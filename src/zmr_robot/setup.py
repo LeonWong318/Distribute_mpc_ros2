@@ -20,6 +20,7 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
+            'robot_node = zmr_robot.robot:main'
         ],
     },
 )
