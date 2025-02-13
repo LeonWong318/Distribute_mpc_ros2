@@ -7,7 +7,7 @@ This is the master thesis repository collaborated by Yinsong and Zihao.
 ### Prerequisites
 - Operating System: Ubuntu 20.04
 - ROS2: foxy
-- Python: 3.9
+- Python: 3.8
 - OpEn: Optimization Engine for MPC solver ([Installation Guide](https://alphaville.github.io/optimization-engine/docs/installation))
 
 ## ROS2 nodes build:
