@@ -81,6 +81,15 @@ class GlobalPathCoordinator:
         return cls(total_schedule)
     
     @classmethod
+    def from_csv_string(cls, csv_path: str, csv_sep:str=','):
+        """Load the total schedule from a csv string."""
+        from io import StringIO
+        total_schedule = pd.read_csv(StringIO(csv_path), sep=csv_sep, header=0)
+        return cls(total_schedule)
+    
+    
+    
+    @classmethod
     def from_dict(cls, schedule_dict: dict):
         """Load the total schedule from a dictionary."""
         total_schedule = pd.DataFrame(schedule_dict)
@@ -101,6 +110,9 @@ class GlobalPathCoordinator:
 
     def load_graph_from_json(self, json_path: str):
         self.load_graph(NetGraph.from_json(json_path))
+        
+    def load_graph_from_json_string(self, json_path: str):
+        self.load_graph(NetGraph.from_json_string(json_path))
 
     def load_map(self, boundary_coords: list[PathNode], obstacle_list: list[list[PathNode]], rescale:Optional[float]=None, inflation_margin:Optional[float]=None):
         self._current_map = GeometricMap.from_raw(boundary_coords, obstacle_list, rescale=rescale)
@@ -114,6 +126,11 @@ class GlobalPathCoordinator:
         boundary_coords, obstacle_coords_list = self._current_map()
         self.load_map(boundary_coords, obstacle_coords_list, rescale=None, inflation_margin=inflation_margin)
 
+    def load_map_from_json_string(self, json_path: str, rescale:Optional[float]=None, inflation_margin:Optional[float]=None):
+        self._current_map = GeometricMap.from_json_string(json_string, rescale=rescale)
+        boundary_coords, obstacle_coords_list = self._current_map()
+        self.load_map(boundary_coords, obstacle_coords_list, rescale=None, inflation_margin=inflation_margin)
+    
     def load_img_map(self, img_path: str):
         self.img_map = OccupancyMap.from_image(img_path)
 

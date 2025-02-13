@@ -42,6 +42,13 @@ class NetGraph(nx.Graph):
         edge_list = data['edge_list']
         return cls(node_dict, edge_list)
     
+    @classmethod
+    def from_json_string(cls, json_string: str):
+        data = json.loads(json_string)
+        node_dict = data['node_dict']
+        edge_list = data['edge_list']
+        return cls(node_dict, edge_list)
+    
     def graph_coords_cvt(self, ct: Callable):
         for node_id, node_data in self.nodes(data=True):
             new_position = ct(node_data[self._position_key])

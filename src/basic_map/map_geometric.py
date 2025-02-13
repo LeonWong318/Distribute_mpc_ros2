@@ -76,6 +76,34 @@ class GeometricMap:
             return cls(boundary_coords_rescaled, obstacle_dict_list_rescaled)
     
     @classmethod
+    def from_json_string(cls, json_string: str, rescale: Optional[float] = None):
+        data = json.loads(json_string)
+        boundary_coords = data['boundary_coords']
+
+        if 'obstacle_dict' in data:
+            obstacle_dict_list = data['obstacle_dict']
+        else:
+            obstacle_coords_list = data['obstacle_list']
+            obstacle_dict_list = [
+                {'id_': i, 'name': f'obstacle_{i}', 'vertices': obs} 
+                for i, obs in enumerate(obstacle_coords_list)
+            ]
+
+        if rescale is None:
+            return cls(boundary_coords, obstacle_dict_list)
+        else:
+            boundary_coords_rescaled = [(x[0]*rescale, x[1]*rescale) for x in boundary_coords]
+            obstacle_dict_list_rescaled = [
+                ObstacleInfo(
+                    id_=obs['id_'], 
+                    name=obs['name'], 
+                    vertices=[(x[0]*rescale, x[1]*rescale) for x in obs['vertices']]
+                ) 
+                for obs in obstacle_dict_list
+            ]
+            return cls(boundary_coords_rescaled, obstacle_dict_list_rescaled)
+    
+    @classmethod
     def from_raw(cls, boundary_coords: list[PathNode], obstacle_coords_list: list[list[PathNode]], rescale:Optional[float]=None):
         """Load a map from raw data."""
         if rescale is None:

@@ -10,6 +10,8 @@ from robot_interfaces.msg import (
     PlanningResult, CollisionWarning
 )
 from geometry_msgs.msg import Pose2D, Point
+from pkg_motion_plan.global_path_coordinate import GlobalPathCoordinator
+
 
 class RobotManager(Node):
     def __init__(self):

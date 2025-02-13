@@ -18,6 +18,8 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/RobotStatus.msg"
   "msg/PlanningResult.msg"
   "msg/CollisionWarning.msg"
+  "msg/OtherRobotStates.msg"
+  "msg/GlobalMapData.msg"
   DEPENDENCIES geometry_msgs std_msgs builtin_interfaces
 )
 
