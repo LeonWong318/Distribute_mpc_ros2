@@ -1,7 +1,7 @@
 import os
 import pathlib
 
-from configs import MpcConfiguration, CircularRobotSpecification
+from pkg_configs.configs import MpcConfiguration, CircularRobotSpecification
 
 from basic_motion_model import motion_model
 from pkg_tracker_mpc.casadi_build import builder_panoc

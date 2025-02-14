@@ -7,20 +7,13 @@ endif()
 
 find_package(ament_cmake REQUIRED)
 find_package(rosidl_default_generators REQUIRED)
-find_package(geometry_msgs REQUIRED)
-find_package(std_msgs REQUIRED)
 find_package(builtin_interfaces REQUIRED)
 
 rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/RobotState.msg"
-  "msg/RobotCommand.msg"
-  "msg/Schedule.msg"
-  "msg/RobotStatus.msg"
-  "msg/PlanningResult.msg"
-  "msg/CollisionWarning.msg"
-  "msg/OtherRobotStates.msg"
+  "msg/RobotStatesQuery.msg"
   "msg/GlobalMapData.msg"
-  DEPENDENCIES geometry_msgs std_msgs builtin_interfaces
+  DEPENDENCIES builtin_interfaces
 )
 
 ament_package()

@@ -1,4 +1,3 @@
-
 from typing import Union, Any
 import yaml
 from abc import ABC, abstractmethod

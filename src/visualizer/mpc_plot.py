@@ -11,7 +11,7 @@ from matplotlib.lines import Line2D
 from matplotlib.gridspec import GridSpec
 from matplotlib.axes import Axes
 
-from configs import CircularRobotSpecification
+from pkg_configs.configs import CircularRobotSpecification
 from basic_map.map_geometric import GeometricMap
 from basic_map.map_occupancy import OccupancyMap
 from basic_map.graph import NetGraph

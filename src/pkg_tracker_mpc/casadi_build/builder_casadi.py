@@ -8,7 +8,7 @@ from . import mpc_helper
 from . import mpc_cost
 
 from basic_casadi.direct_multiple_shooting import MultipleShootingSolver
-from configs import MpcConfiguration, CircularRobotSpecification
+from pkg_configs.configs import MpcConfiguration, CircularRobotSpecification
 
 
 class CasadiBuilder:
