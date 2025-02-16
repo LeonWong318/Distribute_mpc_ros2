@@ -1,5 +1,5 @@
 import math
-from typing import Optional, Union
+from typing import Optional, Union, Tuple, List
 
 import cv2
 import numpy as np
@@ -19,9 +19,9 @@ from basic_map.graph import NetGraph
 
 def figure_formatter(
         window_title: str, 
-        num_axes_per_column:Optional[list]=None, 
-        num_axes_per_row:Optional[list]=None, 
-        figure_size:Optional[tuple[float, float]]=None):
+        num_axes_per_column:Optional[List]=None, 
+        num_axes_per_row:Optional[List]=None, 
+        figure_size:Optional[Tuple[float, float]]=None):
     """ Generate a figure with a given format.
 
     Args:
@@ -62,7 +62,7 @@ def figure_formatter(
     fig.canvas.manager.set_window_title(window_title)
     gs = GridSpec(n_row, n_col, figure=fig)
 
-    axis_format:list[list] = []
+    axis_format:List[List] = []
     if num_axes_per_column is not None:
         for i in range(n_col):
             axis_format.append([])
@@ -100,7 +100,7 @@ class MpcPlotInLoop:
         self.cost_ax :Axes = axis_format[0][2]
         self.map_ax :Axes = axis_format[1][0]
 
-        self.remove_later:list = []     # patches need to be flushed
+        self.remove_later:List = []     # patches need to be flushed
         self.plot_dict_pre:dict = {}    # flush for every life cycle
         self.plot_dict_temp:dict = {}   # flush for every time step
         self.plot_dict_inloop:dict = {} # update every time step, flush for every life cycle
@@ -114,7 +114,7 @@ class MpcPlotInLoop:
     def plot_in_loop_pre(self, original_map: Optional[Union[GeometricMap, OccupancyMap]], 
                          inflated_map:Optional[GeometricMap]=None, 
                          graph_manager:Optional[NetGraph]=None,
-                         map_extend:Optional[list]=None,
+                         map_extend:Optional[List]=None,
                          cmap='gray'):
         """Create the figure and prepare all axes.
 
@@ -154,7 +154,7 @@ class MpcPlotInLoop:
         if graph_manager is not None:
             graph_manager.plot(self.map_ax)
     
-    def add_object_to_pre(self, object_id, ref_traj: Optional[np.ndarray], start: Optional[tuple], end: Optional[tuple], color):
+    def add_object_to_pre(self, object_id, ref_traj: Optional[np.ndarray], start: Optional[Tuple], end: Optional[Tuple], color):
         """
         Description:
             This function should be called for (new) each object that needs to be plotted.
@@ -162,7 +162,7 @@ class MpcPlotInLoop:
             ref_traj: every row is a state
             color   : Matplotlib style color
         """
-        if object_id in list(self.plot_dict_pre):
+        if object_id in List(self.plot_dict_pre):
             raise ValueError(f'Object ID {object_id} exists!')
         
         ref_line = None
@@ -193,7 +193,7 @@ class MpcPlotInLoop:
             pred_states      : np.ndarray, each row is a state
             current_ref_traj : np.ndarray, each row is a state
         '''
-        if object_id not in list(self.plot_dict_pre):
+        if object_id not in List(self.plot_dict_pre):
             raise ValueError(f'Object ID {object_id} does not exist!')
 
         update_list = [action[0], action[1], cost, state]

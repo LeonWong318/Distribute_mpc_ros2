@@ -1,4 +1,4 @@
-from typing import Callable, TypedDict, Union, cast
+from typing import Callable, TypedDict, Union, cast, Tuple, List
 from copy import deepcopy
 
 import casadi as ca # type: ignore
@@ -101,10 +101,10 @@ class PanocBuilder:
         self._motion_model = motion_model
 
     def step_cost(self, step_in_horizon: int, action: ca.SX, last_state: ca.SX,
-                  penalty_terms: PenaltyTerms, q_stcobs: list[ca.SX], q_dynobs: list[ca.SX],
+                  penalty_terms: PenaltyTerms, q_stcobs: List[ca.SX], q_dynobs: List[ca.SX],
                   ref_states: ca.SX, ref_speed: ca.SX, 
                   other_robot_positions: ca.SX, other_robot_pred_positions: ca.SX,
-                  static_obstacles: ca.SX, dynamic_obstacles: ca.SX) -> tuple[ca.SX, mc.CostTerms, list]:
+                  static_obstacles: ca.SX, dynamic_obstacles: ca.SX) -> Tuple[ca.SX, mc.CostTerms, List]:
         """Calculate the cost terms at the selected time step in the predictive horizon.
 
         Args:

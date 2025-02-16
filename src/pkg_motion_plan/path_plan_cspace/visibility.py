@@ -1,12 +1,13 @@
 import networkx as nx # type: ignore
 from shapely.geometry import Point, Polygon, LineString # type: ignore
+from typing import Tuple, List
 
 
-PathNode = tuple[float, float]
+PathNode = Tuple[float, float]
 
 
 class VisibilityPathFinder:
-    def __init__(self, boundary_coords: list[PathNode], obstacle_list: list[list[PathNode]], verbose=False) -> None:
+    def __init__(self, boundary_coords: List[PathNode], obstacle_list: List[List[PathNode]], verbose=False) -> None:
         self._boundary_polygon = Polygon(boundary_coords)
         self._obstacle_polygons = [Polygon(obs) for obs in obstacle_list]
         self._all_vertices = [x for y in obstacle_list for x in y]
@@ -27,7 +28,7 @@ class VisibilityPathFinder:
                     G.add_edge(i+2, j+2, weight=line.length) # 0, 1 are start and end points
         return G
 
-    def get_ref_path(self, start: PathNode, end: PathNode) -> tuple[list[PathNode], list[float]]:
+    def get_ref_path(self, start: PathNode, end: PathNode) -> Tuple[List[PathNode], List[float]]:
         """Get the reference path from start to end.
 
         Args:
@@ -59,7 +60,7 @@ class VisibilityPathFinder:
 
         shortest_path = nx.shortest_path(G, source=0, target=1, weight='weight')
         shortest_path_coords = [points[i] for i in shortest_path]
-        section_lengths: list[float] = [G.edges[shortest_path[i], shortest_path[i+1]]['weight'] for i in range(len(shortest_path)-1)]
+        section_lengths: List[float] = [G.edges[shortest_path[i], shortest_path[i+1]]['weight'] for i in range(len(shortest_path)-1)]
         return shortest_path_coords, section_lengths
 
 

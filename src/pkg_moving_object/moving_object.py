@@ -1,7 +1,7 @@
 import copy
 import math
 import random
-from typing import Union, Callable, Optional, Type, Sequence
+from typing import Union, Callable, Optional, Type, Sequence, Tuple, List
 
 import numpy as np
 from shapely.geometry import Point, LineString # type: ignore
@@ -42,7 +42,7 @@ class MovingObject():
         self.state = state
         self.stagger = stagger
         self.motion_model:MotionModel = OmnidirectionalModel(ts)
-        self.past_traj = [tuple(self.state.tolist())]
+        self.past_traj = [Tuple(self.state.tolist())]
         self.with_path = False
 
         self.sf_mode = False
@@ -66,7 +66,7 @@ class MovingObject():
         return velocity
     
     @property
-    def docking_point(self) -> tuple[float, float]:
+    def docking_point(self) -> Tuple[float, float]:
         # choose the closest point on the path
         if not self.with_path:
             raise RuntimeError('Path is not set yet.')
@@ -78,11 +78,11 @@ class MovingObject():
         return docking_point.x, docking_point.y
         
 
-    def set_path(self, path: list[tuple[float, float]]):
+    def set_path(self, path: List[Tuple[float, float]]):
         self.with_path = True
         self.path = path
         self.coming_path = copy.deepcopy(path)
-        self.past_traj = [tuple(self.state.tolist())]
+        self.past_traj = [Tuple(self.state.tolist())]
 
         self.path_shapely = LineString(path)
     
@@ -104,7 +104,7 @@ class MovingObject():
         self.social_rep_max_force = max_force
         self.social_rep_opponent_type = opponent_type
 
-    def get_social_repulsion(self, agent_list: Sequence['MovingObject']) -> tuple[np.ndarray, list[np.ndarray], float]:
+    def get_social_repulsion(self, agent_list: Sequence['MovingObject']) -> Tuple[np.ndarray, List[np.ndarray], float]:
         """Get social repulsion force from other agents.
 
         Args:
@@ -178,7 +178,7 @@ class MovingObject():
         return social_repulsion, rep_forces, attenuation_factor
 
 
-    def get_next_goal(self, vmax: float) -> Union[tuple, None]:
+    def get_next_goal(self, vmax: float) -> Union[Tuple, None]:
         if not self.with_path:
             raise RuntimeError('Path is not set yet.')
         if not self.coming_path:
@@ -198,7 +198,7 @@ class MovingObject():
         else:
             return None
 
-    def get_action(self, next_path_node: tuple, vmax: float) -> np.ndarray:
+    def get_action(self, next_path_node: Tuple, vmax: float) -> np.ndarray:
         stagger = random.choice([1,-1]) * random.randint(0,10)/10*self.stagger
         dist_to_next_node = math.hypot(self.coming_path[0][0] - self.state[0], self.coming_path[0][1] - self.state[1])
         dire = ((next_path_node[0] - self.state[0])/dist_to_next_node, 
@@ -208,7 +208,7 @@ class MovingObject():
 
     def one_step(self, action: np.ndarray):
         self.state = self.motion_model(self.state, action)
-        self.past_traj.append(tuple(self.state.tolist()))
+        self.past_traj.append(Tuple(self.state.tolist()))
 
     def run_step(self, vmax: float, social_force:Optional[np.ndarray]=None, attenuation_factor:float=1.0) -> Optional[np.ndarray]:
         """Run the agent one step along the path (need to be preset) with optional social force.
@@ -234,7 +234,7 @@ class MovingObject():
         self.one_step(action)
         return action
 
-    def run(self, path: list[tuple[float, float]], vmax:float=0.5):
+    def run(self, path: List[Tuple[float, float]], vmax:float=0.5):
         """Run the agent along the path until the end.
 
         Note:

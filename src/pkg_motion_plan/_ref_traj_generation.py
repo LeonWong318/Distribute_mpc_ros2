@@ -1,19 +1,19 @@
 import math
-from typing import Optional, Union
+from typing import Optional, Union, Tuple, List
 
 
 class TrajectoryGeneration:
     """Given a reference path, generate the reference trajectory according to the sampling method.
     """
     def __init__(self) -> None:
-        self._reference_path:Optional[list[tuple[float, float]]] = None
-        self._reference_path_time:Optional[list[float]] = None
+        self._reference_path:Optional[List[Tuple[float, float]]] = None
+        self._reference_path_time:Optional[List[float]] = None
 
         self._ts:Optional[float] = None
         self._speed:Optional[float] = None
 
-        self._reference_trajectory:Optional[list[tuple[float, float, float]]] = None
-        self._reference_trajectory_time:Optional[list[float]] = None
+        self._reference_trajectory:Optional[List[Tuple[float, float, float]]] = None
+        self._reference_trajectory_time:Optional[List[float]] = None
 
     @property
     def ts(self):
@@ -45,7 +45,7 @@ class TrajectoryGeneration:
     def set_nominal_speed(self, speed: float):
         self._speed = speed
 
-    def set_reference(self, reference_path: list[tuple[float, float]], reference_time: Optional[list[float]]=None):
+    def set_reference(self, reference_path: List[Tuple[float, float]], reference_time: Optional[List[float]]=None):
         """Set the reference path and corresponding reference arrival time for each path node.
 
         Args:
@@ -60,7 +60,7 @@ class TrajectoryGeneration:
         self._reference_path = reference_path
         self._reference_path_time = reference_time
 
-    def generate_trajectory(self, method:str='linear', round_digits:int=0) -> tuple[list[tuple[float, float, float]], Optional[list[float]], list[tuple[float, float]]]:
+    def generate_trajectory(self, method:str='linear', round_digits:int=0) -> Tuple[List[Tuple[float, float, float]], Optional[List[float]], List[Tuple[float, float]]]:
         """Generate the reference trajectory according to the reference path (and time).
         
         Args:
@@ -142,10 +142,10 @@ class TrajectoryGeneration:
         return sampled_points, sampled_times, sampled_target
     
     @staticmethod
-    def single_linear_sampling(p1: tuple[float, float], 
-                               p2: tuple[float, float], 
+    def single_linear_sampling(p1: Tuple[float, float], 
+                               p2: Tuple[float, float], 
                                sample_distance: float, 
-                               last_remainder=0.0) -> tuple[list[tuple[float, float, float]], float]:
+                               last_remainder=0.0) -> Tuple[List[Tuple[float, float, float]], float]:
         """Sample the line segment with a constant distance (step-size).
 
         Args:
@@ -173,7 +173,7 @@ class TrajectoryGeneration:
         return sampled_points, remainder
     
     @staticmethod
-    def single_uniform_sampling(p1: tuple[float, float], p2: tuple[float, float], num_samples: int) -> list[tuple[float, float, float]]:
+    def single_uniform_sampling(p1: Tuple[float, float], p2: Tuple[float, float], num_samples: int) -> List[Tuple[float, float, float]]:
         """_summary_
 
         Args:

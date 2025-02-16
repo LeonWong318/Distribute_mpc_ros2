@@ -10,6 +10,7 @@ from . import mpc_cost
 from basic_casadi.direct_multiple_shooting import MultipleShootingSolver
 from pkg_configs.configs import MpcConfiguration, CircularRobotSpecification
 
+from typing import Dict
 
 class CasadiBuilder:
     def __init__(self, config: MpcConfiguration, robot_specification: CircularRobotSpecification):
@@ -107,7 +108,7 @@ class CasadiBuilder:
 
 
     
-    def individual_cost(self, Cost_dict: dict, varialbes: cs.SX, state: list, input: list):
+    def individual_cost(self, Cost_dict: Dict, varialbes: cs.SX, state: list, input: list):
         #Get a list of 3 states and 2 inputs for N
         merge_list = state[:3]
         for i in range(self.N_hor):

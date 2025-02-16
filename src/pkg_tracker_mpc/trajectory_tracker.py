@@ -5,7 +5,7 @@ import math
 import warnings
 import itertools
 from timeit import default_timer as timer
-from typing import Callable, Optional, TypedDict
+from typing import Callable, Optional, TypedDict, Tuple, List
 # External import
 import numpy as np
 from scipy.spatial import ConvexHull # type: ignore
@@ -14,17 +14,17 @@ from pkg_configs.configs import MpcConfiguration, CircularRobotSpecification
 from .cost_monitor import CostMonitor, MonitoredCost
 
 
-PathNode = tuple[float, float]
+PathNode = Tuple[float, float]
 
 
 class Solver(): # this is not found in the .so file (in ternimal: nm -D  navi_test.so)
     import opengen as og # type: ignore
-    def run(self, p: list, initial_guess=None, initial_lagrange_multipliers=None, initial_penalty=None) -> og.opengen.tcp.solver_status.SolverStatus: pass
+    def run(self, p: List, initial_guess=None, initial_lagrange_multipliers=None, initial_penalty=None) -> og.opengen.tcp.solver_status.SolverStatus: pass
 
 
 class DebugInfo(TypedDict):
     cost: float
-    closest_obstacle_list: list[list[PathNode]]
+    closest_obstacle_list: List[List[PathNode]]
     step_runtime: float
     monitored_cost: Optional[MonitoredCost]
 
@@ -130,13 +130,13 @@ class TrajectoryTracker:
             dyn_weights: penalty weights for dynamic obstacles (only useful if soft constraints activated)
         """
 
-        if isinstance(self.config.qstcobs, list):
+        if isinstance(self.config.qstcobs, List):
             self.stc_weights = self.config.qstcobs
         elif isinstance(self.config.qstcobs, (float, int)):
             self.stc_weights = [self.config.qstcobs]*self.N_hor
         else:
             raise TypeError(f'Unsupported datatype for obstacle weights, got {type(self.config.qstcobs)}.')
-        if isinstance(self.config.qdynobs, list):
+        if isinstance(self.config.qdynobs, List):
             self.dyn_weights = self.config.qdynobs
         elif isinstance(self.config.qdynobs, (float, int)):
             self.dyn_weights = [self.config.qdynobs]*self.N_hor
@@ -162,7 +162,7 @@ class TrajectoryTracker:
         self.__import_solver(use_tcp=self.use_tcp)
 
 
-    def get_stc_constraints(self, static_obstacles: list[list[PathNode]]) -> tuple[list, list[list[PathNode]]]:
+    def get_stc_constraints(self, static_obstacles: List[List[PathNode]]) -> Tuple[List, List[List[PathNode]]]:
         n_stc_obs = self.config.Nstcobs * self.config.nstcobs
         stc_constraints = [0.0] * n_stc_obs
         map_obstacle_list = self.get_closest_n_stc_obstacles(static_obstacles)
@@ -171,7 +171,7 @@ class TrajectoryTracker:
             stc_constraints[i*self.config.nstcobs : (i+1)*self.config.nstcobs] = (b+a0+a1)
         return stc_constraints, map_obstacle_list
     
-    def get_closest_n_stc_obstacles(self, static_obstacles: list[list[PathNode]]) -> list[list[PathNode]]:
+    def get_closest_n_stc_obstacles(self, static_obstacles: List[List[PathNode]]) -> List[List[PathNode]]:
         short_obs_list = []
         dists_to_obs = []
         if len(static_obstacles) <= self.config.Nstcobs:
@@ -194,7 +194,7 @@ class TrajectoryTracker:
         dyn_constraints = [0.0] * self.config.Ndynobs * params_per_dyn_obs
         if full_dyn_obstacle_list is not None:
             for i, dyn_obstacle in enumerate(full_dyn_obstacle_list):
-                dyn_constraints[i*params_per_dyn_obs:(i+1)*params_per_dyn_obs] = list(itertools.chain(*dyn_obstacle))
+                dyn_constraints[i*params_per_dyn_obs:(i+1)*params_per_dyn_obs] = List(itertools.chain(*dyn_obstacle))
         return dyn_constraints
 
 
@@ -239,10 +239,10 @@ class TrajectoryTracker:
         self.state = current_state
         self.final_goal = goal_state
 
-        self.past_states: list[np.ndarray] = [current_state]
-        self.past_actions: list[np.ndarray] = []
-        self.cost_timelist: list[float] = []
-        self.solver_time_timelist: list[float] = []
+        self.past_states: List[np.ndarray] = [current_state]
+        self.past_actions: List[np.ndarray] = []
+        self.cost_timelist: List[float] = []
+        self.solver_time_timelist: List[float] = []
 
         self._idle = False
         self.finishing = False # If approaching (not reaching) the last node of the reference path
@@ -344,7 +344,7 @@ class TrajectoryTracker:
         return self._idle
 
 
-    def run_step(self, static_obstacles: list[list[PathNode]], full_dyn_obstacle_list:Optional[list]=None, other_robot_states:Optional[list]=None, 
+    def run_step(self, static_obstacles: List[List[PathNode]], full_dyn_obstacle_list:Optional[List]=None, other_robot_states:Optional[List]=None, 
                  map_updated:bool=True, report_cost:bool=False):
         """Run the trajectory planner for one step given the surrounding environment.
 
@@ -383,7 +383,7 @@ class TrajectoryTracker:
                                monitored_cost=monitored_cost)
         return actions, pred_states, ref_states, debug_info
 
-    def _run_step(self, stc_constraints: list, dyn_constraints: list, other_robot_states:Optional[list]=None, report_cost:bool=False):
+    def _run_step(self, stc_constraints: List, dyn_constraints: List, other_robot_states:Optional[List]=None, report_cost:bool=False):
         """Run the trajectory planner for one step, wrapped by `run_step`.
 
         Args:
@@ -431,7 +431,7 @@ class TrajectoryTracker:
         self.set_work_mode(mode='work', use_predefined_speed=False)
             
         ### Assemble parameters for solver & Run MPC###
-        params = list(last_u) + list(self.state) + list(finish_state) + self.tuning_params + \
+        params = List(last_u) + List(self.state) + List(finish_state) + self.tuning_params + \
                  current_refs + speed_ref_list + other_robot_states + \
                  stc_constraints + dyn_constraints + self.stc_weights + self.dyn_weights
 
@@ -451,8 +451,8 @@ class TrajectoryTracker:
             monitored_costs = self.cost_monitor.get_cost(self.state, params, u, report=report_cost)
 
         assert isinstance(cost, float)
-        assert isinstance(actions, list)
-        assert isinstance(pred_states, list)
+        assert isinstance(actions, List)
+        assert isinstance(pred_states, List)
         self.past_states.append(self.state)
         self.past_states += taken_states[:-1]
         self.past_actions += actions
@@ -462,7 +462,7 @@ class TrajectoryTracker:
 
         return actions, pred_states, ref_states, cost, monitored_costs
 
-    def run_solver(self, parameters:list, state: np.ndarray, take_steps:int=1):
+    def run_solver(self, parameters:List, state: np.ndarray, take_steps:int=1):
         """Run the solver for the pre-defined MPC problem.
 
         Args:
@@ -492,7 +492,7 @@ class TrajectoryTracker:
             import opengen as og
             solution:og.opengen.tcp.solver_status.SolverStatus = self.solver.run(parameters)
             
-            u:list[float]       = solution.solution
+            u:List[float]       = solution.solution
             cost:float          = solution.cost
             exit_status:str     = solution.exit_status
             solver_time:float   = solution.solve_time_ms
@@ -506,12 +506,12 @@ class TrajectoryTracker:
         else:
             raise ModuleNotFoundError(f'There is no solver with type {self.solver_type}.')
         
-        taken_states:list[np.ndarray] = []
+        taken_states:List[np.ndarray] = []
         for i in range(take_steps):
             state_next = self.motion_model(state, np.array(u[(i*self.nu):((i+1)*self.nu)]), self.ts)
             taken_states.append(state_next)
 
-        pred_states:list[np.ndarray] = [taken_states[-1]]
+        pred_states:List[np.ndarray] = [taken_states[-1]]
         for i in range(len(u)//self.nu):
             pred_state_next = self.motion_model(pred_states[-1], np.array(u[(i*self.nu):(2+i*self.nu)]), self.ts)
             pred_states.append(pred_state_next)
@@ -521,11 +521,11 @@ class TrajectoryTracker:
         actions = [np.array(action) for action in actions]
         return taken_states, pred_states, actions, cost, solver_time, exit_status, u
 
-    def run_solver_tcp(self, parameters:list, state: np.ndarray, take_steps:int=1):
+    def run_solver_tcp(self, parameters:List, state: np.ndarray, take_steps:int=1):
         solution = self.mng.call(parameters)
         if solution.is_ok(): # Solver returned a solution
             solution = solution.get()
-            u:list[float]       = solution.solution
+            u:List[float]       = solution.solution
             cost:float          = solution.cost
             exit_status:str     = solution.exit_status
             solver_time:float   = solution.solve_time_ms
@@ -536,12 +536,12 @@ class TrajectoryTracker:
             self.mng.kill() # kill so rust code wont keep running if python crashes
             raise RuntimeError(f"[{self.__class__.__name__}-{self.robot_id}] MPC Solver error: [{error_code}]{error_msg}")
 
-        taken_states:list[np.ndarray] = []
+        taken_states:List[np.ndarray] = []
         for i in range(take_steps):
             state_next = self.motion_model( state, np.array(u[(i*self.nu):((i+1)*self.nu)]), self.ts )
             taken_states.append(state_next)
 
-        pred_states:list[np.ndarray] = [taken_states[-1]]
+        pred_states:List[np.ndarray] = [taken_states[-1]]
         for i in range(len(u)//self.nu):
             pred_state_next = self.motion_model( pred_states[-1], np.array(u[(i*self.nu):(2+i*self.nu)]), self.ts )
             pred_states.append(pred_state_next)

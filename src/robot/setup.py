@@ -16,7 +16,7 @@ setup(
         (os.path.join('share', package_name, 'launch'),
          glob(os.path.join('launch', '*launch.[pxy][yma]*'))),
     ],
-    install_requires=['setuptools'],
+    install_requires=['setuptools','shapely'],
     zip_safe=True,
     maintainer='zihao',
     maintainer_email='luzihaoprivate@gmail.com',

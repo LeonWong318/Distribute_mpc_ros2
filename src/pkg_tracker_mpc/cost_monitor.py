@@ -1,4 +1,4 @@
-from typing import Callable, Optional, TypedDict
+from typing import Callable, Optional, TypedDict, List
 from timeit import default_timer as timer
 
 import casadi as ca # type: ignore
@@ -12,7 +12,7 @@ from pkg_configs.configs import MpcConfiguration, CircularRobotSpecification
 
 class MonitoredCost(TypedDict):
     total_cost: CostTerms
-    step_cost_list: list[CostTerms]
+    step_cost_list: List[CostTerms]
     terminal_cost: float
     cost_acc: float
     cost_w_acc: float
@@ -69,7 +69,7 @@ class CostMonitor:
     def load_motion_model(self, motion_model: Callable):
         self._builder.load_motion_model(motion_model)
 
-    def _set_params(self, new_params: list, new_actions: list) -> None:
+    def _set_params(self, new_params: List, new_actions: List) -> None:
         if len(new_params) != self._num_params:
             raise ValueError(f"[{self.__class__.__name__}] Number of parameters should be {self._num_params}, but got {len(new_params)}")
 
@@ -111,7 +111,7 @@ class CostMonitor:
                                                        static_obstacles=self._o_s, dynamic_obstacles=self._o_d)
         return state, step_cost
     
-    def get_cost(self, last_state: ca.SX, new_params: list, new_actions: list, report=True):
+    def get_cost(self, last_state: ca.SX, new_params: List, new_actions: List, report=True):
         """Get the cost summary.
 
         Args:
@@ -131,7 +131,7 @@ class CostMonitor:
         """
         start_time = timer()
         self._set_params(new_params, new_actions)
-        step_cost_list:list[CostTerms] = []
+        step_cost_list:List[CostTerms] = []
         total_cost = CostTerms()
         state = last_state
         for kt in range(self._cfg.N_hor):

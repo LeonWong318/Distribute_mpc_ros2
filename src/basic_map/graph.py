@@ -1,7 +1,7 @@
 import json
 import math
 import random
-from typing import Any, Callable
+from typing import Any, Callable, List, Tuple, Dict
 
 import networkx as nx # type: ignore
 from matplotlib.axes import Axes # type: ignore
@@ -12,7 +12,7 @@ class NetGraph(nx.Graph):
     
     The function from_json() should be used to load the graph.
     """
-    def __init__(self, node_dict: dict[Any, tuple], edge_list: list[tuple]):
+    def __init__(self, node_dict: Dict[Any, Tuple], edge_list: List[Tuple]):
         """The init should not be used directly. Use from_json() instead.
 
         Args:
@@ -55,21 +55,21 @@ class NetGraph(nx.Graph):
             self.nodes[node_id][self._position_key] = new_position
         self._distance_weight()
 
-    def get_node_coord(self, node_id) -> tuple:
+    def get_node_coord(self, node_id) -> Tuple:
         x = self.nodes[node_id][self._position_key][0]
         y = self.nodes[node_id][self._position_key][1]
         return x, y
 
-    def return_given_path(self, graph_node_ids: list) -> list[tuple]:
+    def return_given_path(self, graph_node_ids: List) -> List[Tuple]:
         return [self.get_node_coord(id) for id in graph_node_ids]
 
-    def return_random_path(self, start_node_id, num_traversed_nodes:int) -> list[tuple]:
+    def return_random_path(self, start_node_id, num_traversed_nodes:int) -> List[Tuple]:
         """Return random GeometricGraphNode without repeat nodes
         """
         node_ids = [start_node_id]
         nodelist = [self.get_node_coord(start_node_id)]
         for _ in range(num_traversed_nodes):
-            connected_node_ids = list(self.adj[node_ids[-1]])
+            connected_node_ids = List(self.adj[node_ids[-1]])
             connected_node_ids = [x for x in connected_node_ids if x not in node_ids]
             if not connected_node_ids:
                 return nodelist
@@ -89,9 +89,9 @@ class NetGraph(nx.Graph):
             self.plot_graph_edges(ax, edge_color)
 
     def plot_graph_nodes(self, ax: Axes, style='x', with_text=True):
-        [ax.plot(self.get_node_coord(n)[0], self.get_node_coord(n)[1], style) for n in list(self.nodes)]
+        [ax.plot(self.get_node_coord(n)[0], self.get_node_coord(n)[1], style) for n in List(self.nodes)]
         if with_text:
-            [ax.text(self.get_node_coord(n)[0], self.get_node_coord(n)[1], n) for n in list(self.nodes)]
+            [ax.text(self.get_node_coord(n)[0], self.get_node_coord(n)[1], n) for n in List(self.nodes)]
 
     def plot_graph_edges(self, ax: Axes, edge_color='r'):
         nx.draw_networkx_edges(self, nx.get_node_attributes(self, self._position_key), ax=ax, edge_color=edge_color)

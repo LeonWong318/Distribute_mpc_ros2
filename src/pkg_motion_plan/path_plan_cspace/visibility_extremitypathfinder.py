@@ -1,6 +1,7 @@
 from extremitypathfinder.extremitypathfinder import PolygonEnvironment # type: ignore
+from typing import Tuple, List
 
-PathNode = tuple[float, float]
+PathNode = Tuple[float, float]
 
 
 class VisibilityPathFinder:
@@ -16,7 +17,7 @@ class VisibilityPathFinder:
         update_env: Update the environment with new boundary and obstacles.
         get_ref_path: Get the (shortest) refenence path.
     """
-    def __init__(self, boundary_coords: list[PathNode], obstacle_list: list[list[PathNode]], verbose=False):
+    def __init__(self, boundary_coords: List[PathNode], obstacle_list: List[List[PathNode]], verbose=False):
         self.boundary_coords = boundary_coords
         self.obstacle_list = obstacle_list
         self.vb = verbose
@@ -27,12 +28,12 @@ class VisibilityPathFinder:
         self.env.store(self.boundary_coords, self.obstacle_list) # pass obstacles and boundary to environment
         self.env.prepare() # prepare the visibility graph
 
-    def update_env(self, boundary_coords: list[PathNode], obstacle_list: list[list[PathNode]]):
+    def update_env(self, boundary_coords: List[PathNode], obstacle_list: List[List[PathNode]]):
         self.boundary_coords = boundary_coords
         self.obstacle_list = obstacle_list
         self.__prepare()
 
-    def get_ref_path(self, start_pos: PathNode, end_pos: PathNode) -> list[PathNode]:
+    def get_ref_path(self, start_pos: PathNode, end_pos: PathNode) -> List[PathNode]:
         """
         Description:
             Generate the initially guessed path based on obstacles and boundaries specified during preparation.

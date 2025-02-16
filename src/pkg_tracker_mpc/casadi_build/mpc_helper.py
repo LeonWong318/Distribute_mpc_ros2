@@ -1,5 +1,5 @@
 import casadi.casadi as cs # type: ignore
-
+from typing import List 
 
 def dist_to_points_square(point: cs.SX, points: cs.SX) -> cs.SX:
     """Calculate the squared distance from a target point to a set of points.
@@ -34,7 +34,7 @@ def dist_to_lineseg(point: cs.SX, line_segment: cs.SX) -> cs.SX:
     distance = cs.norm_2(temp_vec)
     return distance
 
-def inside_ellipses(point: cs.SX, ellipse_param: list[cs.SX]) -> cs.SX:
+def inside_ellipses(point: cs.SX, ellipse_param: List[cs.SX]) -> cs.SX:
     """Check if a point is inside a set of ellipses.
     
     Args:

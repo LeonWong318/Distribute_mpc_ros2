@@ -1,6 +1,6 @@
 import copy
 from heapq import heappush, heappop
-from typing import Any
+from typing import Any, Tuple, List
 
 import networkx as nx # type: ignore
 
@@ -10,7 +10,7 @@ class DijkstraPathPlanner:
         """Find the shortest path between two nodes in a graph based on Dijkstra's algorithm."""
         self.G = graph
 
-    def k_shortest_paths(self, source, target, k=1, weight_key='weight') -> tuple[list[float], list[list[Any]]]:
+    def k_shortest_paths(self, source, target, k=1, weight_key='weight') -> Tuple[List[float], List[List[Any]]]:
         """Returns the k-shortest paths from source to target in a weighted graph G.
 
         Args:
@@ -44,7 +44,7 @@ class DijkstraPathPlanner:
         lengths = [length] # init lengths
         paths = [path]     # init paths
         cnt = 0 
-        B:list[tuple[float, int, Any]] = []   
+        B:List[Tuple[float, int, Any]] = []   
         for _ in range(1, k):
             for j in range(len(paths[-1]) - 1):            
                 spur_node = paths[-1][j]
@@ -60,7 +60,7 @@ class DijkstraPathPlanner:
                             edges_removed.append((u, v, edge_attr))
                 for n in range(len(root_path) - 1):
                     node = root_path[n]
-                    for u, v, edge_attr in list(G.edges(node, data=True)):
+                    for u, v, edge_attr in List(G.edges(node, data=True)):
                         G.remove_edge(u, v)
                         edges_removed.append((u, v, edge_attr))
                 try:
@@ -87,7 +87,7 @@ class DijkstraPathPlanner:
         
         return lengths, paths
 
-    def k_shortest_paths_with_coords(self, source, target, k=1, weight_key='weight', position_key='position') -> tuple[list[float], list[list[tuple[float, float, Any]]]]:
+    def k_shortest_paths_with_coords(self, source, target, k=1, weight_key='weight', position_key='position') -> Tuple[List[float], List[List[Tuple[float, float, Any]]]]:
         """Find the k shortest paths from source to target with coordinates.
 
         Args:
@@ -114,7 +114,7 @@ class DijkstraPathPlanner:
         paths.append(path)
         return lengths, paths
 
-    def get_path_length(self, path_node_idc: list, weight_key:str='weight') -> float:
+    def get_path_length(self, path_node_idc: List, weight_key:str='weight') -> float:
         """Get the length of a path defined by a list of node indices.
 
         Args:

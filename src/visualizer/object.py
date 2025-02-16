@@ -1,6 +1,6 @@
 import math
 from abc import ABCMeta, abstractmethod
-from typing import Optional
+from typing import Optional, Tuple, List
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -63,7 +63,7 @@ class PointSpeedObjectVisualizer(ObjectVisualizer):
         point_0 = ax.plot(x, y, 'o', color=object_color)[0]
         indicator_0 = ax.arrow(x, y, speed_direction[0], speed_direction[1], head_width=0.1, head_length=0.2, fc=object_color, **indicator_kwargs)
         indicator_1 = ax.arrow(x, y, turning_direction[0], turning_direction[1], head_width=0.1, head_length=0.2, fc=indicator_color, **indicator_kwargs)
-        self.obj_vis_tuple: tuple[Line2D, FancyArrow, FancyArrow] = (point_0, indicator_0, indicator_1)
+        self.obj_vis_tuple: Tuple[Line2D, FancyArrow, FancyArrow] = (point_0, indicator_0, indicator_1)
         self.with_plot = True
 
     def update(self, x: float, y: float, yaw: float, speed:float=0.0, angular_speed:float=0.0) -> None:
@@ -84,9 +84,9 @@ class CircularObjectVisualizer(ObjectVisualizer):
         self.indicate_angle = indicate_angle
         self.with_plot = False
 
-        self.moving_patches: list[Circle] = []
+        self.moving_patches: List[Circle] = []
 
-    def _get_vis_data(self, x: float, y: float, yaw: Optional[float]) -> Optional[tuple[float, float]]:
+    def _get_vis_data(self, x: float, y: float, yaw: Optional[float]) -> Optional[Tuple[float, float]]:
         direction = None
         if (yaw is not None) and self.indicate_angle:
             direction = (float(self.radius*np.cos(yaw)), float(self.radius*np.sin(yaw)))
@@ -155,9 +155,9 @@ class FourWheeledObjectVisualizer(ObjectVisualizer):
         self.spec = spec
         self.with_plot = False
 
-        self.moving_patches: list[Circle] = []
+        self.moving_patches: List[Circle] = []
 
-    def _get_vis_data(self, x: float, y: float, yaw: float, steer:float=0.0) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, tuple]:
+    def _get_vis_data(self, x: float, y: float, yaw: float, steer:float=0.0) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, Tuple]:
         """Get visualization data of the object.
 
         Args:

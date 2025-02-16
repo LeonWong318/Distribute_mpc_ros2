@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Any, Union
+from typing import Any, Union, List
 
 import casadi as ca # type: ignore
 
@@ -30,10 +30,10 @@ class CostTerms:
         return added
     
     def sum(self) -> ca.SX:
-        return sum(list(self.__dict__.values()))
+        return sum(List(self.__dict__.values()))
 
     def sum_values(self) -> float:
-        return float(sum(list(self.__dict__.values())))
+        return float(sum(List(self.__dict__.values())))
 
 
 def cost_inside_cvx_polygon(state: ca.SX, b: ca.SX, a0: ca.SX, a1: ca.SX, weight:Union[ca.SX, float]=1.0) -> ca.SX:
@@ -57,7 +57,7 @@ def cost_inside_cvx_polygon(state: ca.SX, b: ca.SX, a0: ca.SX, a1: ca.SX, weight
     assert cost.shape == (1,1)
     return cost
 
-def cost_inside_ellipses(state: ca.SX, ellipse_param: list[ca.SX], weight:Union[ca.SX, float]=1.0) -> ca.SX:
+def cost_inside_ellipses(state: ca.SX, ellipse_param: List[ca.SX], weight:Union[ca.SX, float]=1.0) -> ca.SX:
     """Cost (weighted squared) for being inside a set of ellipses defined by `(cx, cy, sx, sy, angle, alpha)`.
     
     Args:
