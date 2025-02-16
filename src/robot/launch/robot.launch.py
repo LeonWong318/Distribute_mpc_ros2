@@ -5,7 +5,6 @@ from launch_ros.actions import Node
 import os
 
 def generate_launch_description():
-    # 设置PYTHONPATH环境变量
     pythonpath_cmd = SetEnvironmentVariable(
         name='PYTHONPATH',
         value=os.getenv('CONDA_PREFIX') + '/lib/python3.8/site-packages:' + os.getenv('PYTHONPATH', '')
