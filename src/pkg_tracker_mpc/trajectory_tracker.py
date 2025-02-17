@@ -1,3 +1,4 @@
+from __future__ import annotations
 # System import
 import os
 import sys
@@ -194,7 +195,7 @@ class TrajectoryTracker:
         dyn_constraints = [0.0] * self.config.Ndynobs * params_per_dyn_obs
         if full_dyn_obstacle_list is not None:
             for i, dyn_obstacle in enumerate(full_dyn_obstacle_list):
-                dyn_constraints[i*params_per_dyn_obs:(i+1)*params_per_dyn_obs] = List(itertools.chain(*dyn_obstacle))
+                dyn_constraints[i*params_per_dyn_obs:(i+1)*params_per_dyn_obs] = list(itertools.chain(*dyn_obstacle))
         return dyn_constraints
 
 
@@ -431,7 +432,7 @@ class TrajectoryTracker:
         self.set_work_mode(mode='work', use_predefined_speed=False)
             
         ### Assemble parameters for solver & Run MPC###
-        params = List(last_u) + List(self.state) + List(finish_state) + self.tuning_params + \
+        params = list(last_u) + list(self.state) + list(finish_state) + self.tuning_params + \
                  current_refs + speed_ref_list + other_robot_states + \
                  stc_constraints + dyn_constraints + self.stc_weights + self.dyn_weights
 

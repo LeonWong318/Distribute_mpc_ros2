@@ -42,7 +42,8 @@ class MovingObject():
         self.state = state
         self.stagger = stagger
         self.motion_model:MotionModel = OmnidirectionalModel(ts)
-        self.past_traj = [Tuple(self.state.tolist())]
+        # self.past_traj = [Tuple(self.state.tolist())]
+        self.past_traj: List[Tuple[float, ...]] = [self.state.tolist()]
         self.with_path = False
 
         self.sf_mode = False

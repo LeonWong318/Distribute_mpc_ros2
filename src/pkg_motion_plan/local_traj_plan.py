@@ -1,3 +1,4 @@
+from __future__ import annotations
 import math
 from typing import Optional, Any, Tuple, List
 
@@ -289,7 +290,7 @@ class LocalTrajPlanner:
             new_segment = new_segment[1:]
             new_path.extend(new_segment)
             new_path_segment_length.extend(segment_length)
-            new_section_time: List[float] = List(np.cumsum(segment_length) / sum(segment_length) * section_time)
+            new_section_time: List[float] = list(np.cumsum(segment_length) / sum(segment_length) * section_time)
             new_section_time = [x + time_list[i] for x in new_section_time]
             new_time.extend(new_section_time)
         return new_path, new_time

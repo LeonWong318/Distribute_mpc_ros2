@@ -1,3 +1,4 @@
+from __future__ import annotations
 import json
 import math
 import random
@@ -60,7 +61,7 @@ class NetGraph(nx.Graph):
         y = self.nodes[node_id][self._position_key][1]
         return x, y
 
-    def return_given_path(self, graph_node_ids: List) -> List[Tuple]:
+    def return_given_path(self, graph_node_ids: list) -> list[Tuple]:
         return [self.get_node_coord(id) for id in graph_node_ids]
 
     def return_random_path(self, start_node_id, num_traversed_nodes:int) -> List[Tuple]:
@@ -69,7 +70,7 @@ class NetGraph(nx.Graph):
         node_ids = [start_node_id]
         nodelist = [self.get_node_coord(start_node_id)]
         for _ in range(num_traversed_nodes):
-            connected_node_ids = List(self.adj[node_ids[-1]])
+            connected_node_ids = list(self.adj[node_ids[-1]])
             connected_node_ids = [x for x in connected_node_ids if x not in node_ids]
             if not connected_node_ids:
                 return nodelist
@@ -89,9 +90,9 @@ class NetGraph(nx.Graph):
             self.plot_graph_edges(ax, edge_color)
 
     def plot_graph_nodes(self, ax: Axes, style='x', with_text=True):
-        [ax.plot(self.get_node_coord(n)[0], self.get_node_coord(n)[1], style) for n in List(self.nodes)]
+        [ax.plot(self.get_node_coord(n)[0], self.get_node_coord(n)[1], style) for n in list(self.nodes)]
         if with_text:
-            [ax.text(self.get_node_coord(n)[0], self.get_node_coord(n)[1], n) for n in List(self.nodes)]
+            [ax.text(self.get_node_coord(n)[0], self.get_node_coord(n)[1], n) for n in list(self.nodes)]
 
     def plot_graph_edges(self, ax: Axes, edge_color='r'):
         nx.draw_networkx_edges(self, nx.get_node_attributes(self, self._position_key), ax=ax, edge_color=edge_color)

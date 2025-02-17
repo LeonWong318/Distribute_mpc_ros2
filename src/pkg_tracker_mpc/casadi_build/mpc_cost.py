@@ -1,3 +1,4 @@
+from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Union, List
 
@@ -30,10 +31,10 @@ class CostTerms:
         return added
     
     def sum(self) -> ca.SX:
-        return sum(List(self.__dict__.values()))
+        return sum(list(self.__dict__.values()))
 
     def sum_values(self) -> float:
-        return float(sum(List(self.__dict__.values())))
+        return float(sum(list(self.__dict__.values())))
 
 
 def cost_inside_cvx_polygon(state: ca.SX, b: ca.SX, a0: ca.SX, a1: ca.SX, weight:Union[ca.SX, float]=1.0) -> ca.SX:

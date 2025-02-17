@@ -10,6 +10,25 @@ This is the master thesis repository collaborated by Yinsong and Zihao.
 - Python: 3.8
 - OpEn: Optimization Engine for MPC solver ([Installation Guide](https://alphaville.github.io/optimization-engine/docs/installation))
 
+## Env set up:
+recommend using conda for environment:
+'''
+conda create -n ros_dmpc python=3.8
+'''
+'''
+conda activate ros_dmpc
+'''
+'''
+pip install -r requirements.txt
+'''
+
+## MPC solver build:
+'''
+python src/build_solver.py
+'''
+That can ensure mpc_solver/ located in project root folder.
+
+
 ## ROS2 nodes build:
 If you want to rebuild the node:
 ```
@@ -35,5 +54,5 @@ ros2 launch robot robot.launch.py robot_id:=1
 
 ## Echo
 ```
-ros2 topic echo /robot_1/state
+ros2 topic echo /topic
 ```

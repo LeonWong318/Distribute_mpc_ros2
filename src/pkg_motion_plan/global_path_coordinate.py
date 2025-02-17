@@ -126,7 +126,7 @@ class GlobalPathCoordinator:
         boundary_coords, obstacle_coords_list = self._current_map()
         self.load_map(boundary_coords, obstacle_coords_list, rescale=None, inflation_margin=inflation_margin)
 
-    def load_map_from_json_string(self, json_path: str, rescale:Optional[float]=None, inflation_margin:Optional[float]=None):
+    def load_map_from_json_string(self, json_string: str, rescale:Optional[float]=None, inflation_margin:Optional[float]=None):
         self._current_map = GeometricMap.from_json_string(json_string, rescale=rescale)
         boundary_coords, obstacle_coords_list = self._current_map()
         self.load_map(boundary_coords, obstacle_coords_list, rescale=None, inflation_margin=inflation_margin)

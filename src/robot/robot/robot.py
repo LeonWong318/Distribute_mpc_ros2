@@ -4,9 +4,10 @@ sys.path.append('src')
 import rclpy
 from rclpy.node import Node
 from rclpy.time import Time
+from rclpy.callback_groups import ReentrantCallbackGroup
 
 import numpy as np
-from threading import Event
+import json
 from pkg_configs.configs import MpcConfiguration, CircularRobotSpecification
 
 from pkg_moving_object.moving_object import RobotObject
@@ -15,9 +16,23 @@ from pkg_motion_plan.local_traj_plan import LocalTrajPlanner
 from pkg_tracker_mpc.trajectory_tracker import TrajectoryTracker
 from pkg_motion_plan.global_path_coordinate import GlobalPathCoordinator
 
-from robot_interfaces.msg import RobotState, GlobalMapData, RobotStatesQuery
+from robot_interfaces.msg import RobotState, RobotStatesQuery
+from robot_interfaces.srv import GetMapData
 
 class RobotNode(Node):
+    async def initialize(self):
+        """异步初始化方法"""
+        self.get_logger().info('Starting initialization...')
+    
+        # 等待服务可用
+        while not self.map_client.wait_for_service(timeout_sec=1.0):
+            self.get_logger().info('Map service not available, waiting...')
+    
+        # 获取地图数据
+        self.get_logger().info('Requesting map data...')
+        await self.get_map_data()
+        self.get_logger().info('Requesting map data finished')
+    
     def __init__(self):
         super().__init__('robot_node')
         
@@ -55,21 +70,6 @@ class RobotNode(Node):
         # 设置QoS
         DEFAULT_QOS = 10
         
-        # 等待并获取地图数据
-        self.get_logger().info('Waiting for map data...')
-
-        self.map_data_received = Event()
-
-        self.map_subscriber = self.create_subscription(
-            GlobalMapData,
-            '/global_map_data',
-            self.map_callback,
-            DEFAULT_QOS
-        )
-
-        while not self.map_data_received.wait(timeout=1.0):
-            self.get_logger().info('Waiting for map data...')
-                
         # 创建发布者发布机器人状态
         self.state_publisher = self.create_publisher(
             RobotState, 
@@ -89,27 +89,17 @@ class RobotNode(Node):
             DEFAULT_QOS
         )
         
-        # 初始化控制组件
-        self.setup_control_components()
+        # 创建一个回调组用于服务客户端
+        self.callback_group = ReentrantCallbackGroup()
         
-        #初始化全局路径协调器GPC
-        self.gpc = GlobalPathCoordinator.from_csv_string(self.schedule_json)
-        self.gpc.load_graph_from_json_string(self.graph_json)
-        self.gpc.load_map_from_json_string(self.map_json,inflation_margin=self.config_robot.vehicle_width+0.2)
-        robot_ids = self.gpc.robot_ids if robot_ids is None else robot_ids
-        self.static_obstacles = self.gpc.inflated_map.obstacle_coords_list
-        self.path_coords, self.path_times = self.gpc.get_robot_schedule(self.robot_id)
-        
-        
-        # 初始化机器人状态
-        self.set_state(np.asarray(self.robot_start[str(self.robot_id)]))
-        
-        # 创建控制定时器
-        self.create_timer(
-            1.0/self.control_frequency,
-            self.control_loop
+        # 创建客户端
+        self.map_client = self.create_client(
+            GetMapData,
+            '/get_map_data',
+            callback_group=self.callback_group
         )
-
+    
+        
     def setup_control_components(self):
         """初始化控制相关组件"""
         # 运动模型
@@ -138,14 +128,10 @@ class RobotNode(Node):
         goal_coord = self.path_coords[-1]
         goal_coord_prev = self.path_coords[-2]
         goal_heading = np.arctan2(goal_coord[1]-goal_coord_prev[1], goal_coord[0]-goal_coord_prev[0])
-        goal_state = np.array([*goal_coord, goal_heading])
+        self.goal_state = np.array([*goal_coord, goal_heading])
 
-        current_state = np.asarray(self.robot_start[str(self.robot_id)])
-        
-        self.start = current_state
-        self.goal = goal_state
         self.idle = False
-        self.controller.load_init_states(current_state, goal_state)
+        self.controller.load_init_states(self._state, self.goal_state)
     
     def robot_states_callback(self, msg: RobotStatesQuery):
         """处理来自manager的机器人状态信息"""
@@ -170,25 +156,71 @@ class RobotNode(Node):
         except Exception as e:
             self.get_logger().error(f'Error processing robot states: {str(e)}')
     
-    def map_callback(self, msg: GlobalMapData):
-        """处理地图数据"""
+    async def get_map_data(self):
+        """请求地图数据"""
         try:
-            # 保存地图数据为成员变量
-            self.map_json = msg.map_json
-            self.graph_json = msg.graph_json
-            self.schedule_json = msg.schedule_json
-            self.robot_start = msg.robot_start
-
-            # 设置事件，表示已收到数据
-            self.map_data_received.set()
-
+            # 创建请求
+            request = GetMapData.Request()
+            request.robot_id = self.robot_id
+            
+            # 发送请求
+            future = self.map_client.call_async(request)
+            
+            # 等待响应
+            response = await future
+                        
+            # 处理响应数据
+            self.map_json = response.map_json
+            self.graph_json = response.graph_json
+            self.schedule_json = response.schedule_json
+            self.robot_start = json.loads(response.robot_start)
+            
             self.get_logger().info('Successfully received map data')
+            
+            self.initialize_after_map_data()
+            
+        except Exception as e:
+            self.get_logger().error(f'Error getting map data: {str(e)}')
+            # 可以选择重试或退出
+            rclpy.shutdown()
+    
+    def initialize_after_map_data(self):
+        """初始化地图数据后的设置"""
+        try:
+            # 初始化全局路径协调器GPC
+            self.gpc = GlobalPathCoordinator.from_csv_string(self.schedule_json)
+            self.gpc.load_graph_from_json_string(self.graph_json)
+            self.gpc.load_map_from_json_string(
+                self.map_json,
+                inflation_margin=self.config_robot.vehicle_width+0.2
+            )
+            self.static_obstacles = self.gpc.inflated_map.obstacle_coords_list
+            self.path_coords, self.path_times = self.gpc.get_robot_schedule(self.robot_id)
 
-            # 收到数据后取消订阅
-            self.destroy_subscription(self.map_subscriber)
+            # 初始化控制组件
+            self.setup_control_components()
+            
+            # 初始化机器人状态
+            self.set_state(np.asarray(self.robot_start[str(self.robot_id)]))
+
+            # 添加调度
+            self.add_schedule()
+
+            # 创建控制定时器
+            self.create_timer(
+                1.0/self.control_frequency,
+                self.control_loop
+            )
+
+            self.get_logger().info('Initialization completed successfully')
+            return True
 
         except Exception as e:
-            self.get_logger().error(f'Error processing map data: {str(e)}')
+            self.get_logger().error(f'Error in initialize_after_map_data: {str(e)}')
+            import traceback
+            self.get_logger().error(f'Traceback: {traceback.format_exc()}')
+            return False
+
     
     def control_loop(self):
         """主控制循环"""
@@ -201,7 +233,7 @@ class RobotNode(Node):
             current_time = current_time[0] + current_time[1] * 1e-9
             
             # 获取局部参考轨迹
-            current_pos = (self.current_state['x'], self.current_state['y'])
+            current_pos = (self._state[0], self._state[1])
             ref_states, ref_speed, done = self.planner.get_local_ref(
                 current_time=current_time,
                 current_pos=current_pos,
@@ -249,9 +281,9 @@ class RobotNode(Node):
         try:
             state_msg = RobotState()
             state_msg.robot_id = self.robot_id
-            state_msg.x = self.current_state[0]
-            state_msg.y = self.current_state[1]
-            state_msg.theta = self.current_state[2]
+            state_msg.x = self._state[0]
+            state_msg.y = self._state[1]
+            state_msg.theta = self._state[2]
             state_msg.is_idle = self.is_idle
             state_msg.stamp = self.get_clock().now().to_msg()
             
@@ -265,15 +297,25 @@ class RobotNode(Node):
 
 def main(args=None):
     rclpy.init(args=args)
+    
+    executor = rclpy.executors.MultiThreadedExecutor()
+    
     node = RobotNode()
+    executor.add_node(node)
+    
+    import threading
+    executor_thread = threading.Thread(target=executor.spin, daemon=True)
+    executor_thread.start()
+    
+    import asyncio
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(node.initialize())
     
     try:
-        rclpy.spin(node)
+        executor_thread.join()
     except KeyboardInterrupt:
         pass
     finally:
         node.destroy_node()
         rclpy.shutdown()
 
-if __name__ == '__main__':
-    main()

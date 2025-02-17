@@ -1,3 +1,4 @@
+from __future__ import annotations
 import json
 from typing import TypedDict, Optional, Callable, Tuple, Dict, List
 
@@ -140,7 +141,7 @@ class GeometricMap:
 
     def map_coords_cvt(self, ct: Callable):
         self._boundary_coords = [ct(x) for x in self._boundary_coords]
-        for idx in List(self._obstacle_info_dict):
+        for idx in list(self._obstacle_info_dict):
             obs = self._obstacle_info_dict[idx]
             obs['vertices'] = [Tuple(ct(x)) for x in obs['vertices']] # type: ignore
 

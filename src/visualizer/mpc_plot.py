@@ -1,3 +1,4 @@
+from __future__ import annotations
 import math
 from typing import Optional, Union, Tuple, List
 
@@ -162,7 +163,7 @@ class MpcPlotInLoop:
             ref_traj: every row is a state
             color   : Matplotlib style color
         """
-        if object_id in List(self.plot_dict_pre):
+        if object_id in list(self.plot_dict_pre):
             raise ValueError(f'Object ID {object_id} exists!')
         
         ref_line = None
@@ -193,7 +194,7 @@ class MpcPlotInLoop:
             pred_states      : np.ndarray, each row is a state
             current_ref_traj : np.ndarray, each row is a state
         '''
-        if object_id not in List(self.plot_dict_pre):
+        if object_id not in list(self.plot_dict_pre):
             raise ValueError(f'Object ID {object_id} does not exist!')
 
         update_list = [action[0], action[1], cost, state]

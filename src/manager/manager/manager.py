@@ -6,9 +6,10 @@ from threading import Lock
 
 from robot_interfaces.msg import (
     RobotState,
-    GlobalMapData,
     RobotStatesQuery
 )
+
+from robot_interfaces.srv import GetMapData
 
 class RobotManager(Node):
     def __init__(self):
@@ -41,13 +42,16 @@ class RobotManager(Node):
         
         # 设置QoS
         self.QOS_DEPTH = 10
-
+        
+        # 读取配置文件并且发布数据
+        self.load_config_files()
         
         # 创建全局地图数据发布者
-        self.map_publisher = self.create_publisher(
-            GlobalMapData,
-            '/global_map_data',
-            self.QOS_DEPTH
+        self.map_service = self.create_service(
+            GetMapData,
+            '/get_map_data',
+            self.handle_get_map_data,
+            callback_group=MutuallyExclusiveCallbackGroup()
         )
         
         # 创建机器人状态查询响应发布者
@@ -56,9 +60,6 @@ class RobotManager(Node):
             '/manager/robot_states',
             self.QOS_DEPTH
         )
-                
-        # 读取配置文件
-        self.load_config_files()
         
         # 创建定时发布定时器
         self.create_timer(
@@ -85,22 +86,30 @@ class RobotManager(Node):
                 
             with open(self.robot_start_path, 'r') as f:
                 self.robot_start = f.read()
-                
-            self.publish_map_data()
-            
+        
         except Exception as e:
             self.get_logger().error(f'Error loading config files: {str(e)}')
             raise
             
-    def publish_map_data(self):
-        """发布地图数据"""
-        msg = GlobalMapData()
-        msg.map_json = self.map_json
-        msg.graph_json = self.graph_json
-        msg.schedule_json = self.schedule_json
-        msg.robot_start = self.robot_start
-        
-        self.map_publisher.publish(msg)
+    def handle_get_map_data(self, request, response):
+        """处理地图数据请求服务"""
+        try:
+            self.get_logger().info(f'Received map data request from robot {request.robot_id}')
+            
+            response.map_json = self.map_json
+            response.graph_json = self.graph_json
+            response.schedule_json = self.schedule_json
+            response.robot_start = self.robot_start
+            
+            self.register_robot(request.robot_id)
+            
+            self.get_logger().info(f'Map data sent to robot {request.robot_id}')
+            
+            return response
+            
+        except Exception as e:
+            self.get_logger().error(f'Error handling map data request: {str(e)}')
+            raise
         
     def register_robot(self, robot_id: int) -> None:
         """注册新的机器人"""
