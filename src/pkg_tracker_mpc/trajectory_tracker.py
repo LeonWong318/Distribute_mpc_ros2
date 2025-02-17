@@ -521,7 +521,7 @@ class TrajectoryTracker:
         actions = np.array(u[:self.nu*take_steps]).reshape(take_steps, self.nu).tolist()
         actions = [np.array(action) for action in actions]
         return taken_states, pred_states, actions, cost, solver_time, exit_status, u
-
+    
     def run_solver_tcp(self, parameters:List, state: np.ndarray, take_steps:int=1):
         solution = self.mng.call(parameters)
         if solution.is_ok(): # Solver returned a solution

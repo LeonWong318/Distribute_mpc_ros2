@@ -155,6 +155,7 @@ class RobotNode(Node):
             
         except Exception as e:
             self.get_logger().error(f'Error processing robot states: {str(e)}')
+            rclpy.shutdown()
     
     async def get_map_data(self):
         """请求地图数据"""
@@ -181,8 +182,6 @@ class RobotNode(Node):
             
         except Exception as e:
             self.get_logger().error(f'Error getting map data: {str(e)}')
-            # 可以选择重试或退出
-            rclpy.shutdown()
     
     def initialize_after_map_data(self):
         """初始化地图数据后的设置"""
@@ -252,6 +251,7 @@ class RobotNode(Node):
             # 获取其他机器人状态列表
             other_robot_states = [state for rid, state in self.other_robot_states.items()]
             
+            # TODO： 解决parameters长度不匹配的问题
             # 运行控制器
             self.last_actions, self.pred_states, self.current_refs, self.debug_info = self.controller.run_step(
                 static_obstacles=self.static_obstacles,
@@ -266,7 +266,7 @@ class RobotNode(Node):
         except Exception as e:
             self.get_logger().error(f'Error in control loop: {str(e)}')
     
-    
+
     def set_state(self, state: np.ndarray) -> None:
         self._state = state
         self.robot_object = RobotObject(state=state, ts=self.config_robot.ts, radius=self.config_robot.vehicle_width/2)

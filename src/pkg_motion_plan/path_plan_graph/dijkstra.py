@@ -60,7 +60,7 @@ class DijkstraPathPlanner:
                             edges_removed.append((u, v, edge_attr))
                 for n in range(len(root_path) - 1):
                     node = root_path[n]
-                    for u, v, edge_attr in List(G.edges(node, data=True)):
+                    for u, v, edge_attr in list(G.edges(node, data=True)):
                         G.remove_edge(u, v)
                         edges_removed.append((u, v, edge_attr))
                 try:
