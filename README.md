@@ -12,20 +12,20 @@ This is the master thesis repository collaborated by Yinsong and Zihao.
 
 ## Env set up:
 recommend using conda for environment:
-'''
+```
 conda create -n ros_dmpc python=3.8
-'''
-'''
+```
+```
 conda activate ros_dmpc
-'''
-'''
+```
+```
 pip install -r requirements.txt
-'''
+```
 
 ## MPC solver build:
-'''
+```
 python src/build_solver.py
-'''
+```
 That can ensure mpc_solver/ located in project root folder.
 
 
