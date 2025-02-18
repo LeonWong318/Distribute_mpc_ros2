@@ -54,5 +54,5 @@ ros2 launch robot robot.launch.py robot_id:=1
 
 ## Echo
 ```
-ros2 topic echo /topic
+ros2 topic echo /manager/robot_states > robot_state.log
 ```
