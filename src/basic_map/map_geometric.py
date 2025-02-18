@@ -143,7 +143,7 @@ class GeometricMap:
         self._boundary_coords = [ct(x) for x in self._boundary_coords]
         for idx in list(self._obstacle_info_dict):
             obs = self._obstacle_info_dict[idx]
-            obs['vertices'] = [Tuple(ct(x)) for x in obs['vertices']] # type: ignore
+            obs['vertices'] = [tuple(ct(x)) for x in obs['vertices']] # type: ignore
 
 
     def get_boundary_scope(self) -> Tuple[float, float, float, float]:

@@ -3,5 +3,5 @@ float64 x
 float64 y
 float64 theta
 float64[] pred_states
-bool is_idle
+bool idle
 builtin_interfaces/Time stamp

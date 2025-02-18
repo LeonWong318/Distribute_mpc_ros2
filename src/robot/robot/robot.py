@@ -239,23 +239,36 @@ class RobotNode(Node):
                 idx_check_range=10  # 可以通过参数配置
             )
             
-            if done:
-                self.is_idle = True
-                self.current_task = "idle"
-                self.publish_status()
-                return
+            # if done:
+            #     self.idle = True
+            #     self.current_task = "idle"
+            #     self.publish_status()
+            #     return
                 
             # 设置参考轨迹
             self.controller.set_ref_states(ref_states, ref_speed=ref_speed)
             
             # 获取其他机器人状态列表
-            other_robot_states = [state for rid, state in self.other_robot_states.items()]
+            # other_robot_states = [state for rid, state in self.other_robot_states.items()]
+            other_robots_state_list = []
+            for rid, state in self.other_robot_states.items():
+                for _ in range(self.config_mpc.N_hor + 1):
+                    other_robots_state_list.extend([state.x, state.y, state.theta])
+        
+            if not other_robots_state_list:
+                other_robots_state_list = [-10] * (3 * (self.config_mpc.N_hor + 1) * self.config_mpc.Nother)
+
+            
             
             # TODO： 解决parameters长度不匹配的问题
             # 运行控制器
+            # self.last_actions, self.pred_states, self.current_refs, self.debug_info = self.controller.run_step(
+            #     static_obstacles=self.static_obstacles,
+            #     other_robot_states=other_robot_states
+            # )
             self.last_actions, self.pred_states, self.current_refs, self.debug_info = self.controller.run_step(
                 static_obstacles=self.static_obstacles,
-                other_robot_states=other_robot_states
+                other_robot_states=other_robots_state_list
             )
             
             # 执行控制动作
@@ -284,12 +297,20 @@ class RobotNode(Node):
             state_msg.x = self._state[0]
             state_msg.y = self._state[1]
             state_msg.theta = self._state[2]
-            state_msg.is_idle = self.is_idle
+            state_msg.idle = self.idle
             state_msg.stamp = self.get_clock().now().to_msg()
             
             if self.pred_states is not None:
-                state_msg.pred_states = self.pred_states.flatten().tolist()
-                
+                flattened_states = []
+                for state in self.pred_states:
+                    if isinstance(state, np.ndarray):
+                        flattened_states.extend(state.tolist())
+                    elif isinstance(state, (list, tuple)):
+                        flattened_states.extend(state)
+                    else:
+                        flattened_states.append(state)
+                state_msg.pred_states = flattened_states
+
             self.state_publisher.publish(state_msg)
             
         except Exception as e:

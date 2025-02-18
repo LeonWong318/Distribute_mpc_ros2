@@ -1,3 +1,4 @@
+from __future__ import annotations
 import copy
 import math
 import random
@@ -42,8 +43,7 @@ class MovingObject():
         self.state = state
         self.stagger = stagger
         self.motion_model:MotionModel = OmnidirectionalModel(ts)
-        # self.past_traj = [Tuple(self.state.tolist())]
-        self.past_traj: List[Tuple[float, ...]] = [self.state.tolist()]
+        self.past_traj = [tuple(self.state.tolist())]
         self.with_path = False
 
         self.sf_mode = False
@@ -83,7 +83,7 @@ class MovingObject():
         self.with_path = True
         self.path = path
         self.coming_path = copy.deepcopy(path)
-        self.past_traj = [Tuple(self.state.tolist())]
+        self.past_traj = [tuple(self.state.tolist())]
 
         self.path_shapely = LineString(path)
     
@@ -209,7 +209,7 @@ class MovingObject():
 
     def one_step(self, action: np.ndarray):
         self.state = self.motion_model(self.state, action)
-        self.past_traj.append(Tuple(self.state.tolist()))
+        self.past_traj.append(tuple(self.state.tolist()))
 
     def run_step(self, vmax: float, social_force:Optional[np.ndarray]=None, attenuation_factor:float=1.0) -> Optional[np.ndarray]:
         """Run the agent one step along the path (need to be preset) with optional social force.
