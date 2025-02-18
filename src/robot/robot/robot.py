@@ -5,6 +5,7 @@ import rclpy
 from rclpy.node import Node
 from rclpy.time import Time
 from rclpy.callback_groups import ReentrantCallbackGroup
+from rclpy.qos import QoSProfile, QoSReliabilityPolicy, QoSHistoryPolicy
 
 import numpy as np
 import json
@@ -68,13 +69,17 @@ class RobotNode(Node):
         self.pred_states = None
         
         # 设置QoS
-        DEFAULT_QOS = 10
+        qos_profile = QoSProfile(
+            reliability=QoSReliabilityPolicy.RELIABLE,
+            history=QoSHistoryPolicy.KEEP_LAST,
+            depth=10
+        )
         
         # 创建发布者发布机器人状态
         self.state_publisher = self.create_publisher(
             RobotState, 
             f'/robot_{self.robot_id}/state', 
-            DEFAULT_QOS
+            qos_profile
         )
         
         # 创建订阅者获取其他机器人状态
@@ -86,7 +91,7 @@ class RobotNode(Node):
             RobotStatesQuery,
             '/manager/robot_states',
             self.robot_states_callback,
-            DEFAULT_QOS
+            qos_profile
         )
         
         # 创建一个回调组用于服务客户端
@@ -195,6 +200,7 @@ class RobotNode(Node):
             )
             self.static_obstacles = self.gpc.inflated_map.obstacle_coords_list
             self.path_coords, self.path_times = self.gpc.get_robot_schedule(self.robot_id)
+            self.expected_robots = set(int(robot_id) for robot_id in self.robot_start.keys())
 
             # 初始化控制组件
             self.setup_control_components()
@@ -226,56 +232,51 @@ class RobotNode(Node):
         try:
             if self.planner.idle:
                 return
-                
+
             # 获取当前时间
             current_time = self.get_clock().now().seconds_nanoseconds()
             current_time = current_time[0] + current_time[1] * 1e-9
-            
+
             # 获取局部参考轨迹
             current_pos = (self._state[0], self._state[1])
             ref_states, ref_speed, done = self.planner.get_local_ref(
                 current_time=current_time,
                 current_pos=current_pos,
-                idx_check_range=10  # 可以通过参数配置
+                idx_check_range=10
             )
-            
-            # if done:
-            #     self.idle = True
-            #     self.current_task = "idle"
-            #     self.publish_status()
-            #     return
-                
+
             # 设置参考轨迹
             self.controller.set_ref_states(ref_states, ref_speed=ref_speed)
-            
-            # 获取其他机器人状态列表
-            # other_robot_states = [state for rid, state in self.other_robot_states.items()]
-            other_robots_state_list = []
-            for rid, state in self.other_robot_states.items():
-                for _ in range(self.config_mpc.N_hor + 1):
-                    other_robots_state_list.extend([state.x, state.y, state.theta])
-        
-            if not other_robots_state_list:
-                other_robots_state_list = [-10] * (3 * (self.config_mpc.N_hor + 1) * self.config_mpc.Nother)
 
-            
-            
-            # TODO： 解决parameters长度不匹配的问题
-            # 运行控制器
-            # self.last_actions, self.pred_states, self.current_refs, self.debug_info = self.controller.run_step(
-            #     static_obstacles=self.static_obstacles,
-            #     other_robot_states=other_robot_states
-            # )
-            self.last_actions, self.pred_states, self.current_refs, self.debug_info = self.controller.run_step(
-                static_obstacles=self.static_obstacles,
-                other_robot_states=other_robots_state_list
-            )
-            
-            # 执行控制动作
-            self.step(self.last_actions[-1])
-            
+            # 获取其他机器人状态列表
+            received_robot_states = [state for rid, state in self.other_robot_states.items()]
+
+            if len(received_robot_states) == len(self.expected_robots) - 1:
+                # 转换为控制器需要的状态列表格式
+                robot_states_for_control = []
+                for state in received_robot_states:
+                    for _ in range(self.config_mpc.N_hor + 1):
+                        robot_states_for_control.extend([state.x, state.y, state.theta])
+
+                # 检查长度是否正确，如果不正确则填充至mpc所需的参数长度(将robot_state填充至config_mpc.N_hor所需的长度)
+                required_length = 3 * (self.config_mpc.N_hor + 1) * self.config_mpc.Nother
+                if len(robot_states_for_control) < required_length:
+                    remaining_length = required_length - len(robot_states_for_control)
+                    robot_states_for_control.extend([-10] * remaining_length)
+
+                # 运行控制器
+                self.last_actions, self.pred_states, self.current_refs, self.debug_info = self.controller.run_step(
+                    static_obstacles=self.static_obstacles,
+                    other_robot_states=robot_states_for_control
+                )
+
+                # 执行控制动作
+                self.step(self.last_actions[-1])
+            else:
+                self.get_logger().info('Not enough other robot states, skip this control loop')
+
             self.publish_state()
-            
+
         except Exception as e:
             self.get_logger().error(f'Error in control loop: {str(e)}')
     
