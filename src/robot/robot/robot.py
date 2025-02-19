@@ -272,6 +272,7 @@ class RobotNode(Node):
 
                 # 执行控制动作
                 self.step(self.last_actions[-1])
+                
             else:
                 self.get_logger().info('Not enough other robot states, skip this control loop')
 
