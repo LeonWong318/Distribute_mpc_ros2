@@ -11,7 +11,7 @@ rm -rf build/ install/ log/
 echo "Building with colcon..."
 colcon build
 
-# Check if the build was successful before proceeding
+# Check if build was successful
 if [ $? -ne 0 ]; then
     echo "Colcon build failed! Exiting..."
     exit 1
@@ -23,18 +23,19 @@ if [ ! -f install/setup.bash ]; then
     exit 1
 fi
 
-# Open 3 terminals and run ROS2 launch commands
-echo "Launching ROS2 nodes in 3 terminals..."
+# Read robot IDs from CSV using Python
+echo "Determining required robot nodes..."
+ROBOT_LAUNCH_COMMANDS=$(python cluster_robot_id.py)
 
-gnome-terminal --working-directory="$CURRENT_DIR" -- bash -c "source install/setup.bash; ros2 launch manager manager.launch.py; exec bash"
-sleep 1  # Small delay to ensure proper launch order
+# Open a terminal for the manager
+echo "Launching robot manager..."
+gnome-terminal --working-directory="$CURRENT_DIR" -- bash -c "echo Robot Manager; source install/setup.bash; ros2 launch manager manager.launch.py; exec bash"
 
-gnome-terminal --working-directory="$CURRENT_DIR" -- bash -c "source install/setup.bash; ros2 launch robot robot.launch.py robot_id:=1; exec bash"
-sleep 1  # Delay for stability
+# Launch robot nodes dynamically
+echo "Launching robot nodes..."
+eval "$ROBOT_LAUNCH_COMMANDS"
 
-gnome-terminal --working-directory="$CURRENT_DIR" -- bash -c "source install/setup.bash; ros2 launch robot robot.launch.py robot_id:=0; exec bash"
-
-# Echo topic in current terminal and save output to file
+# Echo topic in the current terminal and save to file
 echo "Echoing /manager/robot_states and saving to robot_state.log..."
 source install/setup.bash
 ros2 topic echo /manager/robot_states > robot_state.log
