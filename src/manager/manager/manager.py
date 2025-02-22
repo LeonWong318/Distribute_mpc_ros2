@@ -8,17 +8,20 @@ from rclpy.callback_groups import ReentrantCallbackGroup
 from concurrent.futures import ThreadPoolExecutor
 from threading import Lock, Event
 
-from robot_interfaces.msg import (
-    RobotState,
-    RobotStatesQuery
-)
-from robot_interfaces.srv import GetMapData
+
+
+from rclpy.callback_groups import ReentrantCallbackGroup, MutuallyExclusiveCallbackGroup
+from threading import Lock, Event
+
+from robot_interfaces.msg import RobotState, RobotStatesQuery
+from robot_interfaces.srv import GetMapData, RegisterLocalRobot, StartSignal
+
 
 class RobotManager(Node):
     def __init__(self):
         super().__init__('robot_manager')
         
-        # 声明参数
+        # Parameters
         self.declare_parameters(
             namespace='',
             parameters=[

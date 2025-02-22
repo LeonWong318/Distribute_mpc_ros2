@@ -17,7 +17,7 @@ from pkg_motion_plan.local_traj_plan import LocalTrajPlanner
 from pkg_tracker_mpc.trajectory_tracker import TrajectoryTracker
 from pkg_motion_plan.global_path_coordinate import GlobalPathCoordinator
 
-from robot_interfaces.msg import RobotState, RobotStatesQuery
+from robot_interfaces.msg import RobotState, RobotStatesQuery, Trajectory
 from robot_interfaces.srv import GetMapData
 
 class RobotNode(Node):
@@ -69,17 +69,26 @@ class RobotNode(Node):
         self.pred_states = None
         
         # 设置QoS
-        qos_profile = QoSProfile(
+        tcp_qos_profile = QoSProfile(
             reliability=QoSReliabilityPolicy.RELIABLE,
             history=QoSHistoryPolicy.KEEP_LAST,
             depth=10
+        )
+        udp_qos_profile = QoSProfile(
+            reliability=QoSReliabilityPolicy.BEST_EFFORT
         )
         
         # 创建发布者发布机器人状态
         self.state_publisher = self.create_publisher(
             RobotState, 
             f'/robot_{self.robot_id}/state', 
-            qos_profile
+            tcp_qos_profile
+        )
+
+        self.traj_publisher = self.create_publisher(
+            Trajectory,
+            f'/robot_{self.robot_id}/trajectory',
+            udp_qos_profile
         )
         
         # 创建订阅者获取其他机器人状态
@@ -91,7 +100,7 @@ class RobotNode(Node):
             RobotStatesQuery,
             '/manager/robot_states',
             self.robot_states_callback,
-            qos_profile
+            tcp_qos_profile
         )
         
         # 创建一个回调组用于服务客户端
@@ -294,6 +303,7 @@ class RobotNode(Node):
     def publish_state(self):
         """发布机器人状态"""
         try:
+
             state_msg = RobotState()
             state_msg.robot_id = self.robot_id
             state_msg.x = self._state[0]
@@ -301,6 +311,11 @@ class RobotNode(Node):
             state_msg.theta = self._state[2]
             state_msg.idle = self.idle
             state_msg.stamp = self.get_clock().now().to_msg()
+            traj_msg = Trajectory()
+            traj_msg.robot_id = state_msg.robot_id
+            traj_msg.x = state_msg.x
+            traj_msg.y = state_msg.y 
+            traj_msg.theta = state_msg.theta
             
             if self.pred_states is not None:
                 flattened_states = []
@@ -312,8 +327,10 @@ class RobotNode(Node):
                     else:
                         flattened_states.append(state)
                 state_msg.pred_states = flattened_states
+                traj_msg.pred_states = state_msg.pred_states
 
             self.state_publisher.publish(state_msg)
+            self.traj_publisher.publish(traj_msg)
             
         except Exception as e:
             self.get_logger().error(f'Error in update_and_publish_state: {str(e)}')
