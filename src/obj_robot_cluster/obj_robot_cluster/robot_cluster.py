@@ -75,7 +75,9 @@ class RobotNode(Node):
             depth=10
         )
         udp_qos_profile = QoSProfile(
-            reliability=QoSReliabilityPolicy.BEST_EFFORT
+            reliability=QoSReliabilityPolicy.BEST_EFFORT,
+            history=QoSHistoryPolicy.KEEP_LAST,
+            depth=10
         )
         
         # 创建发布者发布机器人状态

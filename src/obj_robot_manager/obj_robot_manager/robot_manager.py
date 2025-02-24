@@ -14,7 +14,7 @@ from rclpy.callback_groups import ReentrantCallbackGroup, MutuallyExclusiveCallb
 from threading import Lock, Event
 
 from msg_interfaces.msg import RobotState, RobotStatesQuery
-from msg_interfaces.srv import GetMapData, RegisterLocalRobot, StartSignal
+from msg_interfaces.srv import GetMapData
 
 
 class RobotManager(Node):

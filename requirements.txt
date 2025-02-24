@@ -28,3 +28,5 @@ launch-yaml==0.10.10
 ros2pkg==0.9.13
 ros2run==0.9.13
 ros2topic==0.9.13
+
+gnome-terminal==3.36.2-1
