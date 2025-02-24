@@ -17,8 +17,8 @@ from pkg_motion_plan.local_traj_plan import LocalTrajPlanner
 from pkg_tracker_mpc.trajectory_tracker import TrajectoryTracker
 from pkg_motion_plan.global_path_coordinate import GlobalPathCoordinator
 
-from robot_interfaces.msg import RobotState, RobotStatesQuery
-from robot_interfaces.srv import GetMapData
+from msg_interfaces.msg import RobotState, RobotStatesQuery
+from msg_interfaces.srv import GetMapData
 
 class RobotNode(Node):
     async def initialize(self):

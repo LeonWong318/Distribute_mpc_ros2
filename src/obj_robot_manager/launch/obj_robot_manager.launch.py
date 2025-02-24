@@ -12,10 +12,9 @@ def generate_launch_description():
         'robot_start_path': os.path.join(workspace_root, 'data/test_data/robot_start.json')
     }
     
-    # Manager节点
-    manager_node = Node(
-        package='manager',
-        executable='manager_node',
+    robot_manager = Node(
+        package='obj_robot_manager',
+        executable='robot_manager',
         name='robot_manager',
         parameters=[{
             **data_paths,
@@ -25,5 +24,5 @@ def generate_launch_description():
     )
 
     return LaunchDescription([
-        manager_node
+        robot_manager
     ])

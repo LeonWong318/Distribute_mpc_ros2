@@ -2,7 +2,7 @@ from setuptools import setup
 import os
 from glob import glob
 
-package_name = 'manager'
+package_name = 'obj_robot_manager'
 
 setup(
     name=package_name,
@@ -24,7 +24,7 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'manager_node = manager.manager:main'
+            'robot_manager = obj_robot_manager.robot_manager:main'
         ],
     },
 )

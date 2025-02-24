@@ -29,7 +29,7 @@ ROBOT_LAUNCH_COMMANDS=$(python cluster_robot_id.py)
 
 # Open a terminal for the manager
 echo "Launching robot manager..."
-gnome-terminal --working-directory="$CURRENT_DIR" -- bash -c "echo Robot Manager; source install/setup.bash; ros2 launch manager manager.launch.py; exec bash"
+gnome-terminal --working-directory="$CURRENT_DIR" -- bash -c "echo Robot Manager; source install/setup.bash; ros2 launch obj_robot_manager ojb_robot_manager.launch.py; exec bash"
 
 # Launch robot nodes dynamically
 echo "Launching robot nodes..."

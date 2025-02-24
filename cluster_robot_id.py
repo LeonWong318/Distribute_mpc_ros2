@@ -17,7 +17,7 @@ commands = []
 for robot_id in robot_ids:
     cmd = (
         f'gnome-terminal --working-directory="$CURRENT_DIR" -- bash -c "echo Robot ID: {robot_id}; '
-        f'source install/setup.bash; ros2 launch robot robot.launch.py robot_id:={robot_id}; exec bash"'
+        f'source install/setup.bash; ros2 launch obj_robot_cluster obj_robot_cluster.launch.py robot_id:={robot_id}; exec bash"'
     )
     commands.append(cmd)
 

@@ -16,10 +16,10 @@ def generate_launch_description():
         description='Robot ID'
     )
 
-    robot_node = Node(
-        package='robot',
-        executable='robot_node',
-        name='robot_node',
+    robot_cluster = Node(
+        package='obj_robot_cluster',
+        executable='robot_cluster',
+        name='robot_cluster',
         parameters=[{
             'robot_id': LaunchConfiguration('robot_id'),
             'max_velocity': 1.0,
@@ -34,7 +34,7 @@ def generate_launch_description():
     )
    
     return LaunchDescription([
-        pythonpath_cmd,  # 添加环境变量设置
+        pythonpath_cmd, 
         robot_id_arg,
-        robot_node
+        robot_cluster
     ])

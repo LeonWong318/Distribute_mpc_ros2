@@ -2,7 +2,7 @@ import os
 from glob import glob
 from setuptools import setup, find_packages
 
-package_name = 'localRobot'
+package_name = 'obj_local_robot'
 
 setup(
     name=package_name,
@@ -25,7 +25,7 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'robot_node = localRobot.localRobot:main'
+            'local_robot = obj_local_robot.local_robot:main'
         ],
     },
 )
