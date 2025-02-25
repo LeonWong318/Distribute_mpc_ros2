@@ -382,7 +382,7 @@ class TrajectoryTracker:
                                closest_obstacle_list=self._closest_obstacle_list, 
                                step_runtime=step_runtime, 
                                monitored_cost=monitored_cost)
-        self.check_termination_condition()
+        # self.check_termination_condition()
         return actions, pred_states, ref_states, debug_info
 
     def _run_step(self, stc_constraints: List, dyn_constraints: List, other_robot_states:Optional[List]=None, report_cost:bool=False):

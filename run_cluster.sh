@@ -51,6 +51,10 @@ gnome-terminal --working-directory="$CURRENT_DIR" -- bash -c "echo Robot Manager
 echo "Launching robot nodes..."
 eval "$ROBOT_LAUNCH_COMMANDS"
 
+# Launch robot visualizer
+echo "Launching visualization node..."
+gnome-terminal --working-directory="$CURRENT_DIR" -- bash -c "echo Robot Visualizer; source install/setup.bash; ros2 launch obj_robot_visualizer robot_visualizer.launch.py; exec bash"
+
 # Echo topic in the current terminal and save to file
 echo "Echoing /manager/robot_states and saving to robot_state.log..."
 source install/setup.bash
