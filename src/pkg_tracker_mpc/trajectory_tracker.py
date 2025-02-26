@@ -327,22 +327,39 @@ class TrajectoryTracker:
         else:
             self.set_work_mode(mode='work', use_predefined_speed=True)
 
+    # def check_termination_condition(self, external_check=True) -> bool:
+    #     """Check if the robot finishes the trajectory tracking.
+
+    #     Args:
+    #         external_check: If this is true, the controller will check if it should terminate. Defaults to True.
+
+    #     Returns:
+    #         _idle: If the robot finishes the trajectory tracking.
+    #     """
+        # if external_check:
+        #     self.finishing = True
+        #     if np.allclose(self.state[:2], self.final_goal[:2], atol=0.1, rtol=0) and abs(self.past_actions[-1][0]) < 0.1:
+        #         self._idle = True
+        #         if self.vb:
+        #             print(f"[{self.__class__.__name__}-{self.robot_id}] Trajectory tracking finished.")
+        # return self._idle
+        
+    
+
+    
     def check_termination_condition(self, external_check=True) -> bool:
         """Check if the robot finishes the trajectory tracking.
-
         Args:
             external_check: If this is true, the controller will check if it should terminate. Defaults to True.
-
         Returns:
             _idle: If the robot finishes the trajectory tracking.
         """
         if external_check:
             self.finishing = True
-            if np.allclose(self.state[:2], self.final_goal[:2], atol=0.1, rtol=0) and abs(self.past_actions[-1][0]) < 0.1:
+            distance = np.linalg.norm(self.state[:2] - self.final_goal[:2])
+            if distance <= 0.3:
                 self._idle = True
-                if self.vb:
-                    print(f"[{self.__class__.__name__}-{self.robot_id}] Trajectory tracking finished.")
-        return self._idle
+            return self._idle
 
 
     def run_step(self, static_obstacles: List[List[PathNode]], full_dyn_obstacle_list:Optional[List]=None, other_robot_states:Optional[List]=None, 

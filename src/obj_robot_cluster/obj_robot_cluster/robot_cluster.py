@@ -289,7 +289,7 @@ class RobotNode(Node):
             self.publish_state()
             
             if self.controller.check_termination_condition(external_check=self.planner.idle):
-                self.get_logger.info('Arrived goal and entered idle state')
+                self.get_logger().info('Arrived goal and entered idle state')
                 self.idle = True
 
         except Exception as e:

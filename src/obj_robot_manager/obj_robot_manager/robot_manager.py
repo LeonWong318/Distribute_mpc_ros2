@@ -61,11 +61,9 @@ class RobotManager(Node):
             depth=10
         )
         
-        # 读取配置文件并且发布数据
         self.load_config_files()
         self.parse_robot_start()
         
-        # 创建全局地图数据发布者
         self.map_service = self.create_service(
             GetMapData,
             '/get_map_data',
@@ -73,14 +71,12 @@ class RobotManager(Node):
             callback_group=self.service_group
         )
         
-        # 创建机器人状态查询响应发布者
         self.states_publisher = self.create_publisher(
             RobotStatesQuery,
             '/manager/robot_states',
             self.qos_profile
         )
         
-        # 创建定时发布定时器
         self.create_timer(
             1.0/self.publish_frequency,
             self.publish_states,
@@ -90,7 +86,6 @@ class RobotManager(Node):
         self.get_logger().info('Robot manager initialized successfully')
     
     def load_config_files(self):
-        """加载配置文件"""
         try:
             print(self.map_path)
             # 从配置文件读取相关数据
@@ -111,7 +106,6 @@ class RobotManager(Node):
             raise
         
     def parse_robot_start(self):
-        """解析robot_start文件并设置预期的机器人ID"""
         try:
             import json
             robot_start_data = json.loads(self.robot_start)
@@ -122,25 +116,23 @@ class RobotManager(Node):
             raise
     
     def wait_for_registration(self, timeout=60):
-        """等待所有机器人注册完成"""
         return self._registration_complete_event.wait(timeout)
     
     def handle_get_map_data(self, request, response):
-        """处理地图数据请求服务"""
         try:
             self.get_logger().info(f'Received map data request from robot {request.robot_id}')
             
-            # 尝试注册机器人
+            # wait for robot registrating
             if not self.register_robot(request.robot_id):
                 self.get_logger().error(f'Registration failed for robot {request.robot_id}')
                 return response
             
-            # 等待所有机器人注册完成
+            # wait for all reistration finished
             if not self.wait_for_registration():
                 self.get_logger().error('Registration timeout')
                 return response
             
-            # 所有机器人都已注册，返回地图数据
+            # return map data
             response.map_json = self.map_json
             response.graph_json = self.graph_json
             response.schedule_json = self.schedule_json
@@ -163,7 +155,7 @@ class RobotManager(Node):
             self.get_logger().warn(f'Robot {robot_id} already registered')
             return True
                 
-        # 创建该机器人的状态订阅者
+        # create subscription of current robot state
         state_sub = self.create_subscription(
             RobotState,
             f'/robot_{robot_id}/state',
@@ -192,7 +184,6 @@ class RobotManager(Node):
         if robot_id not in self.registered_robots:
             return
 
-        # 删除订阅者
         if robot_id in self.robot_subscribers:
             self.destroy_subscription(self.robot_subscribers[robot_id])
             del self.robot_subscribers[robot_id]
@@ -203,30 +194,25 @@ class RobotManager(Node):
             if robot_id in self.robot_states:
                 del self.robot_states[robot_id]
 
-            # 重置注册完成状态
             self.registration_complete = False
             self._registration_complete_event.clear()
 
         self.get_logger().info(f'Robot {robot_id} unregistered')
         
     def state_callback(self, msg: RobotState, robot_id: int) -> None:
-        """处理机器人状态更新"""
         with self._lock:
             self.robot_states[robot_id] = msg
             
     def publish_states(self):
-        """广播所有机器人状态"""
         try:
             with self._lock:
                 msg = RobotStatesQuery()
                 msg.stamp = self.get_clock().now().to_msg()
 
-                # 添加所有机器人的状态
                 for robot_id, state in self.robot_states.items():
                     if state is not None:
                         msg.robot_states.append(state)
 
-                # 发布消息
                 self.states_publisher.publish(msg)
 
         except Exception as e:
@@ -237,7 +223,6 @@ def main(args=None):
     
     manager = RobotManager()
     
-    # 使用多线程执行器
     executor = MultiThreadedExecutor()
     executor.add_node(manager)
     

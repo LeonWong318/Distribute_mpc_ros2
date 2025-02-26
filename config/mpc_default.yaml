@@ -32,11 +32,11 @@ qstcobs: 1000.0 # Cost for static obstacle avoidance (soft constraint)
 qdynobs: 1000.0 # Cost for dynamic obstacle avoidance (soft constraint)
   
 # Terminal weights
-qpN: 0.0                # Terminal cost; error relative to final reference position         
+qpN: 0.0               # Terminal cost; error relative to final reference position         
 qthetaN: 0.0            # Terminal cost; error relative to final reference heading     
 # Building options in the optimizer
 solver_type: 'PANOC'
-max_solver_time: 500_0000        # micros (0.5 sec)
+max_solver_time: 500_000        # micros (0.5 sec)
 # max_solver_time: 1_0
 build_type: 'release'           # Can have 'debug' or 'release'
 build_directory: 'mpc_solver'   # Name of the directory where the build is created
