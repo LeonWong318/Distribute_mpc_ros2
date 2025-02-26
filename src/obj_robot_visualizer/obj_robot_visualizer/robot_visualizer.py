@@ -71,53 +71,58 @@ class RobotStateVisualizer(Node):
     
     def load_data(self):
         try:
-            package_share_dir = get_package_share_directory('obj_robot_visualizer')
-            
+            current_dir = os.getcwd()
+            self.get_logger().info(f'Current working directory: {current_dir}')
+
             try:
-                map_file_path = os.path.join(package_share_dir, self.map_path)
-                with open(map_file_path, 'r') as f:
-                    self.map_data = json.load(f)
-                self.get_logger().info(f'Loaded map data from {map_file_path}')
-            except Exception as e:
-                self.get_logger().error(f'Error loading map data: {str(e)}')
-                try:
+                map_file_path = os.path.join(current_dir, self.map_path)
+                if os.path.exists(map_file_path):
+                    with open(map_file_path, 'r') as f:
+                        self.map_data = json.load(f)
+                    self.get_logger().info(f'Loaded map data from {map_file_path}')
+                else:
                     with open(self.map_path, 'r') as f:
                         self.map_data = json.load(f)
                     self.get_logger().info(f'Loaded map data from {self.map_path}')
-                except Exception as e2:
-                    self.get_logger().error(f'Error loading map data from relative path: {str(e2)}')
-            
-            try:
-                graph_file_path = os.path.join(package_share_dir, self.graph_path)
-                with open(graph_file_path, 'r') as f:
-                    self.graph_data = json.load(f)
-                self.get_logger().info(f'Loaded graph data from {graph_file_path}')
             except Exception as e:
-                self.get_logger().error(f'Error loading graph data: {str(e)}')
-                try:
+                self.get_logger().error(f'Failed to load map data: {str(e)}')
+                self.map_data = None
+
+            try:
+                graph_file_path = os.path.join(current_dir, self.graph_path)
+                if os.path.exists(graph_file_path):
+                    with open(graph_file_path, 'r') as f:
+                        self.graph_data = json.load(f)
+                    self.get_logger().info(f'Loaded graph data from {graph_file_path}')
+                else:
                     with open(self.graph_path, 'r') as f:
                         self.graph_data = json.load(f)
                     self.get_logger().info(f'Loaded graph data from {self.graph_path}')
-                except Exception as e2:
-                    self.get_logger().error(f'Error loading graph data from relative path: {str(e2)}')
-            
-            try:
-                robot_start_file_path = os.path.join(package_share_dir, self.robot_start_path)
-                with open(robot_start_file_path, 'r') as f:
-                    self.robot_start_data = json.load(f)
-                self.get_logger().info(f'Loaded robot start data from {robot_start_file_path}')
             except Exception as e:
-                self.get_logger().error(f'Error loading robot start data: {str(e)}')
-                try:
+                self.get_logger().error(f'Failed to load graph data: {str(e)}')
+                self.graph_data = None
+
+            try:
+                robot_start_file_path = os.path.join(current_dir, self.robot_start_path)
+                if os.path.exists(robot_start_file_path):
+                    with open(robot_start_file_path, 'r') as f:
+                        self.robot_start_data = json.load(f)
+                    self.get_logger().info(f'Loaded robot start data from {robot_start_file_path}')
+                else:
                     with open(self.robot_start_path, 'r') as f:
                         self.robot_start_data = json.load(f)
                     self.get_logger().info(f'Loaded robot start data from {self.robot_start_path}')
-                except Exception as e2:
-                    self.get_logger().error(f'Error loading robot start data from relative path: {str(e2)}')
-                    
+            except Exception as e:
+                self.get_logger().error(f'Failed to load robot start data: {str(e)}')
+                self.robot_start_data = None
+
+            self.get_logger().info(f'Data loading complete - Map: {"Loaded" if self.map_data else "Failed"}, '
+                                  f'Graph: {"Loaded" if self.graph_data else "Failed"}, '
+                                  f'Robot Start: {"Loaded" if self.robot_start_data else "Failed"}')
+
         except Exception as e:
-            self.get_logger().error(f'General error loading data: {str(e)}')
-    
+            self.get_logger().error(f'Unexpected error loading data: {str(e)}')
+
     def publish_static_markers(self):
         marker_array = MarkerArray()
 
