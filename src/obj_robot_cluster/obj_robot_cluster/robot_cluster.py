@@ -241,18 +241,16 @@ class RobotNode(Node):
 
     
     def control_loop(self):
-        """主控制循环"""
         try:
-            # if self.planner.idle:
-            #     self.get_logger().info(f'planner idle')
-            #     return
+            if self.idle:
+                return
 
-            # 获取当前时间
+            # Get current time
             current_time = self.get_clock().now().seconds_nanoseconds()
             current_time = current_time[0] + current_time[1] * 1e-9
 
 
-            # 获取局部参考轨迹
+            # Get local ref and set ref states
             current_pos = (self._state[0], self._state[1])
             ref_states, ref_speed, done = self.planner.get_local_ref(
                 current_time=current_time,
@@ -260,10 +258,9 @@ class RobotNode(Node):
                 idx_check_range=10
             )
 
-            # 设置参考轨迹
             self.controller.set_ref_states(ref_states, ref_speed=ref_speed)
 
-            # 获取其他机器人状态列表
+            # get other robot states
             received_robot_states = [state for rid, state in self.other_robot_states.items()]
 
             if len(received_robot_states) == len(self.expected_robots) - 1:
@@ -291,6 +288,10 @@ class RobotNode(Node):
                 self.get_logger().info('Not enough other robot states, skip this control loop')
 
             self.publish_state()
+            
+            if self.controller.check_termination_condition(external_check=self.planner.idle):
+                self.get_logger.info('Arrived goal and entered idle state')
+                self.idle = True
 
         except Exception as e:
             self.get_logger().error(f'Error in control loop: {str(e)}')
