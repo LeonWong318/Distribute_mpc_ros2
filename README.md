@@ -29,30 +29,11 @@ python src/build_solver.py
 That can ensure mpc_solver/ located in project root folder.
 
 
-## ROS2 nodes build:
-If you want to rebuild the node:
+## Start Simulation:
 ```
-rm -rf build/ install/ log/
-```
-After that,
-```
-colcon build
+chmod +x .
 ```
 ```
-source install/setup.bash
+./run_cluster.sh
 ```
 
-## Run robot manager
-```
-ros2 launch manager manager.launch.py
-```
-
-## Run robot
-```
-ros2 launch robot robot.launch.py robot_id:=1
-```
-
-## Echo
-```
-ros2 topic echo /manager/robot_states > robot_state.log
-```
