@@ -54,8 +54,9 @@ class RobotNode(Node):
         self.robot_id = self.get_parameter('robot_id').value
         self.max_velocity = self.get_parameter('max_velocity').value
         self.max_angular_velocity = self.get_parameter('max_angular_velocity').value
-        self.control_frequency = self.get_parameter('control_frequency').value
-        
+        # self.control_frequency = self.get_parameter('control_frequency').value
+        self.control_frequency = 0.5
+
         # 加载配置文件
         mpc_config_path = self.get_parameter('mpc_config_path').value
         robot_config_path = self.get_parameter('robot_config_path').value
