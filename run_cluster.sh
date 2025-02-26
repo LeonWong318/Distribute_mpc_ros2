@@ -59,6 +59,8 @@ sleep 2
 
 echo "Launching listening and logging..."
 
+pkill -f "ros2 topic echo"
+
 nohup bash -c "source install/setup.bash && ros2 topic echo /manager/robot_states > robot_state.log 2>&1" &
 echo "Started monitoring /manager/robot_states"
 
@@ -66,14 +68,5 @@ echo "Started monitoring /manager/robot_states"
 nohup bash -c "source install/setup.bash && ros2 topic echo /robot_0/state > robot_0_state.log 2>&1" &
 echo "Started monitoring /robot_0/state"
 
-
-nohup bash -c "source install/setup.bash && ros2 topic echo /robot_0/debug_info > robot_0_debug_info.log 2>&1" &
-echo "Started monitoring /robot_0/debug_info"
-
-
 nohup bash -c "source install/setup.bash && ros2 topic echo /robot_1/state > robot_1_state.log 2>&1" &
 echo "Started monitoring /robot_1/state"
-
-
-nohup bash -c "source install/setup.bash && ros2 topic echo /robot_1/debug_info > robot_1_debug_info.log 2>&1" &
-echo "Started monitoring /robot_1/debug_info"
