@@ -81,7 +81,7 @@ class RobotNode(Node):
             depth=10
         )
         
-        # 创建发布者发布机器人状态
+        # create publisher
         self.state_publisher = self.create_publisher(
             RobotState, 
             f'/robot_{self.robot_id}/state', 
@@ -230,6 +230,7 @@ class RobotNode(Node):
             )
 
             self.get_logger().info('Initialization completed successfully')
+
             return True
 
         except Exception as e:
@@ -242,12 +243,14 @@ class RobotNode(Node):
     def control_loop(self):
         """主控制循环"""
         try:
-            if self.planner.idle:
-                return
+            # if self.planner.idle:
+            #     self.get_logger().info(f'planner idle')
+            #     return
 
             # 获取当前时间
             current_time = self.get_clock().now().seconds_nanoseconds()
             current_time = current_time[0] + current_time[1] * 1e-9
+
 
             # 获取局部参考轨迹
             current_pos = (self._state[0], self._state[1])
@@ -264,25 +267,24 @@ class RobotNode(Node):
             received_robot_states = [state for rid, state in self.other_robot_states.items()]
 
             if len(received_robot_states) == len(self.expected_robots) - 1:
-                # 转换为控制器需要的状态列表格式
                 robot_states_for_control = []
                 for state in received_robot_states:
                     for _ in range(self.config_mpc.N_hor + 1):
                         robot_states_for_control.extend([state.x, state.y, state.theta])
 
-                # 检查长度是否正确，如果不正确则填充至mpc所需的参数长度(将robot_state填充至config_mpc.N_hor所需的长度)
+                # check if state length is right
                 required_length = 3 * (self.config_mpc.N_hor + 1) * self.config_mpc.Nother
                 if len(robot_states_for_control) < required_length:
                     remaining_length = required_length - len(robot_states_for_control)
                     robot_states_for_control.extend([-10] * remaining_length)
 
-                # 运行控制器
+                # run controller
                 self.last_actions, self.pred_states, self.current_refs, self.debug_info = self.controller.run_step(
                     static_obstacles=self.static_obstacles,
                     other_robot_states=robot_states_for_control
                 )
-
-                # 执行控制动作
+                
+                # run step
                 self.step(self.last_actions[-1])
                 
             else:
@@ -319,7 +321,7 @@ class RobotNode(Node):
             traj_msg.x = state_msg.x
             traj_msg.y = state_msg.y 
             traj_msg.theta = state_msg.theta
-            
+
             if self.pred_states is not None:
                 flattened_states = []
                 for state in self.pred_states:
