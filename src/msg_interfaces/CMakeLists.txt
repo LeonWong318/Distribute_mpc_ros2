@@ -12,8 +12,10 @@ find_package(builtin_interfaces REQUIRED)
 rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/RobotState.msg"
   "msg/RobotStatesQuery.msg"
-  "msg/Trajectory.msg"
+  "msg/ClusterToRobotTrajectory.msg"
+  "msg/RobotToClusterState.msg"
   "srv/GetMapData.srv"
+  "srv/RegisterRobot.srv"
   DEPENDENCIES builtin_interfaces
 )
 

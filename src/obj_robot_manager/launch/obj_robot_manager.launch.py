@@ -12,17 +12,24 @@ def generate_launch_description():
         'robot_start_path': os.path.join(workspace_root, 'data/test_data/robot_start.json')
     }
     
+    config_paths = {
+        'mpc_config_path': os.path.join(workspace_root, 'config/mpc_default.yaml'),
+        'robot_config_path': os.path.join(workspace_root, 'config/spec_robot.yaml')
+    }
+    
     robot_manager = Node(
         package='obj_robot_manager',
         executable='robot_manager',
         name='robot_manager',
         parameters=[{
             **data_paths,
+            **config_paths,
+            'cluster_package': 'obj_robot_cluster', 
             'publish_frequency': 10.0
         }],
         output='screen'
     )
-
+    
     return LaunchDescription([
         robot_manager
     ])

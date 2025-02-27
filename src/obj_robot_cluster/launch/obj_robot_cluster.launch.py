@@ -22,13 +22,9 @@ def generate_launch_description():
         name='robot_cluster',
         parameters=[{
             'robot_id': LaunchConfiguration('robot_id'),
-            'max_velocity': 1.0,
-            'max_angular_velocity': 1.0,
             'control_frequency': 10.0,
             'mpc_config_path': "config/mpc_default.yaml",
             'robot_config_path': "config/spec_robot.yaml",
-            'planner_search_range': 10,
-            'nominal_speed_ratio': 0.8
         }],
         output='screen'
     )

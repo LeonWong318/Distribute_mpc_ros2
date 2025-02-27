@@ -1,27 +1,22 @@
 import rclpy
 from rclpy.node import Node
 from rclpy.executors import MultiThreadedExecutor
-from rclpy.callback_groups import MutuallyExclusiveCallbackGroup
+from rclpy.callback_groups import MutuallyExclusiveCallbackGroup, ReentrantCallbackGroup
 from rclpy.qos import QoSProfile, QoSReliabilityPolicy, QoSHistoryPolicy
 from threading import Lock
-from rclpy.callback_groups import ReentrantCallbackGroup
-from concurrent.futures import ThreadPoolExecutor
-from threading import Lock, Event
+import subprocess
+import os
+import json
+import threading
 
-
-
-from rclpy.callback_groups import ReentrantCallbackGroup, MutuallyExclusiveCallbackGroup
-from threading import Lock, Event
-
-from msg_interfaces.msg import RobotState, RobotStatesQuery
-from msg_interfaces.srv import GetMapData
+from msg_interfaces.msg import ManagerToClusterStateSet, ClusterToManagerState
+from msg_interfaces.srv import RegisterRobot
 
 
 class RobotManager(Node):
     def __init__(self):
         super().__init__('robot_manager')
         
-        # Parameters
         self.declare_parameters(
             namespace='',
             parameters=[
@@ -29,31 +24,42 @@ class RobotManager(Node):
                 ('graph_path', ''),
                 ('schedule_path', ''),
                 ('robot_start_path', ''),
+                ('cluster_package', ''),
+                ('mpc_config_path', ''),
+                ('robot_config_path', ''),
                 ('publish_frequency', 10.0)
             ]
         )
         
-        # 获取参数
+        # Get Parameter
         self.map_path = self.get_parameter('map_path').value
         self.graph_path = self.get_parameter('graph_path').value
         self.schedule_path = self.get_parameter('schedule_path').value
         self.robot_start_path = self.get_parameter('robot_start_path').value
+        self.cluster_package = self.get_parameter('cluster_package').value
         self.publish_frequency = self.get_parameter('publish_frequency').value
+        self.mpc_config_path = self.get_parameter('mpc_config_path').value
+        self.robot_config_path = self.get_parameter('robot_config_path').value
 
-        # 初始化数据结构
-        self.active_robots = []
-        self.robot_states = {}  # 存储每个机器人的最新状态
-        self.robot_subscribers = {}
+        
+        self.active_robots = [] 
+        self.cluster_processes = {}  
+        self.cluster_subscribers = {}
+        self.robot_states = {}
+        
+        
         self._lock = Lock()
+        self._registration_lock = Lock()
+        self._state_lock = Lock()
         
-        self.expected_robots = set()  # 预期的机器人ID集合
-        self.registered_robots = set()  # 已注册的机器人ID集合
-        self.registration_complete = False  # 是否所有预期机器人都已注册
-        self._registration_lock = Lock()  # 用于注册状态的锁
+        self.expected_robots = set()  # Set of expected robots(from config)
+        self.registered_robots = set()  # Set of registrated robots
         
-        self.service_group = ReentrantCallbackGroup() # 允许并发处理
-        self._registration_complete_event = Event() # 创建事件用于通知注册完成
-        self._executor = ThreadPoolExecutor(max_workers=10) # 使用线程池执行器
+        self.load_config_files()
+        self.parse_robot_start()
+        
+        # Allow parallel execution
+        self.service_group = ReentrantCallbackGroup()
         
         self.qos_profile = QoSProfile(
             reliability=QoSReliabilityPolicy.RELIABLE,
@@ -61,25 +67,23 @@ class RobotManager(Node):
             depth=10
         )
         
-        self.load_config_files()
-        self.parse_robot_start()
-        
-        self.map_service = self.create_service(
-            GetMapData,
-            '/get_map_data',
-            self.handle_get_map_data,
+        # create registration service
+        self.register_service = self.create_service(
+            RegisterRobot,
+            '/register_robot',
+            self.handle_register_robot,
             callback_group=self.service_group
         )
         
         self.states_publisher = self.create_publisher(
-            RobotStatesQuery,
+            ManagerToClusterStateSet,
             '/manager/robot_states',
             self.qos_profile
         )
         
         self.create_timer(
-            1.0/self.publish_frequency,
-            self.publish_states,
+            1.0 / self.publish_frequency,
+            self.publish_robot_states,
             callback_group=MutuallyExclusiveCallbackGroup()
         )
         
@@ -87,10 +91,18 @@ class RobotManager(Node):
     
     def load_config_files(self):
         try:
-            print(self.map_path)
-            # 从配置文件读取相关数据
+            for path_name, path in [
+                ('map_path', self.map_path),
+                ('graph_path', self.graph_path),
+                ('schedule_path', self.schedule_path),
+                ('robot_start_path', self.robot_start_path)
+            ]:
+                if not os.path.exists(path):
+                    self.get_logger().error(f'File not found: {path_name} = {path}')
+                    raise FileNotFoundError(f'{path_name} file not found: {path}')
+                    
             with open(self.map_path, 'r') as f:
-                self.map_json = f.read()  # 直接读取json字符串
+                self.map_json = f.read()
             
             with open(self.graph_path, 'r') as f:
                 self.graph_json = f.read()
@@ -100,6 +112,8 @@ class RobotManager(Node):
                 
             with open(self.robot_start_path, 'r') as f:
                 self.robot_start = f.read()
+                
+            self.get_logger().info('Config files loaded successfully')
         
         except Exception as e:
             self.get_logger().error(f'Error loading config files: {str(e)}')
@@ -107,7 +121,6 @@ class RobotManager(Node):
         
     def parse_robot_start(self):
         try:
-            import json
             robot_start_data = json.loads(self.robot_start)
             self.expected_robots = set(int(robot_id) for robot_id in robot_start_data.keys())
             self.get_logger().info(f'Expected robots: {self.expected_robots}')
@@ -115,108 +128,200 @@ class RobotManager(Node):
             self.get_logger().error(f'Error parsing robot_start: {str(e)}')
             raise
     
-    def wait_for_registration(self, timeout=60):
-        return self._registration_complete_event.wait(timeout)
-    
-    def handle_get_map_data(self, request, response):
+    def handle_register_robot(self, request, response):
+        robot_id = request.robot_id
+        
         try:
-            self.get_logger().info(f'Received map data request from robot {request.robot_id}')
+            self.get_logger().info(f'Received registration request from robot {robot_id}')
             
-            # wait for robot registrating
-            if not self.register_robot(request.robot_id):
-                self.get_logger().error(f'Registration failed for robot {request.robot_id}')
+            # check if matches the expected list
+            if robot_id not in self.expected_robots:
+                self.get_logger().warn(f'Robot {robot_id} not in expected robots list, registration rejected')
+                response.success = False
+                response.message = f"Robot {robot_id} not in expected robot list"
+                return response
+                
+            # check if already registered
+            if robot_id in self.registered_robots:
+                self.get_logger().warn(f'Robot {robot_id} already registered')
+                response.success = True
+                response.message = f"Robot {robot_id} already registered"
                 return response
             
-            # wait for all reistration finished
-            if not self.wait_for_registration():
-                self.get_logger().error('Registration timeout')
+            # create cluster node
+            success = self.create_cluster_node(robot_id)
+            if not success:
+                response.success = False
+                response.message = f"Failed to create cluster node for robot {robot_id}"
                 return response
             
-            # return map data
-            response.map_json = self.map_json
-            response.graph_json = self.graph_json
-            response.schedule_json = self.schedule_json
-            response.robot_start = self.robot_start
+            # Create Subscriber for cluster status
+            self.create_cluster_subscriber(robot_id)
             
-            self.get_logger().info(f'Map data sent to robot {request.robot_id}')
+            with self._registration_lock:
+                self.registered_robots.add(robot_id)
+                self.active_robots.append(robot_id)
+                with self._state_lock:
+                    self.robot_states[robot_id] = None
+            
+            response.success = True
+            response.message = f"Robot {robot_id} registered successfully"
+            self.get_logger().info(f'Robot {robot_id} registered successfully')
             return response
                 
         except Exception as e:
-            self.get_logger().error(f'Error handling map data request: {str(e)}')
-            raise
-        
-    def register_robot(self, robot_id: int) -> bool:
-        """注册新的机器人，返回是否注册成功"""
-        if robot_id not in self.expected_robots:
-            self.get_logger().warn(f'Robot {robot_id} not in expected robots list, registration rejected')
-            return False
-            
-        if robot_id in self.registered_robots:
-            self.get_logger().warn(f'Robot {robot_id} already registered')
-            return True
-                
-        # create subscription of current robot state
-        state_sub = self.create_subscription(
-            RobotState,
-            f'/robot_{robot_id}/state',
-            lambda msg: self.state_callback(msg, robot_id),
-            self.qos_profile
+            self.get_logger().error(f'Error handling registration request: {str(e)}')
+            response.success = False
+            response.message = f"Registration error: {str(e)}"
+            return response
+    
+    def create_cluster_subscriber(self, robot_id):
+        subscriber = self.create_subscription(
+            ClusterToManagerState,
+            f'/cluster_{robot_id}/state',
+            lambda msg: self.cluster_state_callback(msg, robot_id),
+            self.qos_profile,
+            callback_group=self.service_group
         )
         
-        self.robot_subscribers[robot_id] = state_sub
-        
-        with self._registration_lock:
-            self.registered_robots.add(robot_id)
-            self.active_robots.append(robot_id)
-            self.robot_states[robot_id] = None
+        self.cluster_subscribers[robot_id] = subscriber
+        self.get_logger().info(f'Created subscriber for cluster {robot_id} state')
+    
+    def cluster_state_callback(self, msg, robot_id):
+        with self._state_lock:
+            if msg.robot_id != robot_id:
+                self.get_logger().warn(f'Received state with mismatched robot_id: expected {robot_id}, got {msg.robot_id}')
+                return
             
-            # 检查是否所有预期的机器人都已注册
-            if self.registered_robots == self.expected_robots:
-                self.registration_complete = True
-                self._registration_complete_event.set()
-                self.get_logger().info('All expected robots have been registered')
-                
-        self.get_logger().info(f'Robot {robot_id} registered successfully')
-        return True
-        
-    def unregister_robot(self, robot_id: int) -> None:
-        """注销机器人"""
-        if robot_id not in self.registered_robots:
-            return
-
-        if robot_id in self.robot_subscribers:
-            self.destroy_subscription(self.robot_subscribers[robot_id])
-            del self.robot_subscribers[robot_id]
-
-        with self._registration_lock:
-            self.registered_robots.remove(robot_id)
-            self.active_robots.remove(robot_id)
-            if robot_id in self.robot_states:
-                del self.robot_states[robot_id]
-
-            self.registration_complete = False
-            self._registration_complete_event.clear()
-
-        self.get_logger().info(f'Robot {robot_id} unregistered')
-        
-    def state_callback(self, msg: RobotState, robot_id: int) -> None:
-        with self._lock:
             self.robot_states[robot_id] = msg
-            
-    def publish_states(self):
+            self.get_logger().debug(f'Updated state for robot {robot_id}: x={msg.x}, y={msg.y}, theta={msg.theta}, idle={msg.idle}')
+    
+    def publish_robot_states(self):
         try:
-            with self._lock:
-                msg = RobotStatesQuery()
+            with self._state_lock:
+                msg = ManagerToClusterStateSet()
                 msg.stamp = self.get_clock().now().to_msg()
-
+                
                 for robot_id, state in self.robot_states.items():
                     if state is not None:
                         msg.robot_states.append(state)
-
+                
                 self.states_publisher.publish(msg)
-
+                self.get_logger().debug(f'Published states for {len(msg.robot_states)} robots')
+        
         except Exception as e:
-            self.get_logger().error(f'Error publishing states: {str(e)}')
+            self.get_logger().error(f'Error publishing robot states: {str(e)}')
+    
+    def create_cluster_node(self, robot_id):
+        try:
+            cmd = [
+                'ros2', 'run',
+                self.cluster_package,
+                'robot_cluster',
+                '--ros-args',
+                '-p', f'robot_id:={robot_id}',
+                '-p', f'control_frequency:=10.0',
+                '-p', f'mpc_config_path:={self.mpc_config_path}',
+                '-p', f'robot_config_path:={self.robot_config_path}',
+                '-p', f'map_path:={self.map_path}',
+                '-p', f'graph_path:={self.graph_path}',
+                '-p', f'schedule_path:={self.schedule_path}',
+                '-p', f'robot_start_path:={self.robot_start_path}'
+            ]
+            
+            # Set Env Parameters
+            env = os.environ.copy()
+            conda_prefix = os.environ.get('CONDA_PREFIX', '')
+            if conda_prefix:
+                pythonpath = os.environ.get('PYTHONPATH', '')
+                env['PYTHONPATH'] = f"{conda_prefix}/lib/python3.8/site-packages:{pythonpath}"
+            
+            # Start Cluster Node Process
+            process = subprocess.Popen(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                env=env
+            )
+            
+            self.cluster_processes[robot_id] = process
+            
+            def monitor_output(process, robot_id):
+                for line in process.stdout:
+                    self.get_logger().info(f'Cluster[{robot_id}]: {line.strip()}')
+                for line in process.stderr:
+                    self.get_logger().error(f'Cluster[{robot_id}]: {line.strip()}')
+            
+            log_thread = threading.Thread(
+                target=monitor_output,
+                args=(process, robot_id),
+                daemon=True
+            )
+            log_thread.start()
+            
+            # check if started successfully
+            returncode = process.poll()
+            if returncode is not None and returncode != 0:
+                stderr = process.stderr.read()
+                self.get_logger().error(f'Failed to start cluster for robot {robot_id}: {stderr}')
+                return False
+                
+            self.get_logger().info(f'Cluster node for robot {robot_id} started')
+            return True
+                
+        except Exception as e:
+            self.get_logger().error(f'Error creating cluster node: {str(e)}')
+            import traceback
+            self.get_logger().error(traceback.format_exc())
+            return False
+        
+    def unregister_robot(self, robot_id):
+        if robot_id not in self.registered_robots:
+            return
+
+        # close cluster process
+        if robot_id in self.cluster_processes:
+            try:
+                process = self.cluster_processes[robot_id]
+                process.terminate()
+                try:
+                    process.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    process.kill()
+                    
+                del self.cluster_processes[robot_id]
+                self.get_logger().info(f'Cluster process for robot {robot_id} terminated')
+            except Exception as e:
+                self.get_logger().error(f'Error terminating cluster process: {str(e)}')
+
+        if robot_id in self.cluster_subscribers:
+            self.destroy_subscription(self.cluster_subscribers[robot_id])
+            del self.cluster_subscribers[robot_id]
+
+        # update registration status
+        with self._registration_lock:
+            self.registered_robots.remove(robot_id)
+            if robot_id in self.active_robots:
+                self.active_robots.remove(robot_id)
+                
+            with self._state_lock:
+                if robot_id in self.robot_states:
+                    del self.robot_states[robot_id]
+
+        self.get_logger().info(f'Robot {robot_id} unregistered')
+    
+    def __del__(self):
+        for robot_id, process in list(self.cluster_processes.items()):
+            try:
+                self.get_logger().info(f'Terminating cluster process for robot {robot_id}')
+                process.terminate()
+                try:
+                    process.wait(timeout=2)
+                except subprocess.TimeoutExpired:
+                    process.kill()
+            except Exception as e:
+                self.get_logger().error(f'Error terminating process: {str(e)}')
 
 def main(args=None):
     rclpy.init(args=args)
@@ -231,6 +336,16 @@ def main(args=None):
     except KeyboardInterrupt:
         pass
     finally:
+        for robot_id, process in list(manager.cluster_processes.items()):
+            try:
+                process.terminate()
+                try:
+                    process.wait(timeout=1)
+                except subprocess.TimeoutExpired:
+                    process.kill()
+            except:
+                pass
+                
         executor.shutdown()
         manager.destroy_node()
         rclpy.shutdown()
