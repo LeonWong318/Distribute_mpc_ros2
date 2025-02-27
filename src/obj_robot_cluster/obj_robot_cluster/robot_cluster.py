@@ -54,8 +54,7 @@ class RobotNode(Node):
         self.robot_id = self.get_parameter('robot_id').value
         self.max_velocity = self.get_parameter('max_velocity').value
         self.max_angular_velocity = self.get_parameter('max_angular_velocity').value
-        # self.control_frequency = self.get_parameter('control_frequency').value
-        self.control_frequency = 0.5
+        self.control_frequency = self.get_parameter('control_frequency').value
 
         # 加载配置文件
         mpc_config_path = self.get_parameter('mpc_config_path').value
@@ -289,11 +288,7 @@ class RobotNode(Node):
 
             self.publish_state()
             
-            # if self.controller.check_termination_condition(external_check=self.planner.idle):
-            #     self.get_logger().info('Arrived goal and entered idle state')
-            #     self.idle = True
-
-            if self.controller.check_termination_condition(external_check=True):
+            if self.controller.check_termination_condition(external_check=self.planner.idle):
                 self.get_logger().info('Arrived goal and entered idle state')
                 self.idle = True
 
@@ -309,6 +304,7 @@ class RobotNode(Node):
     def step(self, action: np.ndarray) -> None:
         self.robot_object.one_step(action)
         self._state = self.robot_object.state
+        self.controller.set_current_state = self._state
     
     def publish_state(self):
         """发布机器人状态"""
