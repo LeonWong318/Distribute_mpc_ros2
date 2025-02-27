@@ -1,8 +1,0 @@
-# Request
-int32 robot_id
----
-# Response
-string map_json
-string graph_json
-string schedule_json
-string robot_start
