@@ -14,6 +14,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/ManagerToClusterStateSet.msg"
   "msg/ClusterToRobotTrajectory.msg"
   "msg/RobotToClusterState.msg"
+  "msg/ManagerToClusterStart.msg"
   "srv/RegisterRobot.srv"
   DEPENDENCIES builtin_interfaces
 )

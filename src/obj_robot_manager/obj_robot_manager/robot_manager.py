@@ -9,7 +9,7 @@ import os
 import json
 import threading
 
-from msg_interfaces.msg import ManagerToClusterStateSet, ClusterToManagerState
+from msg_interfaces.msg import ManagerToClusterStateSet, ClusterToManagerState, ManagerToClusterStart
 from msg_interfaces.srv import RegisterRobot
 
 
@@ -55,6 +55,9 @@ class RobotManager(Node):
         self.expected_robots = set()  # Set of expected robots(from config)
         self.registered_robots = set()  # Set of registrated robots
         
+        # Flag to track if global start signal has been sent
+        self._global_start_sent = False
+        
         self.load_config_files()
         self.parse_robot_start()
         
@@ -81,11 +84,19 @@ class RobotManager(Node):
             self.qos_profile
         )
         
+        self.start_signal_publisher = self.create_publisher(
+            ManagerToClusterStart,
+            '/manager/global_start',
+            self.qos_profile
+        )
+        
         self.create_timer(
             1.0 / self.publish_frequency,
             self.publish_robot_states,
             callback_group=MutuallyExclusiveCallbackGroup()
         )
+        
+
         
         self.get_logger().info('Robot manager initialized successfully')
     
@@ -128,6 +139,34 @@ class RobotManager(Node):
             self.get_logger().error(f'Error parsing robot_start: {str(e)}')
             raise
     
+    def check_all_robots_registered(self):
+        if len(self.registered_robots) == len(self.expected_robots):
+            self.send_global_start_signal()
+    
+    def send_global_start_signal(self):
+        # Prevent sending multiple start signals
+        if self._global_start_sent:
+            return
+        
+        try:
+            # Prepare the start signal message
+            start_msg = ManagerToClusterStart()
+            start_msg.stamp = self.get_clock().now().to_msg()
+            
+            # Publish the start signal
+            self.start_signal_publisher.publish(start_msg)
+            
+            # Mark that start signal has been sent
+            self._global_start_sent = True
+            
+            self.get_logger().info(
+                f'Global start signal sent. '
+                f'Total registered robots: {len(self.registered_robots)}'
+            )
+        
+        except Exception as e:
+            self.get_logger().error(f'Error sending global start signal: {str(e)}')
+    
     def handle_register_robot(self, request, response):
         robot_id = request.robot_id
         
@@ -149,7 +188,8 @@ class RobotManager(Node):
                 return response
             
             # create cluster node
-            success = self.create_cluster_node(robot_id)
+            # success = self.create_cluster_node(robot_id)
+            success = self.create_cluster_node_with_terminal(robot_id)
             if not success:
                 response.success = False
                 response.message = f"Failed to create cluster node for robot {robot_id}"
@@ -167,6 +207,7 @@ class RobotManager(Node):
             response.success = True
             response.message = f"Robot {robot_id} registered successfully"
             self.get_logger().info(f'Robot {robot_id} registered successfully')
+            self.check_all_robots_registered()
             return response
                 
         except Exception as e:
@@ -276,6 +317,53 @@ class RobotManager(Node):
             self.get_logger().error(traceback.format_exc())
             return False
         
+    def create_cluster_node_with_terminal(self, robot_id):
+        try:
+            cmd = [
+                'ros2', 'run',
+                self.cluster_package,
+                'robot_cluster',
+                '--ros-args',
+                '-p', f'robot_id:={robot_id}',
+                '-p', f'control_frequency:=10.0',
+                '-p', f'mpc_config_path:={self.mpc_config_path}',
+                '-p', f'robot_config_path:={self.robot_config_path}',
+                '-p', f'map_path:={self.map_path}',
+                '-p', f'graph_path:={self.graph_path}',
+                '-p', f'schedule_path:={self.schedule_path}',
+                '-p', f'robot_start_path:={self.robot_start_path}'
+            ]
+
+            env = os.environ.copy()
+            conda_prefix = os.environ.get('CONDA_PREFIX', '')
+            if conda_prefix:
+                pythonpath = os.environ.get('PYTHONPATH', '')
+                env['PYTHONPATH'] = f"{conda_prefix}/lib/python3.8/site-packages:{pythonpath}"
+
+            terminal_cmd = [
+                'gnome-terminal', 
+                '--', 
+                'bash', '-c', 
+                f'{" ".join(cmd)}; exec bash'
+            ]
+
+            process = subprocess.Popen(
+                terminal_cmd, 
+                env=env, 
+                shell=False
+            )
+
+            self.cluster_processes[robot_id] = process
+
+            self.get_logger().info(f'Cluster node for robot {robot_id} started in new terminal')
+            return True
+
+        except Exception as e:
+            self.get_logger().error(f'Error creating cluster node: {str(e)}')
+            import traceback
+            self.get_logger().error(traceback.format_exc())
+            return False    
+    
     def unregister_robot(self, robot_id):
         if robot_id not in self.registered_robots:
             return

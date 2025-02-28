@@ -15,7 +15,13 @@ from pkg_motion_plan.local_traj_plan import LocalTrajPlanner
 from pkg_tracker_mpc.trajectory_tracker import TrajectoryTracker
 from pkg_motion_plan.global_path_coordinate import GlobalPathCoordinator
 
-from msg_interfaces.msg import ClusterToManagerState, ManagerToClusterStateSet, ClusterToRobotTrajectory, RobotToClusterState
+from msg_interfaces.msg import (
+    ClusterToManagerState, 
+    ManagerToClusterStateSet, 
+    ClusterToRobotTrajectory, 
+    RobotToClusterState,
+    ManagerToClusterStart
+)
 
 class ClusterNode(Node):
     def __init__(self):
@@ -37,7 +43,6 @@ class ClusterNode(Node):
         
         self.robot_id = self.get_parameter('robot_id').value
         self.control_frequency = self.get_parameter('control_frequency').value
-        self.publish_frequency = 10.0
         self.mpc_config_path = self.get_parameter('mpc_config_path').value
         self.robot_config_path = self.get_parameter('robot_config_path').value
         self.map_path = self.get_parameter('map_path').value
@@ -55,11 +60,7 @@ class ClusterNode(Node):
         self.other_robot_states = {}
         self.predicted_trajectory = None
         self.idle = True
-        
-        self.initialize_cluster_components()
-        
-        self.get_logger().info(f'Cluster node initialized for robot {self.robot_id}')
-    
+                    
     def create_pub_and_sub(self):
         self.callback_group = ReentrantCallbackGroup()
         
@@ -75,29 +76,37 @@ class ClusterNode(Node):
             depth=10
         )
         
-        self.robot_state_sub = self.create_subscription(
+        self.from_robot_state_sub = self.create_subscription(
             RobotToClusterState,
             f'/robot_{self.robot_id}/state',
-            self.robot_state_callback,
+            self.from_robot_state_callback,
             self.reliable_qos,
             callback_group=self.callback_group
         )
         
-        self.manager_states_sub = self.create_subscription(
+        self.from_manager_states_sub = self.create_subscription(
             ManagerToClusterStateSet,
             '/manager/robot_states',
-            self.manager_states_callback,
+            self.from_manager_states_callback,
             self.reliable_qos,
             callback_group=self.callback_group
         )
         
-        self.manager_state_pub = self.create_publisher(
+        self.global_start_sub = self.create_subscription(
+            ManagerToClusterStart,
+            '/manager/global_start',
+            self.global_start_callback,
+            self.reliable_qos,
+            callback_group=self.callback_group
+        )
+        
+        self.to_manager_state_pub = self.create_publisher(
             ClusterToManagerState,
             f'/cluster_{self.robot_id}/state',
             self.reliable_qos
         )
         
-        self.robot_trajectory_pub = self.create_publisher(
+        self.to_robot_trajectory_pub = self.create_publisher(
             ClusterToRobotTrajectory,
             f'/cluster_{self.robot_id}/trajectory',
             self.reliable_qos
@@ -157,7 +166,17 @@ class ClusterNode(Node):
         self.idle = False
         self.controller.load_init_states(self._state, self.goal_state)
     
-    def robot_states_callback(self, msg: ManagerToClusterStateSet):
+    def global_start_callback(self, msg: ManagerToClusterStart):
+        try:
+            self.get_logger().info(f'Robot {self.robot_id} started with global signal')
+            self.initialize_cluster_components()
+        
+        except Exception as e:
+            self.get_logger().error(f'Error in global start callback: {str(e)}')
+            import traceback
+            self.get_logger().error(traceback.format_exc())
+    
+    def from_manager_states_callback(self, msg: ManagerToClusterStateSet):
         try:
             self.other_robot_states.clear()
             for state in msg.robot_states:
@@ -167,6 +186,22 @@ class ClusterNode(Node):
         except Exception as e:
             self.get_logger().error(f'Error processing robot states: {str(e)}')
             rclpy.shutdown()
+    
+    def from_robot_state_callback(self, msg: RobotToClusterState):
+        try:
+            if msg.robot_id != self.robot_id:
+                self.get_logger().warn(f'Received state with mismatched robot_id: expected {self.robot_id}, got {msg.robot_id}')
+                return
+
+            self.robot_state = msg
+            current_state = np.array([msg.x, msg.y, msg.theta])
+            self.set_state(current_state)
+            self.publish_state_to_manager()
+
+            self.get_logger().debug(f'Updated robot state: x={msg.x}, y={msg.y}, theta={msg.theta}, idle={msg.idle}')
+
+        except Exception as e:
+            self.get_logger().error(f'Error in robot_state_callback: {str(e)}')
     
     def initialize_cluster_components(self):
         try:
@@ -194,26 +229,19 @@ class ClusterNode(Node):
                 1.0/self.control_frequency,
                 self.control_loop
             )
-
-            # Timer for publish states
-            self.create_timer(
-                1.0 / self.publish_frequency,
-                self.publish_state_to_manager,
-                callback_group=self.callback_group
-            )
             
             self.get_logger().info('Initialization completed successfully')
 
         except Exception as e:
-            self.get_logger().error(f'Error in initialize_after_map_data: {str(e)}')
+            self.get_logger().error(f'Error in initialize cluster components: {str(e)}')
             import traceback
             self.get_logger().error(f'Traceback: {traceback.format_exc()}')
             return False
-
     
     def control_loop(self):
         try:
             if self.idle:
+                self.get_logger().info('False')
                 return
 
             # Get current time
@@ -255,10 +283,11 @@ class ClusterNode(Node):
                 # run step
                 self.step(self.last_actions[-1])
                 
+                # publish traj to robot after calculating
+                self.publish_trajectory_to_robot()
+                
             else:
                 self.get_logger().info('Not enough other robot states, skip this control loop')
-
-            self.publish_state()
             
             if self.controller.check_termination_condition(external_check=self.planner.idle):
                 self.get_logger().info('Arrived goal and entered idle state')
@@ -277,23 +306,38 @@ class ClusterNode(Node):
         self.robot_object.one_step(action)
         self._state = self.robot_object.state
         self.controller.set_current_state = self._state
-    
-    def publish_state(self):
-        """发布机器人状态"""
-        try:
 
-            state_msg = RobotState()
+    def publish_trajectory_to_robot(self):
+        try:
+            if self.pred_states is None:
+                return
+
+            traj_msg = ClusterToRobotTrajectory()
+            traj_msg.timestamp = self.get_clock().now().to_msg()
+            traj_msg.x = [self._state[0]]
+            traj_msg.y = [self._state[1]]
+            traj_msg.theta = [self._state[2]]
+
+            for state in self.pred_states:
+                if isinstance(state, np.ndarray):
+                    traj_msg.x.append(float(state[0]))
+                    traj_msg.y.append(float(state[1]))
+                    traj_msg.theta.append(float(state[2]))
+
+            self.to_robot_trajectory_pub.publish(traj_msg)
+
+        except Exception as e:
+            self.get_logger().error(f'Error publishing trajectory: {str(e)}')
+
+    def publish_state_to_manager(self):
+        try:
+            state_msg = ClusterToManagerState()
             state_msg.robot_id = self.robot_id
             state_msg.x = self._state[0]
             state_msg.y = self._state[1]
             state_msg.theta = self._state[2]
             state_msg.idle = self.idle
             state_msg.stamp = self.get_clock().now().to_msg()
-            traj_msg = Trajectory()
-            traj_msg.robot_id = state_msg.robot_id
-            traj_msg.x = state_msg.x
-            traj_msg.y = state_msg.y 
-            traj_msg.theta = state_msg.theta
 
             if self.pred_states is not None:
                 flattened_states = []
@@ -305,35 +349,21 @@ class ClusterNode(Node):
                     else:
                         flattened_states.append(state)
                 state_msg.pred_states = flattened_states
-                traj_msg.pred_states = state_msg.pred_states
 
-            self.state_publisher.publish(state_msg)
-            self.traj_publisher.publish(traj_msg)
-            
+            self.to_manager_state_pub.publish(state_msg)
+
         except Exception as e:
-            self.get_logger().error(f'Error in update_and_publish_state: {str(e)}')
+            self.get_logger().error(f'Error publishing state to manager: {str(e)}')
 
 def main(args=None):
     rclpy.init(args=args)
     
-    executor = rclpy.executors.MultiThreadedExecutor()
-    
-    node = RobotNode()
-    executor.add_node(node)
-    
-    import threading
-    executor_thread = threading.Thread(target=executor.spin, daemon=True)
-    executor_thread.start()
-    
-    import asyncio
-    loop = asyncio.get_event_loop()
-    loop.run_until_complete(node.initialize())
+    node = ClusterNode()
     
     try:
-        executor_thread.join()
+        rclpy.spin(node)
     except KeyboardInterrupt:
         pass
     finally:
         node.destroy_node()
         rclpy.shutdown()
-

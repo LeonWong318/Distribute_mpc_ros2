@@ -1,21 +1,25 @@
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, SetEnvironmentVariable
-from launch.substitutions import LaunchConfiguration, EnvironmentVariable
+from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 import os
 
 def generate_launch_description():
+    declare_args = [
+        DeclareLaunchArgument('robot_id', default_value='0', description='Robot ID'),
+        DeclareLaunchArgument('map_path', default_value='data/test_data/map.json'),
+        DeclareLaunchArgument('graph_path', default_value='data/test_data/graph.json'),
+        DeclareLaunchArgument('schedule_path', default_value='data/test_data/schedule.csv'),
+        DeclareLaunchArgument('robot_start_path', default_value='data/test_data/robot_start.json')
+    ]
+    
+    # Python path setup
     pythonpath_cmd = SetEnvironmentVariable(
         name='PYTHONPATH',
         value=os.getenv('CONDA_PREFIX') + '/lib/python3.8/site-packages:' + os.getenv('PYTHONPATH', '')
     )
-
-    robot_id_arg = DeclareLaunchArgument(
-        'robot_id',
-        default_value='0',
-        description='Robot ID'
-    )
-
+    
+    # Cluster node with parameters
     robot_cluster = Node(
         package='obj_robot_cluster',
         executable='robot_cluster',
@@ -25,12 +29,12 @@ def generate_launch_description():
             'control_frequency': 10.0,
             'mpc_config_path': "config/mpc_default.yaml",
             'robot_config_path': "config/spec_robot.yaml",
+            'map_path': LaunchConfiguration('map_path'),
+            'graph_path': LaunchConfiguration('graph_path'),
+            'schedule_path': LaunchConfiguration('schedule_path'),
+            'robot_start_path': LaunchConfiguration('robot_start_path')
         }],
         output='screen'
     )
-   
-    return LaunchDescription([
-        pythonpath_cmd, 
-        robot_id_arg,
-        robot_cluster
-    ])
+    
+    return LaunchDescription([pythonpath_cmd] + declare_args + [robot_cluster])

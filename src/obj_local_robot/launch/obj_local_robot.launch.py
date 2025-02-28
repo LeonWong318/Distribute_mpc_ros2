@@ -5,17 +5,20 @@ from launch_ros.actions import Node
 import os
 
 def generate_launch_description():
+    # Setup Python path
     pythonpath_cmd = SetEnvironmentVariable(
         name='PYTHONPATH',
         value=os.getenv('CONDA_PREFIX') + '/lib/python3.8/site-packages:' + os.getenv('PYTHONPATH', '')
     )
-
+    
+    # Robot ID argument
     robot_id_arg = DeclareLaunchArgument(
         'robot_id',
         default_value='0',
         description='Robot ID'
     )
-
+    
+    # Robot node
     local_robot = Node(
         package='obj_local_robot',
         executable='local_robot',
@@ -25,16 +28,17 @@ def generate_launch_description():
             'max_velocity': 1.0,
             'max_angular_velocity': 1.0,
             'control_frequency': 10.0,
-            'mpc_config_path': "config/mpc_default.yaml",
+            'lookahead_distance': 0.5,  # Added for Pure Pursuit
             'robot_config_path': "config/spec_robot.yaml",
-            'planner_search_range': 10,
-            'nominal_speed_ratio': 0.8
+            'cluster_wait_timeout': 30.0,  # Added timeout parameter
+            'alpha': 1.0,  # Added tuning parameter
+            'ts': 0.2  # Added sampling time
         }],
         output='screen'
     )
-   
+    
     return LaunchDescription([
-        pythonpath_cmd,  # 添加环境变量设置
+        pythonpath_cmd,
         robot_id_arg,
         local_robot
     ])

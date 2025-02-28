@@ -1,7 +1,7 @@
 import rclpy
 from rclpy.node import Node
 from visualization_msgs.msg import MarkerArray, Marker
-from msg_interfaces.msg import RobotStatesQuery, RobotState
+from msg_interfaces.msg import ManagerToClusterStateSet, ClusterToManagerState
 from geometry_msgs.msg import Point
 from tf2_ros import TransformBroadcaster
 from geometry_msgs.msg import TransformStamped
@@ -54,7 +54,7 @@ class RobotStateVisualizer(Node):
         self.tf_broadcaster = TransformBroadcaster(self)
         
         self.subscription = self.create_subscription(
-            RobotStatesQuery,
+            ClusterToManagerState,
             '/manager/robot_states',
             self.robot_states_callback,
             10

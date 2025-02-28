@@ -3,7 +3,6 @@ sys.path.append('src')
 
 import rclpy
 from rclpy.node import Node
-from rclpy.time import Time
 from rclpy.callback_groups import ReentrantCallbackGroup
 from rclpy.qos import QoSProfile, QoSReliabilityPolicy, QoSHistoryPolicy
 from pkg_moving_object.moving_object import RobotObject
@@ -11,15 +10,52 @@ from basic_motion_model.motion_model import UnicycleModel
 from pkg_configs.configs import CircularRobotSpecification
 
 import numpy as np
+import time
+import asyncio
 from pkg_local_control.pure_pursuit import PurePursuit
 
-from msg_interfaces.msg import RobotState, RobotStatesQuery, Trajectory, LocalRobotStates
+from msg_interfaces.msg import ClusterToRobotTrajectory, RobotToClusterState
+from msg_interfaces.srv import RegisterRobot
 
 
 class RobotNode(Node):
     async def initialize(self):
-        # Any asynchronous initialization can be done here (e.g., waiting for services)
-        pass
+        try:
+            self.get_logger().info('Starting initialization...')
+            
+            # Wait for register service
+            while not self.register_client.wait_for_service(timeout_sec=1.0):
+                self.get_logger().info('Register service not available, waiting...')
+            
+            # Register with manager
+            self.get_logger().info('Registering with manager...')
+            registration_result = await self.register_with_manager()
+            
+            if not registration_result:
+                self.get_logger().error('Registration failed')
+                return False
+                
+            self.get_logger().info('Registration successful')
+            
+            # Wait for cluster node to be ready (by detecting trajectory messages)
+            self.get_logger().info('Waiting for cluster node to start publishing...')
+            cluster_ready = await self.wait_for_cluster()
+            
+            if not cluster_ready:
+                self.get_logger().error('Timeout waiting for cluster node')
+                return False
+                
+            self.get_logger().info('Cluster node is ready')
+            
+            # Set initial state after initialization is complete
+            initial_state = np.zeros(3)  # [x, y, theta]
+            self.set_state(initial_state)
+            
+            return True
+            
+        except Exception as e:
+            self.get_logger().error(f'Error during initialization: {str(e)}')
+            return False
 
     def __init__(self):
         super().__init__('robot_node')
@@ -33,147 +69,258 @@ class RobotNode(Node):
                 ('max_angular_velocity', 1.0),
                 ('control_frequency', 10.0),
                 ('lookahead_distance', 0.5),
-                ('robot_config_path', '')
+                ('robot_config_path', ''),
+                ('cluster_wait_timeout', 30.0),  # Timeout for waiting for cluster node (seconds)
+                ('alpha', 1.0),  # Tuning parameter for velocity reduction at high curvature
+                ('ts', 0.2)  # Sampling time for controllers
             ]
         )
         
-        robot_config_path = self.get_parameter('robot_config_path').value
-        self.config_robot = CircularRobotSpecification.from_yaml(robot_config_path)
-        self.motion_model = UnicycleModel(sampling_time=self.config_robot.ts)
-
         # Get parameters
         self.robot_id = self.get_parameter('robot_id').value
         self.max_velocity = self.get_parameter('max_velocity').value
         self.max_angular_velocity = self.get_parameter('max_angular_velocity').value
         self.control_frequency = self.get_parameter('control_frequency').value
         self.lookahead_distance = self.get_parameter('lookahead_distance').value
-
+        robot_config_path = self.get_parameter('robot_config_path').value
+        self.cluster_wait_timeout = self.get_parameter('cluster_wait_timeout').value
+        self.alpha = self.get_parameter('alpha').value
+        self.ts = self.get_parameter('ts').value
         
-        self.Ts = 0.2 # equal to MPC ts
-
-        # Tuning parameter for velocity reduction at high curvature (set as needed)
-        alpha = 1.0
-
-        # Instantiate the Pure Pursuit controller with the state-space parameters
-        self.pure_pursuit = PurePursuit(self.lookahead_distance, self.Ts, self.max_velocity, alpha)
-
-        # Initialize storage for the latest state and trajectory messages
-        self.current_state = None        # Expected to be a RobotState message
-        self.current_trajectory = None   # Expected to be a Trajectory message
-
-
-        # Setup QoS profile for subscribers and publisher
-        udp_qos_profile = QoSProfile(
-            reliability=QoSReliabilityPolicy.BEST_EFFORT,
-            history=QoSHistoryPolicy.KEEP_LAST,
-            depth=10
+        # Load robot configuration
+        self.config_robot = CircularRobotSpecification.from_yaml(robot_config_path)
+        self.motion_model = UnicycleModel(sampling_time=self.config_robot.ts)
+        
+        # Initialize Pure Pursuit controller
+        self.pure_pursuit = PurePursuit(
+            self.lookahead_distance, 
+            self.ts, 
+            self.max_velocity, 
+            self.alpha
         )
-        tcp_qos_profile = QoSProfile(
+
+        # Initialize state variables
+        self._state = None  # Current state
+        self.current_trajectory = None  # Current trajectory
+        self.trajectory_received = False  # Flag for trajectory reception
+
+        # Create callback group
+        self.callback_group = ReentrantCallbackGroup()
+        
+        # Set up QoS profiles
+        self.reliable_qos = QoSProfile(
             reliability=QoSReliabilityPolicy.RELIABLE,
             history=QoSHistoryPolicy.KEEP_LAST,
             depth=10
         )
-    
-        # Subscriber: listen for the planned trajectory (e.g., on 'trajectory' topic)
+        
+        self.best_effort_qos = QoSProfile(
+            reliability=QoSReliabilityPolicy.BEST_EFFORT,
+            history=QoSHistoryPolicy.KEEP_LAST,
+            depth=10
+        )
+        
+        # Create registration service client
+        self.register_client = self.create_client(
+            RegisterRobot,
+            '/register_robot',
+            callback_group=self.callback_group
+        )
+        
+        # Create subscriber for trajectory from cluster
         self.trajectory_sub = self.create_subscription(
-            Trajectory,
-            'trajectory',
+            ClusterToRobotTrajectory,
+            f'/cluster_{self.robot_id}/trajectory',
             self.trajectory_callback,
-            udp_qos_profile
+            self.reliable_qos,
+            callback_group=self.callback_group
         )
-
-        # Publisher: send computed control commands (e.g., on 'robot_cmd' topic)
-        self.state_publisher = self.create_publisher(
-            LocalRobotStates, 
-            f'/local_robot_{self.robot_id}/state', 
-            tcp_qos_profile
+        
+        # Create publisher for robot state to cluster
+        self.to_cluster_state_pub = self.create_publisher(
+            RobotToClusterState,
+            f'/robot_{self.robot_id}/state',
+            self.reliable_qos
         )
-
-        # Create a timer to execute the control loop at the desired frequency
+        
+        # Create control timer
         timer_period = 1.0 / self.control_frequency
-        self.control_timer = self.create_timer(timer_period, self.control_loop_callback)
+        self.control_timer = self.create_timer(
+            timer_period, 
+            self.control_loop_callback,
+            callback_group=self.callback_group
+        )
+        
+        self.get_logger().info('Robot node initialized')
 
-    def trajectory_callback(self, msg: Trajectory):
-        """
-        Callback to receive and store the planned trajectory.
-        Expected that msg.points is a list of RobotState messages.
-        """
-        if msg.robot_id is self.robot_id:
+    async def register_with_manager(self):
+        """Register with manager node"""
+        try:
+            # Create request
+            request = RegisterRobot.Request()
+            request.robot_id = self.robot_id
+            
+            # Send request
+            future = self.register_client.call_async(request)
+            
+            # Wait for response
+            response = await future
+            
+            if not response.success:
+                self.get_logger().error(f'Registration failed: {response.message}')
+                return False
+                
+            self.get_logger().info(f'Registration successful: {response.message}')
+            return True
+            
+        except Exception as e:
+            self.get_logger().error(f'Error during registration: {str(e)}')
+            return False
+    
+    async def wait_for_cluster(self):
+        """Wait for cluster node to be ready (wait until trajectory is received)"""
+        try:
+            start_time = time.time()
+            
+            # Wait until trajectory is received or timeout
+            while not self.trajectory_received:
+                # Check for timeout
+                if time.time() - start_time > self.cluster_wait_timeout:
+                    self.get_logger().warn('Timeout waiting for trajectory from cluster node')
+                    return False
+                    
+                # Wait for a short period
+                await asyncio.sleep(0.1)
+                
+            return True
+            
+        except Exception as e:
+            self.get_logger().error(f'Error waiting for cluster: {str(e)}')
+            return False
+    
+    def trajectory_callback(self, msg: ClusterToRobotTrajectory):
+        """Process trajectory message from cluster"""
+        try: 
+            # Mark trajectory as received
+            self.trajectory_received = True
+            
+            # Store current trajectory
             self.current_trajectory = msg
-            self.get_logger().debug(f"Received trajectory with {len(msg.points)} points")
-
+            
+            self.get_logger().debug(f'Received trajectory with {len(msg.x)} points')
+            
+        except Exception as e:
+            self.get_logger().error(f'Error in trajectory_callback: {str(e)}')
+    
     def control_loop_callback(self):
-        """
-        Control loop timer callback: computes and publishes the control command
-        based on the current robot state and trajectory.
-        """
-        if self.current_trajectory is None:
-            self.get_logger().warn("Waiting for trajectory messages")
-            return
-
-        # Extract current state (assumes RobotState has fields: x, y, theta)
-        current_position = (self.trajectory.x, self.trajectory.y)
-        current_heading = self.trajectory.theta
-
-        # Extract the trajectory as a list of waypoints (each a tuple: (x, y, theta))
-        trajectory_list = [
-            (self.trajectory.pred_states[i], self.trajectory.pred_states[i + 1], self.trajectory.pred_states[i + 2]) 
-            for i in range(0, len(self.trajectory.pred_states), 3)
-        ]
-
-
-        # Compute control commands using Pure Pursuit
-        v, omega = self.pure_pursuit.compute_control_commands(current_position, current_heading, trajectory_list)
-
-        # Saturate the computed commands with the maximum allowable velocities
-        v = np.clip(v, 0, self.max_velocity)
-        omega = np.clip(omega, -self.max_angular_velocity, self.max_angular_velocity)
-        self.step([v,omega])
-
-        self.get_logger().info(f"Computed control: v = {v:.2f} m/s, omega = {omega:.2f} rad/s")
-
+        """Control loop: compute and apply control commands"""
+        try:
+            # Check if trajectory and state are available
+            if self.current_trajectory is None or self._state is None:
+                return
+                
+            # Get current position and heading
+            current_position = (self._state[0], self._state[1])
+            current_heading = self._state[2]
+            
+            # Build trajectory list
+            trajectory_list = []
+            for i in range(len(self.current_trajectory.x)):
+                point = (
+                    self.current_trajectory.x[i],
+                    self.current_trajectory.y[i],
+                    self.current_trajectory.theta[i]
+                )
+                trajectory_list.append(point)
+            
+            # Compute control commands using Pure Pursuit
+            v, omega = self.pure_pursuit.compute_control_commands(
+                current_position,
+                current_heading,
+                trajectory_list
+            )
+            
+            # Limit control commands
+            v = np.clip(v, 0, self.max_velocity)
+            omega = np.clip(omega, -self.max_angular_velocity, self.max_angular_velocity)
+            
+            # Apply control
+            self.step([v, omega])
+            
+            # Publish state after control update
+            self.publish_state()
+            
+            self.get_logger().debug(f'Control commands: v={v:.2f}, omega={omega:.2f}')
+            
+        except Exception as e:
+            self.get_logger().error(f'Error in control_loop_callback: {str(e)}')
+    
     def set_state(self, state: np.ndarray) -> None:
+        """Set robot state"""
         self._state = state
-        self.robot_object = RobotObject(state=state, ts=self.config_robot.ts, radius=self.config_robot.vehicle_width/2)
+        self.robot_object = RobotObject(
+            state=state,
+            ts=self.config_robot.ts,
+            radius=self.config_robot.vehicle_width/2
+        )
         self.robot_object.motion_model = self.motion_model
         
     def step(self, action: np.ndarray) -> None:
+        """Execute one step of action and update state"""
         self.robot_object.one_step(action)
         self._state = self.robot_object.state
-
+    
     def publish_state(self):
-        
+        """Publish robot state to cluster"""
         try:
-
-            state_msg = LocalRobotStates()
+            # Skip if state is not initialized
+            if self._state is None:
+                return
+                
+            # Create state message
+            state_msg = RobotToClusterState()
             state_msg.robot_id = self.robot_id
             state_msg.x = self._state[0]
             state_msg.y = self._state[1]
             state_msg.theta = self._state[2]
-
-            self.state_publisher.publish(state_msg)
+            state_msg.idle = False  # Default not idle
+            state_msg.stamp = self.get_clock().now().to_msg()
+            
+            # Publish state
+            self.to_cluster_state_pub.publish(state_msg)
             
         except Exception as e:
-            self.get_logger().error(f'Error in update_and_publish_state: {str(e)}')
+            self.get_logger().error(f'Error publishing state: {str(e)}')
 
 
 def main(args=None):
+    """Main function"""
     rclpy.init(args=args)
+    
+    # Create executor
     executor = rclpy.executors.MultiThreadedExecutor()
-
+    
+    # Create node
     node = RobotNode()
     executor.add_node(node)
-
-    # Run the executor in a separate thread
+    
+    # Run executor in separate thread
     import threading
     executor_thread = threading.Thread(target=executor.spin, daemon=True)
     executor_thread.start()
-
-    # Run asynchronous initialization if needed
+    
+    # Run async initialization
     import asyncio
     loop = asyncio.get_event_loop()
-    loop.run_until_complete(node.initialize())
-
+    init_success = loop.run_until_complete(node.initialize())
+    
+    # Shutdown if initialization fails
+    if not init_success:
+        node.get_logger().error('Initialization failed, shutting down')
+        node.destroy_node()
+        rclpy.shutdown()
+        return
+    
     try:
         executor_thread.join()
     except KeyboardInterrupt:
@@ -184,4 +331,4 @@ def main(args=None):
 
 
 if __name__ == "__main__":
-    main()
+    main() 
