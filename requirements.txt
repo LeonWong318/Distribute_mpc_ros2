@@ -30,3 +30,7 @@ ros2run==0.9.13
 ros2topic==0.9.13
 
 transform3d==0.0.4
+
+ros-foxy-gazebo-ros-pkgs
+ros-foxy-ros-core
+ros-foxy-geometry2
