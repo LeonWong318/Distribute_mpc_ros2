@@ -45,7 +45,7 @@ def generate_launch_description():
     #spawn_entity = Node(package='gazebo_ros', node_executable='spawn_entity.py',
     #                    arguments=['-entity', 'demo', 'x', 'y', 'z'],
     #                    output='screen')
-    spawn_entity = Node(package='pkg_gazebo_simulation', executable='demo.py',
+    spawn_entity = Node(package='pkg_gazebo_simulation', executable='demo',
                         arguments=['WarehouseBot', 'demo', '-1.5', '-4.0', '0.0'],
                         output='screen')
 
