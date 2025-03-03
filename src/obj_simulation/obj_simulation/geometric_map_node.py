@@ -20,7 +20,7 @@ class GeometricMapNode(Node):
         super().__init__(self.__class__.__name__)
         self.get_logger().info(f"{self.__class__.__name__} init..")
 
-        pkg_root_dir = get_package_share_directory('map_description')
+        pkg_root_dir = get_package_share_directory('obj_simulation')
 
         self.geometric_map_publisher = self.create_publisher(
             MapMsg, 
