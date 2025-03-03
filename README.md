@@ -21,6 +21,9 @@ conda activate ros_dmpc
 ```
 pip install -r requirements.txt
 ```
+```
+sudo apt install ros-foxy-gazebo-ros-pkgs ros-foxy-ros-core ros-foxy-geometry2
+```
 
 ## MPC solver build:
 ```

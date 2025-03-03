@@ -17,7 +17,7 @@ shapely==2.0.7
 scipy==1.10.1
 scikit-image==0.21.0
 networkx==3.1
-python3-shapely
+shapely
 ros2cli==0.9.13
 
 launch==0.10.10
@@ -30,7 +30,3 @@ ros2run==0.9.13
 ros2topic==0.9.13
 
 transform3d==0.0.4
-
-ros-foxy-gazebo-ros-pkgs
-ros-foxy-ros-core
-ros-foxy-geometry2
