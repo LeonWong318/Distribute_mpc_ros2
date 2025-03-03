@@ -40,8 +40,8 @@ chmod +x .
 ./run_cluster.sh
 ```
 ## Launch gazebo:
-'''
+```
 colcon build
 source install/setup.bash
 ros2 launch pkg_gazebo_simulation gazebo_world.launch.py
-'''
+```
