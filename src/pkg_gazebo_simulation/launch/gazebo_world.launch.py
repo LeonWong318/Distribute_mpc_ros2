@@ -19,7 +19,7 @@ Launches Gazebo and spawns a model
 # A bunch of software packages that are needed to launch ROS2
 import os
 from launch import LaunchDescription
-from launch.actions import IncludeLaunchDescription
+from launch.actions import IncludeLaunchDescription, SetEnvironmentVariable
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import ThisLaunchFileDir,LaunchConfiguration
 from launch_ros.actions import Node
@@ -27,6 +27,10 @@ from launch.actions import ExecuteProcess
 from ament_index_python.packages import get_package_share_directory
 
 def generate_launch_description():
+    pythonpath_cmd = SetEnvironmentVariable(
+        name='PYTHONPATH',
+        value=os.getenv('CONDA_PREFIX') + '/lib/python3.8/site-packages:' + os.getenv('PYTHONPATH', '')
+    )
     use_sim_time = LaunchConfiguration('use_sim_time', default='True')
     world_file_name = 'warehouse.world'
     pkg_dir = get_package_share_directory('pkg_gazebo_simulation')
@@ -50,6 +54,7 @@ def generate_launch_description():
                         output='screen')
 
     return LaunchDescription([
+        pythonpath_cmd,
         gazebo,
         spawn_entity,
     ])
