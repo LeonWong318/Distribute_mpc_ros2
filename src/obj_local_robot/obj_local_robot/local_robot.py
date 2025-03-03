@@ -14,7 +14,7 @@ import time
 import asyncio
 from pkg_local_control.pure_pursuit import PurePursuit
 
-from msg_interfaces.msg import ClusterToRobotTrajectory, RobotToClusterState
+from msg_interfaces.msg import ClusterToRobotTrajectory, RobotToClusterState, ClusterBetweenRobotHeartBeat
 from msg_interfaces.srv import RegisterRobot
 
 
@@ -38,8 +38,8 @@ class RobotNode(Node):
             self.get_logger().info('Registration successful')
             
             # Set initial state and publish init state after initialization is complete
-            initial_state = self.load_init_state()
-            self.set_state(initial_state)
+            self.initial_state, self.target_point = self.load_init_state_and_target()
+            self.set_state(self.initial_state)
             self.publish_state()
             
             # Wait for cluster node to be ready (by detecting trajectory messages)
@@ -51,7 +51,7 @@ class RobotNode(Node):
                 return False
                 
             self.get_logger().info('Cluster node is ready')
-            
+            self.idle = False
             
             return True
             
@@ -73,6 +73,8 @@ class RobotNode(Node):
                 ('lookahead_distance', 0.5),
                 ('robot_config_path', ''),
                 ('robot_start_path', ''),
+                ('robot_graph_path',''),
+                ('robot_schedule_path',''),
                 ('cluster_wait_timeout', 30.0),  # Timeout for waiting for cluster node (seconds)
                 ('alpha', 1.0),  # Tuning parameter for velocity reduction at high curvature
                 ('ts', 0.2)  # Sampling time for controllers
@@ -87,6 +89,8 @@ class RobotNode(Node):
         self.lookahead_distance = self.get_parameter('lookahead_distance').value
         self.robot_config_path = self.get_parameter('robot_config_path').value
         self.robot_start_path = self.get_parameter('robot_start_path').value
+        self.robot_graph_path = self.get_parameter('robot_graph_path').value
+        self.robot_schedule_path = self.get_parameter('robot_schedule_path').value
         self.cluster_wait_timeout = self.get_parameter('cluster_wait_timeout').value
         self.alpha = self.get_parameter('alpha').value
         self.ts = self.get_parameter('ts').value
@@ -104,10 +108,11 @@ class RobotNode(Node):
         )
 
         # Initialize state variables
+        self.idle = True
         self._state = None  # Current state
         self.current_trajectory = None  # Current trajectory
         self.trajectory_received = False  # Flag for trajectory reception
-
+        
         # Create callback group
         self.callback_group = ReentrantCallbackGroup()
         
@@ -157,6 +162,11 @@ class RobotNode(Node):
             callback_group=self.callback_group
         )
         
+        # Set heart beat period
+        self.heart_beat_send_period = 0.1
+        self.heart_beat_check_period = 0.2
+        self.start_heart_beat()
+        
         self.get_logger().info('Robot node initialized')
 
     async def register_with_manager(self):
@@ -204,6 +214,85 @@ class RobotNode(Node):
             self.get_logger().error(f'Error waiting for cluster: {str(e)}')
             return False
     
+    def start_heart_beat(self):
+        self.heartbeat_pub = self.create_publisher(
+            ClusterBetweenRobotHeartBeat,
+            f'/robot_{self.robot_id}/heartbeat',
+            self.reliable_qos
+        )
+
+        self.heartbeat_sub = self.create_subscription(
+            ClusterBetweenRobotHeartBeat,
+            f'/cluster_{self.robot_id}/heartbeat',
+            self.heartbeat_callback,
+            self.reliable_qos,
+            callback_group=self.callback_group
+        )
+
+        self.heartbeat_timer = self.create_timer(
+            self.heart_beat_send_period,
+            self.send_heartbeat,
+            callback_group=self.callback_group
+        )
+
+        self.last_heartbeat_time = self.get_clock().now()
+
+        self.heartbeat_check_timer = self.create_timer(
+            self.heart_beat_check_period,
+            self.check_heartbeat,
+            callback_group=self.callback_group
+        )
+
+        self.cluster_connected = False
+    
+    def heartbeat_callback(self, msg: ClusterBetweenRobotHeartBeat):
+        try:
+            self.last_heartbeat_time = self.get_clock().now()
+
+            if not self.cluster_connected:
+                self.cluster_connected = True
+                self.get_logger().info(f'Cluster node {self.robot_id} is now connected')
+
+            self.get_logger().debug(f'Received heartbeat from cluster {self.robot_id}')
+        except Exception as e:
+            self.get_logger().error(f'Error in heartbeat_callback: {str(e)}')
+
+    def send_heartbeat(self):
+        try:
+            heartbeat_msg = ClusterBetweenRobotHeartBeat()
+            heartbeat_msg.stamp = self.get_clock().now().to_msg()
+
+            self.heartbeat_pub.publish(heartbeat_msg)
+            self.get_logger().debug(f'Sent heartbeat to cluster {self.robot_id}')
+        except Exception as e:
+            self.get_logger().error(f'Error sending heartbeat: {str(e)}')
+
+    def check_heartbeat(self):
+        try:
+            current_time = self.get_clock().now()
+            time_diff = (current_time - self.last_heartbeat_time).nanoseconds / 1e9
+
+            if time_diff > self.heart_beat_check_period * 5:
+                if self.cluster_connected:
+                    self.cluster_connected = False
+                    self.get_logger().warn(f'Cluster node {self.robot_id} appears to be offline')
+                    self.handle_cluster_offline()
+        except Exception as e:
+            self.get_logger().error(f'Error checking heartbeat: {str(e)}')
+
+    def handle_cluster_offline(self):
+        if not self.idle:
+            self.get_logger().error(f'Cluster {self.robot_id} appears to be offline, entering safety stop state')
+            self.idle = True
+            self.emergency_stop()
+
+    def emergency_stop(self):
+        try:
+            self.step([0.0, 0.0])
+            self.get_logger().warn(f'Robot {self.robot_id} emergency stop executed')
+        except Exception as e:
+            self.get_logger().error(f'Error during emergency stop: {str(e)}')
+
     def trajectory_callback(self, msg: ClusterToRobotTrajectory):
         """Process trajectory message from cluster"""
         try: 
@@ -221,6 +310,8 @@ class RobotNode(Node):
     def control_loop_callback(self):
         """Control loop: compute and apply control commands"""
         try:
+            if self.idle:
+                return
             # Check if trajectory and state are available
             if self.current_trajectory is None or self._state is None:
                 return
@@ -288,6 +379,7 @@ class RobotNode(Node):
             state_msg.x = self._state[0]
             state_msg.y = self._state[1]
             state_msg.theta = self._state[2]
+            state_msg.idle = self.check_termination_condition()
             state_msg.stamp = self.get_clock().now().to_msg()
             
             # Publish state
@@ -296,7 +388,21 @@ class RobotNode(Node):
         except Exception as e:
             self.get_logger().error(f'Error publishing state: {str(e)}')
 
-    def load_init_state(self):
+    def check_termination_condition(self):
+        current_position = self._state[:2]
+        target_position = self.target_point
+
+        distance = np.linalg.norm(current_position - target_position)
+
+        if distance < 0.3:
+            self.idle = True
+            self.step([0.0, 0.0])
+            self.get_logger().info(f'Robot {self.robot_id} reached target. Distance: {distance:.3f}')
+        else:
+            self.idle = False
+        return self.idle
+    
+    def load_init_state_and_target(self):
         try:
             import json
 
@@ -307,16 +413,43 @@ class RobotNode(Node):
 
             if robot_id_str not in robot_start_data:
                 self.get_logger().error(f'Robot ID {self.robot_id} not found in start configuration')
-                return np.zeros(3)
+                return np.zeros(3), np.zeros(2)
 
             initial_state = np.array(robot_start_data[robot_id_str])
 
             self.get_logger().info(f'Loaded initial state for robot {self.robot_id}: {initial_state}')
-            return initial_state
+
+            with open(self.robot_graph_path, 'r') as f:
+                graph_data = json.load(f)
+
+            node_dict = graph_data["node_dict"]
+
+            import csv
+            final_node_id = None
+
+            with open(self.robot_schedule_path, 'r') as f:
+                csv_reader = csv.DictReader(f)
+                robot_tasks = [row for row in csv_reader if int(row['robot_id']) == self.robot_id]
+
+                if not robot_tasks:
+                    self.get_logger().error(f'No schedule found for robot {self.robot_id}')
+                    return initial_state, np.zeros(2)
+
+                final_task = max(robot_tasks, key=lambda x: float(x['ETA']))
+                final_node_id = final_task['node_id']
+
+            if final_node_id not in node_dict:
+                self.get_logger().error(f'Node ID {final_node_id} not found in graph')
+                return initial_state, np.zeros(2)
+
+            target_position = np.array(node_dict[final_node_id])
+            self.get_logger().info(f'Loaded target position for robot {self.robot_id}: {target_position}')
+
+            return initial_state, target_position
 
         except Exception as e:
-            self.get_logger().error(f'Error loading initial state: {str(e)}')
-            return np.zeros(3)
+            self.get_logger().error(f'Error loading loading data: {str(e)}')
+            return np.zeros(3), np.zeros(2)
 
 def main(args=None):
     """Main function"""

@@ -13,6 +13,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/ClusterToManagerState.msg"
   "msg/ManagerToClusterStateSet.msg"
   "msg/ClusterToRobotTrajectory.msg"
+  "msg/ClusterBetweenRobotHeartBeat.msg"
   "msg/RobotToClusterState.msg"
   "msg/ManagerToClusterStart.msg"
   "srv/RegisterRobot.srv"

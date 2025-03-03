@@ -20,7 +20,8 @@ from msg_interfaces.msg import (
     ManagerToClusterStateSet, 
     ClusterToRobotTrajectory, 
     RobotToClusterState,
-    ManagerToClusterStart
+    ManagerToClusterStart,
+    ClusterBetweenRobotHeartBeat
 )
 
 class ClusterNode(Node):
@@ -61,6 +62,8 @@ class ClusterNode(Node):
             self.config_robot.lin_vel_max
         )
         
+        self.heart_beat_send_period = 0.1
+        self.heart_beat_check_period = 0.2
         self.create_pub_and_sub()
 
         self.robot_state = None
@@ -68,6 +71,8 @@ class ClusterNode(Node):
         self.predicted_trajectory = None
         self.pred_states = None
         self.idle = True
+        
+
                     
     def create_pub_and_sub(self):
         self.callback_group = ReentrantCallbackGroup()
@@ -120,6 +125,67 @@ class ClusterNode(Node):
             f'/cluster_{self.robot_id}/trajectory',
             self.reliable_qos
         )
+        
+        self.heartbeat_pub = self.create_publisher(
+            ClusterBetweenRobotHeartBeat,
+            f'/cluster_{self.robot_id}/heartbeat',
+            self.reliable_qos
+        )
+
+        self.heartbeat_sub = self.create_subscription(
+            ClusterBetweenRobotHeartBeat,
+            f'/robot_{self.robot_id}/heartbeat',
+            self.heartbeat_callback,
+            self.reliable_qos,
+            callback_group=self.callback_group
+        )
+
+        self.heartbeat_timer = self.create_timer(
+            self.heart_beat_send_period,
+            self.send_heartbeat,
+            callback_group=self.callback_group
+        )
+
+        self.last_heartbeat_time = self.get_clock().now()
+
+        self.heartbeat_check_timer = self.create_timer(
+            self.heart_beat_check_period,
+            self.check_heartbeat,
+            callback_group=self.callback_group
+        )
+    
+    def heartbeat_callback(self, msg: ClusterBetweenRobotHeartBeat):
+        try:
+            self.last_heartbeat_time = self.get_clock().now()
+            self.get_logger().debug(f'Received heartbeat from robot {self.robot_id}')
+        except Exception as e:
+            self.get_logger().error(f'Error in heartbeat_callback: {str(e)}')
+
+    def send_heartbeat(self):
+        try:
+            heartbeat_msg = ClusterBetweenRobotHeartBeat()
+            heartbeat_msg.stamp = self.get_clock().now().to_msg()
+
+            self.heartbeat_pub.publish(heartbeat_msg)
+            self.get_logger().debug(f'Sent heartbeat to robot {self.robot_id}')
+        except Exception as e:
+            self.get_logger().error(f'Error sending heartbeat: {str(e)}')
+
+    def check_heartbeat(self):
+        try:
+            current_time = self.get_clock().now()
+            time_diff = (current_time - self.last_heartbeat_time).nanoseconds / 1e9
+            
+            if time_diff > self.heart_beat_check_period * 5:
+                self.get_logger().warn(f'No heartbeat from robot {self.robot_id} for {time_diff:.1f} seconds')
+                self.handle_robot_offline()
+        except Exception as e:
+            self.get_logger().error(f'Error checking heartbeat: {str(e)}')
+
+    def handle_robot_offline(self):
+        if not self.idle:
+            self.get_logger().error(f'Robot {self.robot_id} appears to be offline, entering idle state')
+            self.idle = True
     
     def load_config_files(self):
         try:
@@ -193,6 +259,7 @@ class ClusterNode(Node):
         try:
             self.robot_state = msg
             current_state = np.array([msg.x, msg.y, msg.theta])
+            self.idle = msg.idle
             self.set_state(current_state)
             self.publish_state_to_manager()
 

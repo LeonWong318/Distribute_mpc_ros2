@@ -1,4 +1,5 @@
 float64 x
 float64 y
 float64 theta
+bool idle
 builtin_interfaces/Time stamp

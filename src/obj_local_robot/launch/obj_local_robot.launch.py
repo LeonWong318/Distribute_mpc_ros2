@@ -31,6 +31,8 @@ def generate_launch_description():
             'lookahead_distance': 0.5,  # Added for Pure Pursuit
             'robot_config_path': "config/spec_robot.yaml",
             'robot_start_path': "data/test_data/robot_start.json",
+            'robot_graph_path': 'data/test_data/graph.json',
+            'robot_schedule_path': 'data/test_data/schedule.csv',
             'cluster_wait_timeout': 30.0,  # Added timeout parameter
             'alpha': 1.0,  # Added tuning parameter
             'ts': 0.2  # Added sampling time
