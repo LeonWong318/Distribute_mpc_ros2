@@ -1,14 +1,13 @@
 import rclpy
 from rclpy.node import Node
 from visualization_msgs.msg import MarkerArray, Marker
-from msg_interfaces.msg import ManagerToClusterStateSet, ClusterToManagerState
+from msg_interfaces.msg import ManagerToClusterStateSet
 from geometry_msgs.msg import Point
 from tf2_ros import TransformBroadcaster
 from geometry_msgs.msg import TransformStamped
 import math
 import json
 import os
-from ament_index_python.packages import get_package_share_directory
 
 def quaternion_from_euler(ai, aj, ak):
     ai /= 2.0
@@ -54,7 +53,7 @@ class RobotStateVisualizer(Node):
         self.tf_broadcaster = TransformBroadcaster(self)
         
         self.subscription = self.create_subscription(
-            ClusterToManagerState,
+            ManagerToClusterStateSet,
             '/manager/robot_states',
             self.robot_states_callback,
             10

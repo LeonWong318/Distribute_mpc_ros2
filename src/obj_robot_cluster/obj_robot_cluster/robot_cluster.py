@@ -4,7 +4,7 @@ sys.path.append('src')
 import rclpy
 from rclpy.node import Node
 from rclpy.callback_groups import ReentrantCallbackGroup
-from rclpy.qos import QoSProfile, QoSReliabilityPolicy, QoSHistoryPolicy
+from rclpy.qos import QoSProfile, QoSReliabilityPolicy, QoSHistoryPolicy, QoSDurabilityPolicy
 import numpy as np
 import json
 
@@ -54,11 +54,19 @@ class ClusterNode(Node):
         
         self.load_config_files()
         
+        self.motion_model = UnicycleModel(sampling_time=self.config_mpc.ts)
+        self.planner = LocalTrajPlanner(
+            self.config_mpc.ts,
+            self.config_mpc.N_hor,
+            self.config_robot.lin_vel_max
+        )
+        
         self.create_pub_and_sub()
 
         self.robot_state = None
         self.other_robot_states = {}
         self.predicted_trajectory = None
+        self.pred_states = None
         self.idle = True
                     
     def create_pub_and_sub(self):
@@ -67,6 +75,7 @@ class ClusterNode(Node):
         self.reliable_qos = QoSProfile(
             reliability=QoSReliabilityPolicy.RELIABLE,
             history=QoSHistoryPolicy.KEEP_LAST,
+            durability=QoSDurabilityPolicy.TRANSIENT_LOCAL, #using Transient_local to prevent message loss
             depth=10
         )
         
@@ -75,7 +84,7 @@ class ClusterNode(Node):
             history=QoSHistoryPolicy.KEEP_LAST,
             depth=10
         )
-        
+
         self.from_robot_state_sub = self.create_subscription(
             RobotToClusterState,
             f'/robot_{self.robot_id}/state',
@@ -138,14 +147,7 @@ class ClusterNode(Node):
             self.get_logger().error(traceback.format_exc())
             raise
     
-    def setup_control_components(self):
-        self.motion_model = UnicycleModel(sampling_time=self.config_mpc.ts)
-        self.planner = LocalTrajPlanner(
-            self.config_mpc.ts,
-            self.config_mpc.N_hor,
-            self.config_robot.lin_vel_max
-        )
-        
+    def setup_control_components(self):        
         self.planner.load_map(self.gpc.inflated_map.boundary_coords, self.gpc.inflated_map.obstacle_coords_list)
         
         self.controller = TrajectoryTracker(
@@ -189,16 +191,12 @@ class ClusterNode(Node):
     
     def from_robot_state_callback(self, msg: RobotToClusterState):
         try:
-            if msg.robot_id != self.robot_id:
-                self.get_logger().warn(f'Received state with mismatched robot_id: expected {self.robot_id}, got {msg.robot_id}')
-                return
-
             self.robot_state = msg
             current_state = np.array([msg.x, msg.y, msg.theta])
             self.set_state(current_state)
             self.publish_state_to_manager()
 
-            self.get_logger().debug(f'Updated robot state: x={msg.x}, y={msg.y}, theta={msg.theta}, idle={msg.idle}')
+            self.get_logger().debug(f'Updated robot state: x={msg.x}, y={msg.y}, theta={msg.theta}')
 
         except Exception as e:
             self.get_logger().error(f'Error in robot_state_callback: {str(e)}')
@@ -241,7 +239,6 @@ class ClusterNode(Node):
     def control_loop(self):
         try:
             if self.idle:
-                self.get_logger().info('False')
                 return
 
             # Get current time
@@ -287,7 +284,7 @@ class ClusterNode(Node):
                 self.publish_trajectory_to_robot()
                 
             else:
-                self.get_logger().info('Not enough other robot states, skip this control loop')
+                self.get_logger().debug('Not enough other robot states, skip this control loop')
             
             if self.controller.check_termination_condition(external_check=self.planner.idle):
                 self.get_logger().info('Arrived goal and entered idle state')
@@ -313,10 +310,15 @@ class ClusterNode(Node):
                 return
 
             traj_msg = ClusterToRobotTrajectory()
-            traj_msg.timestamp = self.get_clock().now().to_msg()
-            traj_msg.x = [self._state[0]]
-            traj_msg.y = [self._state[1]]
-            traj_msg.theta = [self._state[2]]
+            traj_msg.stamp = self.get_clock().now().to_msg()
+
+            traj_msg.x = []
+            traj_msg.y = []
+            traj_msg.theta = []
+
+            traj_msg.x.append(float(self._state[0]))
+            traj_msg.y.append(float(self._state[1]))
+            traj_msg.theta.append(float(self._state[2]))
 
             for state in self.pred_states:
                 if isinstance(state, np.ndarray):
@@ -328,7 +330,7 @@ class ClusterNode(Node):
 
         except Exception as e:
             self.get_logger().error(f'Error publishing trajectory: {str(e)}')
-
+        
     def publish_state_to_manager(self):
         try:
             state_msg = ClusterToManagerState()
@@ -349,6 +351,8 @@ class ClusterNode(Node):
                     else:
                         flattened_states.append(state)
                 state_msg.pred_states = flattened_states
+            else:
+                state_msg.pred_states = []
 
             self.to_manager_state_pub.publish(state_msg)
 

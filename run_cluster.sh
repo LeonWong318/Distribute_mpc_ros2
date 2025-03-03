@@ -52,9 +52,6 @@ gnome-terminal --working-directory="$CURRENT_DIR" -- bash -c "echo Robot Manager
 echo "Waiting for manager to initialize (5 seconds)..."
 sleep 2
 
-nohup bash -c "source install/setup.bash && ros2 topic echo /manager/global_start > global_start.log 2>&1" &
-echo "Started monitoring /manager/global_start "
-
 # Launch local robot nodes (will register with manager)
 echo "Launching local robot nodes..."
 eval "$ROBOT_LAUNCH_COMMANDS"
@@ -63,9 +60,9 @@ eval "$ROBOT_LAUNCH_COMMANDS"
 echo "Waiting for robots to register and cluster nodes to initialize (5 seconds)..."
 sleep 2
 
-# # Launch robot visualizer
-# echo "Launching visualization node..."
-# gnome-terminal --working-directory="$CURRENT_DIR" -- bash -c "echo Robot Visualizer; source install/setup.bash; ros2 launch obj_robot_visualizer robot_visualizer.launch.py; exec bash"
+# Launch robot visualizer
+echo "Launching visualization node..."
+gnome-terminal --working-directory="$CURRENT_DIR" -- bash -c "echo Robot Visualizer; source install/setup.bash; ros2 launch obj_robot_visualizer robot_visualizer.launch.py; exec bash"
 
 sleep 2
 

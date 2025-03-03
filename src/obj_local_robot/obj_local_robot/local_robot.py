@@ -4,7 +4,7 @@ sys.path.append('src')
 import rclpy
 from rclpy.node import Node
 from rclpy.callback_groups import ReentrantCallbackGroup
-from rclpy.qos import QoSProfile, QoSReliabilityPolicy, QoSHistoryPolicy
+from rclpy.qos import QoSProfile, QoSReliabilityPolicy, QoSHistoryPolicy, QoSDurabilityPolicy
 from pkg_moving_object.moving_object import RobotObject
 from basic_motion_model.motion_model import UnicycleModel
 from pkg_configs.configs import CircularRobotSpecification
@@ -37,6 +37,11 @@ class RobotNode(Node):
                 
             self.get_logger().info('Registration successful')
             
+            # Set initial state and publish init state after initialization is complete
+            initial_state = self.load_init_state()
+            self.set_state(initial_state)
+            self.publish_state()
+            
             # Wait for cluster node to be ready (by detecting trajectory messages)
             self.get_logger().info('Waiting for cluster node to start publishing...')
             cluster_ready = await self.wait_for_cluster()
@@ -47,9 +52,6 @@ class RobotNode(Node):
                 
             self.get_logger().info('Cluster node is ready')
             
-            # Set initial state after initialization is complete
-            initial_state = np.zeros(3)  # [x, y, theta]
-            self.set_state(initial_state)
             
             return True
             
@@ -70,6 +72,7 @@ class RobotNode(Node):
                 ('control_frequency', 10.0),
                 ('lookahead_distance', 0.5),
                 ('robot_config_path', ''),
+                ('robot_start_path', ''),
                 ('cluster_wait_timeout', 30.0),  # Timeout for waiting for cluster node (seconds)
                 ('alpha', 1.0),  # Tuning parameter for velocity reduction at high curvature
                 ('ts', 0.2)  # Sampling time for controllers
@@ -82,13 +85,14 @@ class RobotNode(Node):
         self.max_angular_velocity = self.get_parameter('max_angular_velocity').value
         self.control_frequency = self.get_parameter('control_frequency').value
         self.lookahead_distance = self.get_parameter('lookahead_distance').value
-        robot_config_path = self.get_parameter('robot_config_path').value
+        self.robot_config_path = self.get_parameter('robot_config_path').value
+        self.robot_start_path = self.get_parameter('robot_start_path').value
         self.cluster_wait_timeout = self.get_parameter('cluster_wait_timeout').value
         self.alpha = self.get_parameter('alpha').value
         self.ts = self.get_parameter('ts').value
         
         # Load robot configuration
-        self.config_robot = CircularRobotSpecification.from_yaml(robot_config_path)
+        self.config_robot = CircularRobotSpecification.from_yaml(self.robot_config_path)
         self.motion_model = UnicycleModel(sampling_time=self.config_robot.ts)
         
         # Initialize Pure Pursuit controller
@@ -111,11 +115,13 @@ class RobotNode(Node):
         self.reliable_qos = QoSProfile(
             reliability=QoSReliabilityPolicy.RELIABLE,
             history=QoSHistoryPolicy.KEEP_LAST,
+            durability=QoSDurabilityPolicy.TRANSIENT_LOCAL,
             depth=10
         )
         
         self.best_effort_qos = QoSProfile(
             reliability=QoSReliabilityPolicy.BEST_EFFORT,
+            durability=QoSDurabilityPolicy.TRANSIENT_LOCAL,
             history=QoSHistoryPolicy.KEEP_LAST,
             depth=10
         )
@@ -279,11 +285,9 @@ class RobotNode(Node):
                 
             # Create state message
             state_msg = RobotToClusterState()
-            state_msg.robot_id = self.robot_id
             state_msg.x = self._state[0]
             state_msg.y = self._state[1]
             state_msg.theta = self._state[2]
-            state_msg.idle = False  # Default not idle
             state_msg.stamp = self.get_clock().now().to_msg()
             
             # Publish state
@@ -292,6 +296,27 @@ class RobotNode(Node):
         except Exception as e:
             self.get_logger().error(f'Error publishing state: {str(e)}')
 
+    def load_init_state(self):
+        try:
+            import json
+
+            with open(self.robot_start_path, 'r') as f:
+                robot_start_data = json.load(f)
+
+            robot_id_str = str(self.robot_id)
+
+            if robot_id_str not in robot_start_data:
+                self.get_logger().error(f'Robot ID {self.robot_id} not found in start configuration')
+                return np.zeros(3)
+
+            initial_state = np.array(robot_start_data[robot_id_str])
+
+            self.get_logger().info(f'Loaded initial state for robot {self.robot_id}: {initial_state}')
+            return initial_state
+
+        except Exception as e:
+            self.get_logger().error(f'Error loading initial state: {str(e)}')
+            return np.zeros(3)
 
 def main(args=None):
     """Main function"""

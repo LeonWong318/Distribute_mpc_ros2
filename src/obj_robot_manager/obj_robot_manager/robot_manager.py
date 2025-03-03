@@ -2,7 +2,7 @@ import rclpy
 from rclpy.node import Node
 from rclpy.executors import MultiThreadedExecutor
 from rclpy.callback_groups import MutuallyExclusiveCallbackGroup, ReentrantCallbackGroup
-from rclpy.qos import QoSProfile, QoSReliabilityPolicy, QoSHistoryPolicy
+from rclpy.qos import QoSProfile, QoSReliabilityPolicy, QoSHistoryPolicy, QoSDurabilityPolicy
 from threading import Lock
 import subprocess
 import os
@@ -66,6 +66,7 @@ class RobotManager(Node):
         
         self.qos_profile = QoSProfile(
             reliability=QoSReliabilityPolicy.RELIABLE,
+            durability=QoSDurabilityPolicy.TRANSIENT_LOCAL,
             history=QoSHistoryPolicy.KEEP_LAST,
             depth=10
         )
@@ -95,8 +96,6 @@ class RobotManager(Node):
             self.publish_robot_states,
             callback_group=MutuallyExclusiveCallbackGroup()
         )
-        
-
         
         self.get_logger().info('Robot manager initialized successfully')
     
@@ -188,8 +187,8 @@ class RobotManager(Node):
                 return response
             
             # create cluster node
-            # success = self.create_cluster_node(robot_id)
-            success = self.create_cluster_node_with_terminal(robot_id)
+            success = self.create_cluster_node(robot_id)
+            # success = self.create_cluster_node_with_terminal(robot_id)
             if not success:
                 response.success = False
                 response.message = f"Failed to create cluster node for robot {robot_id}"
