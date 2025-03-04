@@ -19,7 +19,7 @@ setup(
         (os.path.join('share', package_name, 'worlds'), glob('worlds/*')),
 
         # Models
-        (os.path.join('share', package_name,'models/small_warehouse/'), glob('./models/small_warehouse/*')),
+        (os.path.join('share', package_name,'models/test_map/'), glob('./models/test_map/*')),
         (os.path.join('share', package_name, 'models/mobile_robot'), glob('./models/mobile_robot/*')),
     ],
     install_requires=['setuptools'],
