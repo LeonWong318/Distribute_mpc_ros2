@@ -20,7 +20,7 @@ CURRENT_DIR=$(pwd)
 
 # Remove build, install, and log directories
 echo "Cleaning build, install, and log directories..."
-rm -rf build/ install/ log/
+rm -rf build/ install/ log/ *.log *.out
 
 # Build the workspace
 echo "Building with colcon..."
@@ -57,20 +57,19 @@ echo "Launching local robot nodes..."
 eval "$ROBOT_LAUNCH_COMMANDS"
 
 # Wait for robots to register and clusters to be created
-echo "Waiting for robots to register and cluster nodes to initialize (5 seconds)..."
+echo "Waiting for robots to register and cluster nodes to initialize (2 seconds)..."
 sleep 2
 
 # Launch robot visualizer
 echo "Launching visualization node..."
 gnome-terminal --working-directory="$CURRENT_DIR" -- bash -c "echo Robot Visualizer; source install/setup.bash; ros2 launch obj_robot_visualizer robot_visualizer.launch.py; exec bash"
 
-sleep 2
+# sleep 2
 
 echo "Launching listening and logging..."
 
 nohup bash -c "source install/setup.bash && ros2 topic echo /manager/robot_states > robot_state.log 2>&1" &
 echo "Started monitoring /manager/robot_states"
-
 
 nohup bash -c "source install/setup.bash && ros2 topic echo /robot_0/state > robot_0_state.log 2>&1" &
 echo "Started monitoring /robot_0/state"

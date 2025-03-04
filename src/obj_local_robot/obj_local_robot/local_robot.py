@@ -17,7 +17,6 @@ from pkg_local_control.pure_pursuit import PurePursuit
 from msg_interfaces.msg import ClusterToRobotTrajectory, RobotToClusterState, ClusterBetweenRobotHeartBeat
 from msg_interfaces.srv import RegisterRobot
 
-
 class RobotNode(Node):
     async def initialize(self):
         try:
@@ -45,12 +44,15 @@ class RobotNode(Node):
             # Wait for cluster node to be ready (by detecting trajectory messages)
             self.get_logger().info('Waiting for cluster node to start publishing...')
             cluster_ready = await self.wait_for_cluster()
-            
+
             if not cluster_ready:
                 self.get_logger().error('Timeout waiting for cluster node')
                 return False
                 
-            self.get_logger().info('Cluster node is ready')
+            self.get_logger().info('Starting heartbeat mechanism...')
+            self.start_heart_beat()
+            self.get_logger().info('Heartbeat mechanism started')
+            
             self.idle = False
             
             return True
@@ -126,7 +128,6 @@ class RobotNode(Node):
         
         self.best_effort_qos = QoSProfile(
             reliability=QoSReliabilityPolicy.BEST_EFFORT,
-            durability=QoSDurabilityPolicy.TRANSIENT_LOCAL,
             history=QoSHistoryPolicy.KEEP_LAST,
             depth=10
         )
@@ -165,9 +166,15 @@ class RobotNode(Node):
         # Set heart beat period
         self.heart_beat_send_period = 0.1
         self.heart_beat_check_period = 0.2
-        self.start_heart_beat()
         
         self.get_logger().info('Robot node initialized')
+
+    # def log_timestamp(self, event_name):
+    #     """For debug, logging with timestamp"""
+    #     current_time = self.get_clock().now()
+    #     seconds = current_time.seconds_nanoseconds()
+    #     timestamp = seconds[0] + seconds[1] * 1e-9
+    #     self.get_logger().warning(f'[TIMESTAMP][Robot-{self.robot_id}] {event_name}: {timestamp:.6f}s')
 
     async def register_with_manager(self):
         """Register with manager node"""
@@ -207,7 +214,7 @@ class RobotNode(Node):
                     
                 # Wait for a short period
                 await asyncio.sleep(0.1)
-                
+            
             return True
             
         except Exception as e:
@@ -218,14 +225,14 @@ class RobotNode(Node):
         self.heartbeat_pub = self.create_publisher(
             ClusterBetweenRobotHeartBeat,
             f'/robot_{self.robot_id}/heartbeat',
-            self.reliable_qos
+            self.best_effort_qos
         )
 
         self.heartbeat_sub = self.create_subscription(
             ClusterBetweenRobotHeartBeat,
             f'/cluster_{self.robot_id}/heartbeat',
             self.heartbeat_callback,
-            self.reliable_qos,
+            self.best_effort_qos,
             callback_group=self.callback_group
         )
 
@@ -236,6 +243,7 @@ class RobotNode(Node):
         )
 
         self.last_heartbeat_time = self.get_clock().now()
+        self.received_first_heartbeat = False  
 
         self.heartbeat_check_timer = self.create_timer(
             self.heart_beat_check_period,
@@ -248,6 +256,10 @@ class RobotNode(Node):
     def heartbeat_callback(self, msg: ClusterBetweenRobotHeartBeat):
         try:
             self.last_heartbeat_time = self.get_clock().now()
+
+            if not self.received_first_heartbeat:
+                self.received_first_heartbeat = True
+                self.get_logger().info(f'Received first heartbeat from cluster {self.robot_id}')
 
             if not self.cluster_connected:
                 self.cluster_connected = True
@@ -269,10 +281,13 @@ class RobotNode(Node):
 
     def check_heartbeat(self):
         try:
+            if not self.received_first_heartbeat:
+                return
+            
             current_time = self.get_clock().now()
             time_diff = (current_time - self.last_heartbeat_time).nanoseconds / 1e9
 
-            if time_diff > self.heart_beat_check_period * 5:
+            if time_diff > self.heart_beat_check_period * 10.0:
                 if self.cluster_connected:
                     self.cluster_connected = False
                     self.get_logger().warn(f'Cluster node {self.robot_id} appears to be offline')
@@ -295,7 +310,7 @@ class RobotNode(Node):
 
     def trajectory_callback(self, msg: ClusterToRobotTrajectory):
         """Process trajectory message from cluster"""
-        try: 
+        try:    
             # Mark trajectory as received
             self.trajectory_received = True
             
@@ -315,7 +330,7 @@ class RobotNode(Node):
             # Check if trajectory and state are available
             if self.current_trajectory is None or self._state is None:
                 return
-                
+            
             # Get current position and heading
             current_position = (self._state[0], self._state[1])
             current_heading = self._state[2]
