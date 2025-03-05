@@ -8,6 +8,6 @@ __pycache__/
 
 .vscode/
 
-
+mpc_solver/
 
 *.out
