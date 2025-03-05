@@ -9,7 +9,7 @@ import numpy as np
 import json
 
 from pkg_configs.configs import MpcConfiguration, CircularRobotSpecification
-from pkg_moving_object.moving_object import RobotObject
+# from pkg_moving_object.moving_object import RobotObject
 from basic_motion_model.motion_model import UnicycleModel
 from pkg_motion_plan.local_traj_plan import LocalTrajPlanner
 from pkg_tracker_mpc.trajectory_tracker import TrajectoryTracker
@@ -248,9 +248,8 @@ class ClusterNode(Node):
                 self.start_heart_beat()
 
             self.robot_state = msg
-            current_state = np.array([msg.x, msg.y, msg.theta])
             self.idle = msg.idle
-            self.set_state(current_state)
+            self._state = np.array([msg.x, msg.y, msg.theta])
             self.publish_state_to_manager()
 
             self.get_logger().debug(f'Updated robot state: x={msg.x}, y={msg.y}, theta={msg.theta}')
@@ -337,7 +336,8 @@ class ClusterNode(Node):
             # setup control
             self.setup_control_components()
                         
-            self.set_state(np.asarray(self.robot_start[str(self.robot_id)]))
+            # self.set_state(np.asarray(self.robot_start[str(self.robot_id)]))
+            self._state = np.asarray(self.robot_start[str(self.robot_id)])
 
             # add schedule
             self.add_schedule()
@@ -433,7 +433,8 @@ class ClusterNode(Node):
                 )
                 
                 # run step
-                self.step(self.last_actions[-1])
+                # self.step(self.last_actions[-1])
+                self.controller.set_current_state = self._state
                 
                 # publish traj to robot after calculating
                 self.publish_trajectory_to_robot()
@@ -552,15 +553,15 @@ class ClusterNode(Node):
     #     except Exception as e:
     #         self.get_logger().error(f'Error in control loop: {str(e)}')
 
-    def set_state(self, state: np.ndarray) -> None:
-        self._state = state
-        self.robot_object = RobotObject(state=state, ts=self.config_robot.ts, radius=self.config_robot.vehicle_width/2)
-        self.robot_object.motion_model = self.motion_model
+    # def set_state(self, state: np.ndarray) -> None:
+    #     self._state = state
+    #     self.robot_object = RobotObject(state=state, ts=self.config_robot.ts, radius=self.config_robot.vehicle_width/2)
+    #     self.robot_object.motion_model = self.motion_model
         
-    def step(self, action: np.ndarray) -> None:
-        self.robot_object.one_step(action)
-        self._state = self.robot_object.state
-        self.controller.set_current_state = self._state
+    # def step(self, action: np.ndarray) -> None:
+    #     self.robot_object.one_step(action)
+    #     self._state = self.robot_object.state
+    #     self.controller.set_current_state = self._state
 
     def publish_trajectory_to_robot(self):
         try:
