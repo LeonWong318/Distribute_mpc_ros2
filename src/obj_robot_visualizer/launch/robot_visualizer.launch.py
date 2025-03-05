@@ -12,6 +12,7 @@ def generate_launch_description():
     default_map_path = os.path.join('data', 'test_data', 'map.json')
     default_graph_path = os.path.join('data', 'test_data', 'graph.json')
     default_robot_start_path = os.path.join('data', 'test_data', 'robot_start.json')
+    default_robot_spec_path = os.path.join('config','spec_robot.yaml')
     
     map_path_arg = DeclareLaunchArgument(
         'map_path',
@@ -31,6 +32,11 @@ def generate_launch_description():
         description='Path to the robot start JSON file'
     )
     
+    robot_spec_path_arg = DeclareLaunchArgument(
+        'robot_spec_path',
+        default_value=default_robot_spec_path,
+    )
+    
     visualizer_node = Node(
         package='obj_robot_visualizer',
         executable='robot_visualizer',
@@ -38,7 +44,8 @@ def generate_launch_description():
         parameters=[{
             'map_path': LaunchConfiguration('map_path'),
             'graph_path': LaunchConfiguration('graph_path'),
-            'robot_start_path': LaunchConfiguration('robot_start_path')
+            'robot_start_path': LaunchConfiguration('robot_start_path'),
+            'robot_spec_path': LaunchConfiguration('robot_spec_path')
         }],
         output='screen'
     )
@@ -55,6 +62,7 @@ def generate_launch_description():
         map_path_arg,
         graph_path_arg,
         robot_start_path_arg,
+        robot_spec_path_arg,
         visualizer_node,
         rviz_node
     ])

@@ -8,6 +8,7 @@ from geometry_msgs.msg import TransformStamped
 import math
 import json
 import os
+import yaml
 
 def quaternion_from_euler(ai, aj, ak):
     ai /= 2.0
@@ -39,10 +40,12 @@ class RobotStateVisualizer(Node):
         self.declare_parameter('map_path', 'data/test_data/map.json')
         self.declare_parameter('graph_path', 'data/test_data/graph.json')
         self.declare_parameter('robot_start_path', 'data/test_data/robot_start.json')
+        self.declare_parameter('robot_spec_path', 'config/spec_robot.yaml')
         
         self.map_path = self.get_parameter('map_path').value
         self.graph_path = self.get_parameter('graph_path').value
         self.robot_start_path = self.get_parameter('robot_start_path').value
+        self.robot_spec_path = self.get_parameter('robot_spec_path').value
         
         self.marker_publisher = self.create_publisher(
             MarkerArray,
@@ -64,6 +67,7 @@ class RobotStateVisualizer(Node):
         self.map_data = None
         self.graph_data = None
         self.robot_start_data = None
+        self.vehicle_width = 0.5
         self.load_data()
         
         self.get_logger().info('Robot state visualizer initialized')
@@ -73,6 +77,23 @@ class RobotStateVisualizer(Node):
             current_dir = os.getcwd()
             self.get_logger().info(f'Current working directory: {current_dir}')
 
+            try:
+                current_dir = os.getcwd()
+                robot_spec_file_path = os.path.join(current_dir, self.robot_spec_path)
+                
+                if os.path.exists(robot_spec_file_path):
+                    with open(robot_spec_file_path, 'r') as f:
+                        robot_spec = yaml.safe_load(f)
+                        if 'vehicle_width' in robot_spec:
+                            self.vehicle_width = float(robot_spec['vehicle_width'])
+                            self.get_logger().info(f'Loaded vehicle width: {self.vehicle_width} from {robot_spec_file_path}')
+                        else:
+                            self.get_logger().warn(f'vehicle_width not found in {robot_spec_file_path}, using default: {self.vehicle_width}')
+                else:
+                    self.get_logger().warn(f'Robot spec file not found at {robot_spec_file_path}, using default width: {self.vehicle_width}')
+            except Exception as e:
+                self.get_logger().error(f'Failed to load robot spec data: {str(e)}')
+            
             try:
                 map_file_path = os.path.join(current_dir, self.map_path)
                 if os.path.exists(map_file_path):
@@ -124,7 +145,51 @@ class RobotStateVisualizer(Node):
 
     def publish_static_markers(self):
         marker_array = MarkerArray()
+        
+        # if self.map_data and "boundary_coords" in self.map_data:
+        #     floor_marker = Marker()
+        #     floor_marker.header.frame_id = "map"
+        #     floor_marker.header.stamp = self.get_clock().now().to_msg()
+        #     floor_marker.ns = "floor"
+        #     floor_marker.id = 0
+        #     floor_marker.type = Marker.TRIANGLE_LIST
+        #     floor_marker.action = Marker.ADD
+        #     floor_marker.scale.x = 1.0
+        #     floor_marker.scale.y = 1.0
+        #     floor_marker.scale.z = 1.0
+        #     floor_marker.color.r = 0.6
+        #     floor_marker.color.g = 0.6
+        #     floor_marker.color.b = 0.6
+        #     floor_marker.color.a = 0.8 
 
+        #     if len(self.map_data["boundary_coords"]) >= 3:
+        #         center_x = float(sum(float(p[0]) for p in self.map_data["boundary_coords"]) / len(self.map_data["boundary_coords"]))
+        #         center_y = float(sum(float(p[1]) for p in self.map_data["boundary_coords"]) / len(self.map_data["boundary_coords"]))
+
+        #         for i in range(len(self.map_data["boundary_coords"])):
+        #             center = Point()
+        #             center.x = center_x
+        #             center.y = center_y
+        #             center.z = 0.0
+
+        #             p1 = Point()
+        #             p1.x = float(self.map_data["boundary_coords"][i][0])
+        #             p1.y = float(self.map_data["boundary_coords"][i][1])
+        #             p1.z = 0.0
+
+        #             next_idx = (i + 1) % len(self.map_data["boundary_coords"])
+        #             p2 = Point()
+        #             p2.x = float(self.map_data["boundary_coords"][next_idx][0])
+        #             p2.y = float(self.map_data["boundary_coords"][next_idx][1])
+        #             p2.z = 0.0
+
+        #             floor_marker.points.append(center)
+        #             floor_marker.points.append(p1)
+        #             floor_marker.points.append(p2)
+
+        #     marker_array.markers.append(floor_marker)
+        
+        
         if self.map_data:
             if "boundary_coords" in self.map_data:
                 boundary_marker = Marker()
@@ -156,77 +221,37 @@ class RobotStateVisualizer(Node):
 
                 marker_array.markers.append(boundary_marker)
 
-            if "obstacle_list" in self.map_data:
-                for i, obstacle in enumerate(self.map_data["obstacle_list"]):
-                    obstacle_marker = Marker()
-                    obstacle_marker.header.frame_id = "map"
-                    obstacle_marker.header.stamp = self.get_clock().now().to_msg()
-                    obstacle_marker.ns = "obstacles"
-                    obstacle_marker.id = i
-                    obstacle_marker.type = Marker.LINE_STRIP
-                    obstacle_marker.action = Marker.ADD
-                    obstacle_marker.scale.x = 0.1
-                    obstacle_marker.color.r = 1.0
-                    obstacle_marker.color.g = 0.0
-                    obstacle_marker.color.b = 0.0
-                    obstacle_marker.color.a = 1.0
+        if "obstacle_list" in self.map_data:
+            for i, obstacle in enumerate(self.map_data["obstacle_list"]):
+                if len(obstacle) >= 3:
+                    center_x = float(sum(float(p[0]) for p in obstacle) / len(obstacle))
+                    center_y = float(sum(float(p[1]) for p in obstacle) / len(obstacle))
 
-                    for coord in obstacle:
-                        p = Point()
-                        p.x = float(coord[0])
-                        p.y = float(coord[1])
-                        p.z = 0.0
-                        obstacle_marker.points.append(p)
+                    max_distance_x = max(abs(float(p[0]) - center_x) for p in obstacle)
+                    max_distance_y = max(abs(float(p[1]) - center_y) for p in obstacle)
 
-                    if len(obstacle) > 0:
-                        p = Point()
-                        p.x = float(obstacle[0][0])
-                        p.y = float(obstacle[0][1])
-                        p.z = 0.0
-                        obstacle_marker.points.append(p)
+                    cube_marker = Marker()
+                    cube_marker.header.frame_id = "map"
+                    cube_marker.header.stamp = self.get_clock().now().to_msg()
+                    cube_marker.ns = "obstacle_cubes"
+                    cube_marker.id = i
+                    cube_marker.type = Marker.CUBE
+                    cube_marker.action = Marker.ADD
 
-                    marker_array.markers.append(obstacle_marker)
+                    cube_marker.pose.position.x = center_x
+                    cube_marker.pose.position.y = center_y
+                    cube_marker.pose.position.z = 0.2
 
-                    fill_marker = Marker()
-                    fill_marker.header.frame_id = "map"
-                    fill_marker.header.stamp = self.get_clock().now().to_msg()
-                    fill_marker.ns = "obstacle_fills"
-                    fill_marker.id = i
-                    fill_marker.type = Marker.TRIANGLE_LIST
-                    fill_marker.action = Marker.ADD
-                    fill_marker.scale.x = 1.0
-                    fill_marker.scale.y = 1.0
-                    fill_marker.scale.z = 1.0
-                    fill_marker.color.r = 1.0
-                    fill_marker.color.g = 0.0
-                    fill_marker.color.b = 0.0
-                    fill_marker.color.a = 0.3
+                    cube_marker.scale.x = max_distance_x * 2
+                    cube_marker.scale.y = max_distance_y * 2
+                    cube_marker.scale.z = 1.0
 
-                    if len(obstacle) >= 3:
-                        center_x = float(sum(float(p[0]) for p in obstacle) / len(obstacle))
-                        center_y = float(sum(float(p[1]) for p in obstacle) / len(obstacle))
+                    cube_marker.color.r = 1.0
+                    cube_marker.color.g = 0.0
+                    cube_marker.color.b = 0.0
+                    cube_marker.color.a = 0.8
 
-                        for j in range(len(obstacle)):
-                            center = Point()
-                            center.x = center_x
-                            center.y = center_y
-                            center.z = 0.0
-
-                            p1 = Point()
-                            p1.x = float(obstacle[j][0])
-                            p1.y = float(obstacle[j][1])
-                            p1.z = 0.0
-
-                            p2 = Point()
-                            p2.x = float(obstacle[(j+1) % len(obstacle)][0])
-                            p2.y = float(obstacle[(j+1) % len(obstacle)][1])
-                            p2.z = 0.0
-
-                            fill_marker.points.append(center)
-                            fill_marker.points.append(p1)
-                            fill_marker.points.append(p2)
-
-                    marker_array.markers.append(fill_marker)
+                    marker_array.markers.append(cube_marker)
 
         if self.graph_data:
             if "node_dict" in self.graph_data:
@@ -309,6 +334,29 @@ class RobotStateVisualizer(Node):
         marker_array = MarkerArray()
         
         for robot_state in msg.robot_states:
+            robot_circle = Marker()
+            robot_circle.header.frame_id = "map"
+            robot_circle.header.stamp = msg.stamp
+            robot_circle.ns = "robot_size"
+            robot_circle.id = robot_state.robot_id
+            robot_circle.type = Marker.CYLINDER
+            robot_circle.action = Marker.ADD
+            
+            robot_circle.pose.position.x = robot_state.x
+            robot_circle.pose.position.y = robot_state.y
+            robot_circle.pose.position.z = 0.05
+            
+            robot_circle.scale.x = self.vehicle_width
+            robot_circle.scale.y = self.vehicle_width
+            robot_circle.scale.z = 0.5
+            
+            robot_circle.color.r = 1.0
+            robot_circle.color.g = 1.0
+            robot_circle.color.b = 0.0
+            robot_circle.color.a = 0.9
+            
+            marker_array.markers.append(robot_circle)
+            
             robot_marker = Marker()
             robot_marker.header.frame_id = "map"
             robot_marker.header.stamp = msg.stamp
@@ -327,9 +375,9 @@ class RobotStateVisualizer(Node):
             robot_marker.pose.orientation.z = q[2]
             robot_marker.pose.orientation.w = q[3]
             
-            robot_marker.scale.x = 0.5
-            robot_marker.scale.y = 0.2
-            robot_marker.scale.z = 0.1
+            robot_marker.scale.x = self.vehicle_width
+            robot_marker.scale.y = 0.2 
+            robot_marker.scale.z = 0.1 
             
             robot_marker.color.a = 1.0
             if robot_state.idle:
@@ -375,13 +423,6 @@ class RobotStateVisualizer(Node):
                 trajectory_marker.color.r = 1.0
                 trajectory_marker.color.g = 0.5
                 trajectory_marker.color.b = 0.0
-                
-                # start_point = Point()
-                # start_point.x = robot_state.x
-                # start_point.y = robot_state.y
-                # start_point.z = 0.05
-                # trajectory_marker.points.append(start_point)
-                
 
                 for i in range(0, len(robot_state.pred_states), 3):
                     if i + 1 < len(robot_state.pred_states):
