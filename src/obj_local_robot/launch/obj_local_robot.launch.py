@@ -24,7 +24,7 @@ def generate_launch_description():
         default_value='lqr' # choose pure_pursuit/cbf/lqr
     )
     
-    # === Node Configuration ===
+    # === Node Configuration ===pure_pursuit
     local_robot = Node(
         package='obj_local_robot',
         executable='local_robot',
@@ -53,7 +53,7 @@ def generate_launch_description():
             
             # --- Pure Pursuit Parameters ---
             'lookahead_distance': 0.3,
-            'alpha': 0.2,  # Tuning parameter for velocity reduction at high curvature
+            'alpha': 0.1,  # Tuning parameter for velocity reduction at high curvature
             
             # --- LQR Parameters ---
             'lqr_q_pos': 10.0,    # Position error weight
