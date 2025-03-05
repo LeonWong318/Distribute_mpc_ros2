@@ -34,7 +34,7 @@ def generate_launch_description():
             'robot_graph_path': 'data/test_data/graph.json',
             'robot_schedule_path': 'data/test_data/schedule.csv',
             'cluster_wait_timeout': 30.0,  # Added timeout parameter
-            'alpha': 1.0,  # Added tuning parameter
+            'alpha': 0.1,  # Added tuning parameter
             'ts': 0.2  # Added sampling time
         }],
         output='screen'
