@@ -2,7 +2,7 @@ import json
 import math
 import xml.etree.ElementTree as ET
 
-from typing import TypedDict
+from typing import TypedDict, Tuple, List
 
 
 """Generate SDF model and the config file for the map from a json file"""
@@ -10,7 +10,7 @@ from typing import TypedDict
 
 class ObstacleInfoCompulsive(TypedDict):
     id_: int
-    vertices: list[tuple[float, float]]
+    vertices: List[Tuple[float, float]]
 
 class ObstacleInfo(ObstacleInfoCompulsive, total=False):
     name: str
@@ -89,7 +89,7 @@ def create_wall_link(id, length, x, y, z, yaw, wall_height, wall_thickness):
 
     return link
 
-def parse_json(json_file_path) -> list[list]:
+def parse_json(json_file_path) -> List[List]:
     with open(json_file_path, 'r') as file:
         data = json.load(file)
 
