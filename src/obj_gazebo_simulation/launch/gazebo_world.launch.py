@@ -19,7 +19,7 @@ def generate_launch_description():
     # Declare argument for map selection
     map_name_arg = DeclareLaunchArgument(
         'map_name',
-        default_value='test_map.world',
+        default_value='test_data.world',
         description='Name of the map file to load'
     )
 

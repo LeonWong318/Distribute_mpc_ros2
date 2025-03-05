@@ -4,13 +4,20 @@
   <name>obj_gazebo_simulation</name>
   <version>0.0.0</version>
   <description>Package to do the gazebo simulation based on ROS2</description>
-  <maintainer email="wangyinsong01@gmail.com">Yinsong Wang/maintainer>
+  <maintainer email="wangyinsong01@gmail.com">Yinsong Wang</maintainer>
   <license>MIT</license>
 
   <test_depend>ament_copyright</test_depend>
   <test_depend>ament_flake8</test_depend>
   <test_depend>ament_pep257</test_depend>
   <test_depend>python3-pytest</test_depend>
+
+  <depend>rclpy</depend>
+  <depend>launch</depend>
+  <depend>launch_ros</depend>
+  <depend>gazebo_ros</depend>
+  <depend>ament_index_python</depend>
+
 
   <export>
     <build_type>ament_python</build_type>

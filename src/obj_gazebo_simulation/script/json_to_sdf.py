@@ -4,7 +4,22 @@ import xml.etree.ElementTree as ET
 
 from typing import TypedDict, Tuple, List
 
+from xml.dom import minidom
 
+def indent(elem, level=0):
+    """Manually indent the XML tree for pretty-printing in Python <3.9."""
+    i = "\n" + level * "  "  # Two spaces per level
+    if len(elem):
+        if not elem.text or not elem.text.strip():
+            elem.text = i + "  "
+        if not elem.tail or not elem.tail.strip():
+            elem.tail = i
+        for child in elem:
+            indent(child, level + 1)
+        if not elem.tail or not elem.tail.strip():
+            elem.tail = i
+    elif level and (not elem.tail or not elem.tail.strip()):
+        elem.tail = i
 """Generate SDF model and the config file for the map from a json file"""
 
 
@@ -117,7 +132,6 @@ def create_sdf_model(json_file, sdf_file, wall_height=2.0, wall_thickness=0.1, m
 
     model = ET.Element('sdf', version='1.6')
     model_element = ET.SubElement(model, 'model', name=model_name)
-
     ET.SubElement(model_element, 'static').text = 'true'
 
     for idx, wall in enumerate(wall_list):
@@ -125,11 +139,11 @@ def create_sdf_model(json_file, sdf_file, wall_height=2.0, wall_thickness=0.1, m
         link = create_wall_link(idx, length, x, y, z, yaw, wall_height, wall_thickness)
         model_element.append(link)
 
+    indent(model)  # Apply custom indentation
     tree = ET.ElementTree(model)
-    ET.indent(tree, space="\t", level=0)
     tree.write(sdf_file, encoding='utf-8', xml_declaration=True)
 
-def create_config_file(config_file_path: str, model_name: str, author_name='Ze', author_email='zhze.zhang@gmail.com', description='Placeholder'):
+def create_config_file(config_file_path: str, model_name: str, author_name='Yinsong', author_email='wangyinsong01@gmail.com', description='Placeholder'):
     model = ET.Element('model')
     ET.SubElement(model, 'name').text = model_name
     ET.SubElement(model, 'version').text = '1.0'
@@ -139,8 +153,8 @@ def create_config_file(config_file_path: str, model_name: str, author_name='Ze',
     ET.SubElement(author, 'email').text = author_email
     ET.SubElement(model, 'description').text = description
 
+    indent(model)  # Apply custom indentation
     tree = ET.ElementTree(model)
-    ET.indent(tree, space="\t", level=0)
     tree.write(config_file_path, encoding='utf-8', xml_declaration=True)
 
 
@@ -149,16 +163,17 @@ if __name__ == '__main__':
     import os
     import pathlib
 
-    map_name = 'test_map' # the map name is the same as the json file name
+    map_name = 'test_data' # the map name is the same as the json file name
 
-    json_file_name = map_name + '.json'
+    json_file_name = 'map.json'
     sdf_file_name = 'model.sdf'
     config_file_name = 'model.config'
 
     pkg_dir = pathlib.Path(__file__).resolve().parents[1]
-    json_path = os.path.join(pkg_dir, 'data', json_file_name)
-    sdf_path = os.path.join(pkg_dir, 'model', map_name, sdf_file_name)
-    config_path = os.path.join(pkg_dir, 'model', map_name, config_file_name)
+    data_dir = pathlib.Path(__file__).resolve().parents[3]
+    json_path = os.path.join(data_dir, 'data', map_name, json_file_name)
+    sdf_path = os.path.join(pkg_dir, 'models', map_name, sdf_file_name)
+    config_path = os.path.join(pkg_dir, 'models', map_name, config_file_name)
     
     create_sdf_model(json_path, sdf_path, model_name=map_name)
     create_config_file(config_path, model_name=map_name)
