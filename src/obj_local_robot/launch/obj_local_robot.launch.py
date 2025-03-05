@@ -55,7 +55,7 @@ def generate_launch_description():
             'alpha': 0.1,  # Tuning parameter for velocity reduction at high curvature
             
             # --- LQR Parameters ---
-            'lqr_q_pos': 1.0,      # Position error weight
+            'lqr_q_pos': 10.0,    # Position error weight
             'lqr_q_theta': 0.5,    # Heading error weight
             'lqr_r_v': 0.1,        # Linear velocity control weight
             'lqr_r_omega': 0.1,    # Angular velocity control weight

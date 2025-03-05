@@ -158,7 +158,7 @@ class LQRController:
                 direction_norm = np.linalg.norm(direction)
                 
                 if direction_norm > 1e-6:
-                    v_ref = direction_norm / self.Ts
+                    v_ref = (direnction[0] * np.cos(x_ref[2]) + direction[1] * np.sin(x_ref[2])) / self.Ts
                     theta_ref = (trajectory_list[next_idx][2] - x_ref[2]+ np.pi) % (2 * np.pi) - np.pi
                     omega_ref = theta_ref / self.Ts  # Simplified handling
                     
