@@ -397,7 +397,7 @@ class RobotNode(Node):
                 return
             
             # Limit control commands
-            v = np.clip(v, 0, self.max_velocity)
+            v = np.clip(v, -self.max_velocity, self.max_velocity)
             omega = np.clip(omega, -self.max_angular_velocity, self.max_angular_velocity)
             
             # Apply control
