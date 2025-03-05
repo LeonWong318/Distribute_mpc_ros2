@@ -32,7 +32,6 @@ def generate_launch_description():
         parameters=[{
             # --- Robot Configuration ---
             'robot_id': LaunchConfiguration('robot_id'),
-            'ts': 0.1,  # Sampling time
             
             # --- Motion Constraints ---
             'max_velocity': 1.0,

@@ -106,7 +106,7 @@ class RobotNode(Node):
         # Get purepursuit parameters
         self.lookahead_distance = self.get_parameter('lookahead_distance').value
         self.alpha = self.get_parameter('alpha').value
-        self.ts = self.get_parameter('ts').value
+        self.ts = 1.0 / self.control_frequency
         
         # Get lqr parameters
         self.lqr_q_pos = self.get_parameter('lqr_q_pos').value

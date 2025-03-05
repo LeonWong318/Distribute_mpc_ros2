@@ -559,7 +559,7 @@ class ClusterNode(Node):
         
     def step(self, action: np.ndarray) -> None:
         self.robot_object.one_step(action)
-        # self._state = self.robot_object.state
+        self._state = self.robot_object.state
         self.controller.set_current_state = self._state
 
     def publish_trajectory_to_robot(self):
