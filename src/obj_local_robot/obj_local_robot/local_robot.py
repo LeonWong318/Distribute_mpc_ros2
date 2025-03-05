@@ -106,7 +106,7 @@ class RobotNode(Node):
         # Get purepursuit parameters
         self.lookahead_distance = self.get_parameter('lookahead_distance').value
         self.alpha = self.get_parameter('alpha').value
-        self.ts = self.get_parameter('ts').value
+        self.ts = 1.0 / self.control_frequency
         
         # Get lqr parameters
         self.lqr_q_pos = self.get_parameter('lqr_q_pos').value
@@ -397,7 +397,7 @@ class RobotNode(Node):
                 return
             
             # Limit control commands
-            v = np.clip(v, 0, self.max_velocity)
+            v = np.clip(v, -self.max_velocity, self.max_velocity)
             omega = np.clip(omega, -self.max_angular_velocity, self.max_angular_velocity)
             
             # Apply control
