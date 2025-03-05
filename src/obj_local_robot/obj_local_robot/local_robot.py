@@ -13,6 +13,7 @@ import numpy as np
 import time
 import asyncio
 from pkg_local_control.pure_pursuit import PurePursuit
+from pkg_local_control.lqr import LQRController
 
 from msg_interfaces.msg import ClusterToRobotTrajectory, RobotToClusterState, ClusterBetweenRobotHeartBeat
 from msg_interfaces.srv import RegisterRobot
@@ -79,7 +80,12 @@ class RobotNode(Node):
                 ('robot_schedule_path',''),
                 ('cluster_wait_timeout', 30.0),  # Timeout for waiting for cluster node (seconds)
                 ('alpha', 1.0),  # Tuning parameter for velocity reduction at high curvature
-                ('ts', 0.2)  # Sampling time for controllers
+                ('ts', 0.2),  # Sampling time for controllers
+                ('controller_type', 'pure_pursuit'),  # 'pure_pursuit', 'lqr', or 'cbf'
+                ('lqr_q_pos', 1.0),
+                ('lqr_q_theta', 0.5),
+                ('lqr_r_v', 0.1),
+                ('lqr_r_omega', 0.1)
             ]
         )
         
@@ -88,26 +94,32 @@ class RobotNode(Node):
         self.max_velocity = self.get_parameter('max_velocity').value
         self.max_angular_velocity = self.get_parameter('max_angular_velocity').value
         self.control_frequency = self.get_parameter('control_frequency').value
-        self.lookahead_distance = self.get_parameter('lookahead_distance').value
         self.robot_config_path = self.get_parameter('robot_config_path').value
         self.robot_start_path = self.get_parameter('robot_start_path').value
         self.robot_graph_path = self.get_parameter('robot_graph_path').value
         self.robot_schedule_path = self.get_parameter('robot_schedule_path').value
         self.cluster_wait_timeout = self.get_parameter('cluster_wait_timeout').value
+        
+        # Get type of controller
+        self.controller_type = self.get_parameter('controller_type').value
+        
+        # Get purepursuit parameters
+        self.lookahead_distance = self.get_parameter('lookahead_distance').value
         self.alpha = self.get_parameter('alpha').value
         self.ts = self.get_parameter('ts').value
+        
+        # Get lqr parameters
+        self.lqr_q_pos = self.get_parameter('lqr_q_pos').value
+        self.lqr_q_theta = self.get_parameter('lqr_q_theta').value
+        self.lqr_r_v = self.get_parameter('lqr_r_v').value
+        self.lqr_r_omega = self.get_parameter('lqr_r_omega').value
         
         # Load robot configuration
         self.config_robot = CircularRobotSpecification.from_yaml(self.robot_config_path)
         self.motion_model = UnicycleModel(sampling_time=self.config_robot.ts)
         
-        # Initialize Pure Pursuit controller
-        self.pure_pursuit = PurePursuit(
-            self.lookahead_distance, 
-            self.ts, 
-            self.max_velocity, 
-            self.alpha
-        )
+        # Initialize controllers
+        self.setup_controllers()
 
         # Initialize state variables
         self.idle = True
@@ -167,14 +179,27 @@ class RobotNode(Node):
         self.heart_beat_send_period = 0.1
         self.heart_beat_check_period = 0.2
         
-        self.get_logger().info('Robot node initialized')
+        self.get_logger().info(f'Robot node initialized with controller: {self.controller_type}')
 
-    # def log_timestamp(self, event_name):
-    #     """For debug, logging with timestamp"""
-    #     current_time = self.get_clock().now()
-    #     seconds = current_time.seconds_nanoseconds()
-    #     timestamp = seconds[0] + seconds[1] * 1e-9
-    #     self.get_logger().warning(f'[TIMESTAMP][Robot-{self.robot_id}] {event_name}: {timestamp:.6f}s')
+    def setup_controllers(self):
+        """Initialize the selected controller"""
+        # Initialize Pure Pursuit controller
+        self.pure_pursuit = PurePursuit(
+            self.lookahead_distance, 
+            self.ts, 
+            self.max_velocity, 
+            self.alpha
+        )
+        
+        # Initialize LQR controller
+        Q = np.diag([self.lqr_q_pos, self.lqr_q_pos, self.lqr_q_theta])
+        R = np.diag([self.lqr_r_v, self.lqr_r_omega])
+        self.lqr_controller = LQRController(self.ts, Q, R, self.max_velocity)
+        
+        # TODO:Initialize CBF controller if needed in the future
+        # self.cbf_controller = ...
+        
+        self.get_logger().info(f'Controllers initialized: {self.controller_type}')
 
     async def register_with_manager(self):
         """Register with manager node"""
@@ -327,6 +352,7 @@ class RobotNode(Node):
         try:
             if self.idle:
                 return
+                
             # Check if trajectory and state are available
             if self.current_trajectory is None or self._state is None:
                 return
@@ -344,13 +370,31 @@ class RobotNode(Node):
                     self.current_trajectory.theta[i]
                 )
                 trajectory_list.append(point)
-            
-            # Compute control commands using Pure Pursuit
-            v, omega = self.pure_pursuit.compute_control_commands(
-                current_position,
-                current_heading,
-                trajectory_list
-            )
+
+            # Compute control commands based on selected controller type
+            if self.controller_type == 'pure_pursuit':
+                v, omega = self.pure_pursuit.compute_control_commands(
+                    current_position,
+                    current_heading,
+                    trajectory_list
+                )
+            elif self.controller_type == 'lqr':
+                v, omega = self.lqr_controller.compute_control_commands(
+                    current_position,
+                    current_heading,
+                    trajectory_list
+                )
+            elif self.controller_type == 'cbf':
+                # Future implementation for CBF controller
+                v, omega = self.pure_pursuit.compute_control_commands(
+                    current_position,
+                    current_heading,
+                    trajectory_list
+                )
+                self.get_logger().warn_once('CBF controller not yet implemented, using Pure Pursuit instead')
+            else:
+                self.get_logger().warn_once(f'Unknown controller type: {self.controller_type}')
+                return
             
             # Limit control commands
             v = np.clip(v, 0, self.max_velocity)
@@ -362,11 +406,11 @@ class RobotNode(Node):
             # Publish state after control update
             self.publish_state()
             
-            self.get_logger().debug(f'Control commands: v={v:.2f}, omega={omega:.2f}')
+            self.get_logger().debug(f'Control commands ({self.controller_type}): v={v:.2f}, omega={omega:.2f}')
             
         except Exception as e:
             self.get_logger().error(f'Error in control_loop_callback: {str(e)}')
-    
+
     def set_state(self, state: np.ndarray) -> None:
         """Set robot state"""
         self._state = state
@@ -504,4 +548,4 @@ def main(args=None):
 
 
 if __name__ == "__main__":
-    main() 
+    main()

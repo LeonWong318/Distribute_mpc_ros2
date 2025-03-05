@@ -11,31 +11,58 @@ def generate_launch_description():
         value=os.getenv('CONDA_PREFIX') + '/lib/python3.8/site-packages:' + os.getenv('PYTHONPATH', '')
     )
     
+    # === Launch Arguments ===
     # Robot ID argument
     robot_id_arg = DeclareLaunchArgument(
         'robot_id',
-        default_value='0',
-        description='Robot ID'
+        default_value='0'
     )
     
-    # Robot node
+    # Controller type argument
+    controller_type_arg = DeclareLaunchArgument(
+        'controller_type',
+        default_value='lqr' # choose pure_pursuit/cbf/lqr
+    )
+    
+    # === Node Configuration ===
     local_robot = Node(
         package='obj_local_robot',
         executable='local_robot',
         name='local_robot',
         parameters=[{
+            # --- Robot Configuration ---
             'robot_id': LaunchConfiguration('robot_id'),
+            'ts': 0.1,  # Sampling time
+            
+            # --- Motion Constraints ---
             'max_velocity': 1.0,
             'max_angular_velocity': 1.0,
             'control_frequency': 10.0,
-            'lookahead_distance': 0.3,  # Added for Pure Pursuit
+            
+            # --- File Paths ---
             'robot_config_path': "config/spec_robot.yaml",
             'robot_start_path': "data/test_data/robot_start.json",
             'robot_graph_path': 'data/test_data/graph.json',
             'robot_schedule_path': 'data/test_data/schedule.csv',
-            'cluster_wait_timeout': 30.0,  # Added timeout parameter
-            'alpha': 0.1,  # Added tuning parameter
-            'ts': 0.2  # Added sampling time
+            
+            # --- Communication ---
+            'cluster_wait_timeout': 30.0,  # Timeout for waiting for cluster node
+            
+            # --- Controller Selection ---
+            'controller_type': LaunchConfiguration('controller_type'),
+            
+            # --- Pure Pursuit Parameters ---
+            'lookahead_distance': 0.3,
+            'alpha': 0.2,  # Tuning parameter for velocity reduction at high curvature
+            
+            # --- LQR Parameters ---
+            'lqr_q_pos': 1.0,      # Position error weight
+            'lqr_q_theta': 0.5,    # Heading error weight
+            'lqr_r_v': 0.1,        # Linear velocity control weight
+            'lqr_r_omega': 0.1,    # Angular velocity control weight
+            
+            # --- CBF Parameters (for future implementation) ---
+
         }],
         output='screen'
     )
@@ -43,5 +70,6 @@ def generate_launch_description():
     return LaunchDescription([
         pythonpath_cmd,
         robot_id_arg,
+        controller_type_arg,
         local_robot
     ])
