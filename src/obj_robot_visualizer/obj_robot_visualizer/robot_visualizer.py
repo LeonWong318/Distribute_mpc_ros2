@@ -376,11 +376,11 @@ class RobotStateVisualizer(Node):
                 trajectory_marker.color.g = 0.5
                 trajectory_marker.color.b = 0.0
                 
-                start_point = Point()
-                start_point.x = robot_state.x
-                start_point.y = robot_state.y
-                start_point.z = 0.05
-                trajectory_marker.points.append(start_point)
+                # start_point = Point()
+                # start_point.x = robot_state.x
+                # start_point.y = robot_state.y
+                # start_point.z = 0.05
+                # trajectory_marker.points.append(start_point)
                 
 
                 for i in range(0, len(robot_state.pred_states), 3):
