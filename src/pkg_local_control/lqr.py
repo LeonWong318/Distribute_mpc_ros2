@@ -125,13 +125,13 @@ class LQRController:
             min_dist = float('inf')
             closest_idx = 0
             
-            for i, point in enumerate(trajectory_list):
-                point_state = np.array([point[0], point[1], point[2]])
-                dist = np.linalg.norm(current_state[:2] - point_state[:2])
+            # for i, point in enumerate(trajectory_list):
+            #     point_state = np.array([point[0], point[1], point[2]])
+            #     dist = np.linalg.norm(current_state[:2] - point_state[:2])
                 
-                if dist < min_dist:
-                    min_dist = dist
-                    closest_idx = i
+            #     if dist < min_dist:
+            #         min_dist = dist
+            #         closest_idx = i
             
             # Find next point for reference
             next_idx = min(closest_idx + 1, len(trajectory_list) - 1)
