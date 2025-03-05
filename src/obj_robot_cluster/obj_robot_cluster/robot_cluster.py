@@ -238,7 +238,6 @@ class ClusterNode(Node):
                         
         except Exception as e:
             self.get_logger().error(f'Error processing robot states: {str(e)}')
-            rclpy.shutdown()
     
     def from_robot_state_callback(self, msg: RobotToClusterState):
         try:
@@ -387,21 +386,46 @@ class ClusterNode(Node):
 
             self.controller.set_ref_states(ref_states, ref_speed=ref_speed)
 
+            # # get other robot states
+            # received_robot_states = [state for rid, state in self.other_robot_states.items()]
+
+            # if len(received_robot_states) == len(self.expected_robots) - 1:
+            #     robot_states_for_control = []
+            #     for state in received_robot_states:
+            #         for _ in range(self.config_mpc.N_hor + 1):
+            #             robot_states_for_control.extend([state.x, state.y, state.theta])
+
+            #     # check if state length is right
+            #     required_length = 3 * (self.config_mpc.N_hor + 1) * self.config_mpc.Nother
+            #     if len(robot_states_for_control) < required_length:
+            #         remaining_length = required_length - len(robot_states_for_control)
+            #         robot_states_for_control.extend([-10] * remaining_length)
+
+            #     # run controller
+            #     self.last_actions, self.pred_states, self.current_refs, self.debug_info = self.controller.run_step(
+            #         static_obstacles=self.static_obstacles,
+            #         other_robot_states=robot_states_for_control
+            #     )
+            
             # get other robot states
             received_robot_states = [state for rid, state in self.other_robot_states.items()]
-
             if len(received_robot_states) == len(self.expected_robots) - 1:
-                robot_states_for_control = []
+                state_dim = 3  # x, y, theta
+                horizon = self.config_mpc.N_hor
+                num_others = self.config_mpc.Nother
+                robot_states_for_control = [-10.0] * state_dim * (horizon + 1) * num_others
+                
+                idx = 0
                 for state in received_robot_states:
-                    for _ in range(self.config_mpc.N_hor + 1):
-                        robot_states_for_control.extend([state.x, state.y, state.theta])
-
-                # check if state length is right
-                required_length = 3 * (self.config_mpc.N_hor + 1) * self.config_mpc.Nother
-                if len(robot_states_for_control) < required_length:
-                    remaining_length = required_length - len(robot_states_for_control)
-                    robot_states_for_control.extend([-10] * remaining_length)
-
+                    robot_states_for_control[idx:idx+state_dim] = [state.x, state.y, state.theta]
+                    idx += state_dim
+                
+                idx_pred = state_dim * num_others
+                for state in received_robot_states:
+                    if hasattr(state, 'pred_states') and len(state.pred_states) >= state_dim * horizon:
+                        robot_states_for_control[idx_pred:idx_pred+state_dim*horizon] = state.pred_states[:state_dim*horizon]
+                    idx_pred += state_dim * horizon
+                
                 # run controller
                 self.last_actions, self.pred_states, self.current_refs, self.debug_info = self.controller.run_step(
                     static_obstacles=self.static_obstacles,
