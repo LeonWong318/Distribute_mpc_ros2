@@ -24,7 +24,7 @@ def generate_launch_description():
         default_value='pure_pursuit' # choose pure_pursuit/cbf/lqr
     )
     
-    # === Node Configuration ===pure_pursuit
+    # === Node Configuration ===
     local_robot = Node(
         package='obj_local_robot',
         executable='local_robot',
