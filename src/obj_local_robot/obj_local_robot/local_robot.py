@@ -5,7 +5,6 @@ import rclpy
 from rclpy.node import Node
 from rclpy.callback_groups import ReentrantCallbackGroup
 from rclpy.qos import QoSProfile, QoSReliabilityPolicy, QoSHistoryPolicy, QoSDurabilityPolicy
-from pkg_moving_object.moving_object import RobotObject
 from basic_motion_model.motion_model import UnicycleModel
 from pkg_configs.configs import CircularRobotSpecification
 
@@ -16,7 +15,7 @@ from pkg_local_control.pure_pursuit import PurePursuit
 from pkg_local_control.lqr import LQRController
 
 from msg_interfaces.msg import ClusterToRobotTrajectory, RobotToClusterState, ClusterBetweenRobotHeartBeat
-from msg_interfaces.srv import RegisterRobot
+from msg_interfaces.srv import RegisterRobot, ExecuteCommand
 
 class RobotNode(Node):
     async def initialize(self):
@@ -38,9 +37,8 @@ class RobotNode(Node):
             self.get_logger().info('Registration successful')
             
             # Set initial state and publish init state after initialization is complete
-            self.initial_state, self.target_point = self.load_init_state_and_target()
-            self.set_state(self.initial_state)
-            self.publish_state()
+            self._state, self.target_point = self.load_init_state_and_target()
+            self.publish_state_to_cluster()
             
             # Wait for cluster node to be ready (by detecting trajectory messages)
             self.get_logger().info('Waiting for cluster node to start publishing...')
@@ -165,6 +163,12 @@ class RobotNode(Node):
             RobotToClusterState,
             f'/robot_{self.robot_id}/state',
             self.reliable_qos
+        )
+        
+        self.send_command_client = self.create_client(
+            ExecuteCommand,
+            f'/robot_{self.robot_id}/command',
+            callback_group=self.callback_group
         )
         
         # Create control timer
@@ -320,6 +324,16 @@ class RobotNode(Node):
         except Exception as e:
             self.get_logger().error(f'Error checking heartbeat: {str(e)}')
 
+    def gazebo_state_callback(self, msg):
+        try:
+            new_state = [msg.x, msg.y, msg.theta]
+            self.set_state(new_state)
+            self.get_logger().debug(f'Updated from Gazebo: x={msg.x:.2f}, y={msg.y:.2f}, θ={msg.theta:.2f}')
+
+        except Exception as e:
+            self.get_logger().error(f'Error in gazebo_state_callback: {str(e)}')
+
+    
     def handle_cluster_offline(self):
         if not self.idle:
             self.get_logger().error(f'Cluster {self.robot_id} appears to be offline, entering safety stop state')
@@ -400,33 +414,61 @@ class RobotNode(Node):
             v = np.clip(v, -self.max_velocity, self.max_velocity)
             omega = np.clip(omega, -self.max_angular_velocity, self.max_angular_velocity)
             
-            # Apply control
-            self.step([v, omega])
-            
-            # Publish state after control update
-            self.publish_state()
-            
-            self.get_logger().debug(f'Control commands ({self.controller_type}): v={v:.2f}, omega={omega:.2f}')
+            # Send command and wait for state update (blocking call)
+            success, new_state = self.send_command_to_gazebo(v, omega)
+
+            if success:
+                self._state = new_state
+
+                # Publish state to cluster
+                self.publish_state_to_cluster()
+
+                self.get_logger().debug(f'Control commands ({self.controller_type}): v={v:.2f}, omega={omega:.2f}')
+            else:
+                self.get_logger().warn('Failed to send command to Gazebo')
             
         except Exception as e:
             self.get_logger().error(f'Error in control_loop_callback: {str(e)}')
 
-    def set_state(self, state: np.ndarray) -> None:
-        """Set robot state"""
-        self._state = state
-        self.robot_object = RobotObject(
-            state=state,
-            ts=self.config_robot.ts,
-            radius=self.config_robot.vehicle_width/2
-        )
-        self.robot_object.motion_model = self.motion_model
+    def send_command_to_gazebo(self, v, omega):
+        try:
+            if not self.send_command_client.wait_for_service(timeout_sec=1.0):
+                self.get_logger().warn('Send command service not available')
+                return False, None
+
+            # Create request
+            request = ExecuteCommand.Request()
+            request.v = float(v)
+            request.omega = float(omega)
+
+            # end request and wait to get response
+            future = self.send_command_client.call_async(request)
+            rclpy.spin_until_future_complete(self, future)
+
+            # check result
+            if future.result() is not None:
+                response = future.result()
+                if response.success:
+                    new_state = np.array([response.x, response.y, response.theta])
+                    return True, new_state
+                else:
+                    self.get_logger().warn('Command sent but state update failed')
+                    return False, None
+            else:
+                self.get_logger().error(f'Service call failed: {future.exception()}')
+                return False, None
+
+        except Exception as e:
+            self.get_logger().error(f'Error sending command to Gazebo: {str(e)}')
+            return False, None
+    
         
     def step(self, action: np.ndarray) -> None:
         """Execute one step of action and update state"""
         self.robot_object.one_step(action)
         self._state = self.robot_object.state
     
-    def publish_state(self):
+    def publish_state_to_cluster(self):
         """Publish robot state to cluster"""
         try:
             # Skip if state is not initialized
