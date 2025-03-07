@@ -575,10 +575,6 @@ class ClusterNode(Node):
             traj_msg.y = []
             traj_msg.theta = []
 
-            traj_msg.x.append(float(self._state[0]))
-            traj_msg.y.append(float(self._state[1]))
-            traj_msg.theta.append(float(self._state[2]))
-
             for state in self.pred_states:
                 if isinstance(state, np.ndarray):
                     traj_msg.x.append(float(state[0]))
