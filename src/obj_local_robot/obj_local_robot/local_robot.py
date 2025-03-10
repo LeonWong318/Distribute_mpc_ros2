@@ -338,14 +338,14 @@ class RobotNode(Node):
         if not self.idle:
             self.get_logger().error(f'Cluster {self.robot_id} appears to be offline, entering safety stop state')
             self.idle = True
-            self.emergency_stop()
+            self.execute_stop()
 
-    def emergency_stop(self):
+    def execute_stop(self):
         try:
-            self.step([0.0, 0.0])
-            self.get_logger().warn(f'Robot {self.robot_id} emergency stop executed')
+            _, _ = self.send_command_to_gazebo(0, 0)
+            self.get_logger().warn(f'Robot {self.robot_id} stop executed')
         except Exception as e:
-            self.get_logger().error(f'Error during emergency stop: {str(e)}')
+            self.get_logger().error(f'Error during stop: {str(e)}')
 
     def trajectory_callback(self, msg: ClusterToRobotTrajectory):
         """Process trajectory message from cluster"""
@@ -462,12 +462,6 @@ class RobotNode(Node):
             self.get_logger().error(f'Error sending command to Gazebo: {str(e)}')
             return False, None
     
-        
-    def step(self, action: np.ndarray) -> None:
-        """Execute one step of action and update state"""
-        self.robot_object.one_step(action)
-        self._state = self.robot_object.state
-    
     def publish_state_to_cluster(self):
         """Publish robot state to cluster"""
         try:
@@ -497,7 +491,7 @@ class RobotNode(Node):
 
         if distance < 0.3:
             self.idle = True
-            self.step([0.0, 0.0])
+            self.execute_stop()
             self.get_logger().info(f'Robot {self.robot_id} reached target. Distance: {distance:.3f}')
         else:
             self.idle = False

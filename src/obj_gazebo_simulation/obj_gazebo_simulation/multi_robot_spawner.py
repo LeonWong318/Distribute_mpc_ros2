@@ -79,8 +79,8 @@ class MultiRobotSpawner(Node):
 
             ros_elem = ET.SubElement(diff_drive, "ros")
             ET.SubElement(ros_elem, "namespace").text = f"/{robot_namespace}"
-            ET.SubElement(ros_elem, "remapping").text = f"cmd_vel:={robot_namespace}/cmd_vel"
-            ET.SubElement(ros_elem, "remapping").text = f"odom:={robot_namespace}/odom"
+            ET.SubElement(ros_elem, "remapping").text = f"cmd_vel:=cmd_vel"
+            ET.SubElement(ros_elem, "remapping").text = f"odom:=odom"
 
             ET.SubElement(diff_drive, "left_joint").text = "left_wheel_hinge"
             ET.SubElement(diff_drive, "right_joint").text = "right_wheel_hinge"
@@ -178,7 +178,7 @@ class MultiRobotSpawner(Node):
         else:
             self.get_logger().error("Failed to spawn any robots!")
     
-    def start_converters(self):
+    def start_converters_with_terminal(self):
         """Start converter nodes for each successfully spawned robot"""
         self.converter_processes = []
         
@@ -186,8 +186,35 @@ class MultiRobotSpawner(Node):
             try:
                 # Launch a converter process for this robot
                 cmd = [
+                    'gnome-terminal', '--', 'bash', '-c',
+                    f'ros2 run obj_gazebo_simulation gazebo_converter --ros-args -p robot_id:={robot_id}; exec bash'
+                ]
+                
+                process = subprocess.Popen(
+                    cmd, 
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True
+                )
+                
+                self.converter_processes.append(process)
+                                
+            except Exception as e:
+                self.get_logger().error(f"Failed to start converter for robot {robot_id}: {str(e)}")
+        
+        self.get_logger().info("All converters started")
+    
+    def start_converters(self):
+        """Start converter nodes for each successfully spawned robot"""
+        self.converter_processes = []
+        
+        for robot_id in self.spawned_robots:
+            try:
+                # Launch a converter process for this robot
+                
+                cmd = [
                     'ros2', 'run', 
-                    'obj_gazebo_simulation', 'robot_service_converter',
+                    'obj_gazebo_simulation', 'gazebo_converter',
                     '--ros-args', '-p', f'robot_id:={robot_id}'
                 ]
                 
@@ -199,8 +226,7 @@ class MultiRobotSpawner(Node):
                 )
                 
                 self.converter_processes.append(process)
-                self.get_logger().info(f"Started converter for robot {robot_id}")
-                
+                                
             except Exception as e:
                 self.get_logger().error(f"Failed to start converter for robot {robot_id}: {str(e)}")
         
