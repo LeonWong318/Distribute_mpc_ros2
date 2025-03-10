@@ -65,15 +65,17 @@ echo "Launching visualization node..."
 gnome-terminal --working-directory="$CURRENT_DIR" -- bash -c "echo Robot Visualizer; source install/setup.bash; ros2 launch obj_robot_visualizer robot_visualizer.launch.py; exec bash"
 
 # sleep 2
+echo "Launching msg buffer..."
+gnome-terminal --working-directory="$CURRENT_DIR" -- bash -c "echo Message Buffer; source install/setup.bash; ros2 launch obj_msg_buffer msg_buffer.launch.py; exec bash"
 
-echo "Launching listening and logging..."
+# echo "Launching listening and logging..."
 
-nohup bash -c "source install/setup.bash && ros2 topic echo /manager/robot_states > robot_state.log 2>&1" &
-echo "Started monitoring /manager/robot_states"
+# nohup bash -c "source install/setup.bash && ros2 topic echo /manager/robot_states > robot_state.log 2>&1" &
+# echo "Started monitoring /manager/robot_states"
 
-nohup bash -c "source install/setup.bash && ros2 topic echo /robot_0/state > robot_0_state.log 2>&1" &
-echo "Started monitoring /robot_0/state"
+# nohup bash -c "source install/setup.bash && ros2 topic echo /robot_0/state > robot_0_state.log 2>&1" &
+# echo "Started monitoring /robot_0/state"
 
-nohup bash -c "source install/setup.bash && ros2 topic echo /robot_1/state > robot_1_state.log 2>&1" &
-echo "Started monitoring /robot_1/state"
+# nohup bash -c "source install/setup.bash && ros2 topic echo /robot_1/state > robot_1_state.log 2>&1" &
+# echo "Started monitoring /robot_1/state"
 

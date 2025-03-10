@@ -154,7 +154,7 @@ class RobotNode(Node):
         # Create subscriber for trajectory from cluster
         self.trajectory_sub = self.create_subscription(
             ClusterToRobotTrajectory,
-            f'/cluster_{self.robot_id}/trajectory',
+            f'/cluster_{self.robot_id}/trajectory_delayed',
             self.trajectory_callback,
             self.reliable_qos,
             callback_group=self.callback_group
