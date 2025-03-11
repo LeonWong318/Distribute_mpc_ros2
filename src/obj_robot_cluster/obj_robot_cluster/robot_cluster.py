@@ -94,7 +94,7 @@ class ClusterNode(Node):
 
         self.from_robot_state_sub = self.create_subscription(
             RobotToClusterState,
-            f'/robot_{self.robot_id}/state',
+            f'/robot_{self.robot_id}/state_delayed',
             self.from_robot_state_callback,
             self.reliable_qos,
             callback_group=self.callback_group

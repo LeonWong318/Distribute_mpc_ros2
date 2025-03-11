@@ -51,7 +51,7 @@ def generate_launch_description():
             'controller_type': LaunchConfiguration('controller_type'),
             
             # --- Pure Pursuit Parameters ---
-            'lookahead_distance': 0.3,
+            'lookahead_distance': 1.0,
             'alpha': 0.1,  # Tuning parameter for velocity reduction at high curvature
             
             # --- LQR Parameters ---
