@@ -5,10 +5,7 @@ import math
 from rclpy.node import Node
 from ament_index_python.packages import get_package_share_directory
 from gazebo_msgs.srv import SpawnEntity
-from launch_ros.actions import Node as NodeAction
-from launch.substitutions import LaunchConfiguration
 import xml.etree.ElementTree as ET
-from geometry_msgs.msg import Twist
 import subprocess
 
 class MultiRobotSpawner(Node):
@@ -38,6 +35,7 @@ class MultiRobotSpawner(Node):
         
         # Start converter nodes for each robot
         self.start_converters()
+        # self.start_converters_with_terminal()
 
     def load_robot_positions(self):
         """ Loads multiple robot initial positions from a JSON file """

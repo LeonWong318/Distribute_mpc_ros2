@@ -107,11 +107,10 @@ class RobotControlConverter(Node):
                 state_msg.x = self.current_x
                 state_msg.y = self.current_y
                 state_msg.theta = self.current_theta
-                state_msg.stamp = self.get_clock().now().to_msg()
+                state_msg.stamp = self.last_update_time.to_msg()
                 
                 # Publish state
                 self.state_pub.publish(state_msg)
-                
         except Exception as e:
             self.get_logger().error(f'Error in publish_state: {str(e)}')
     
@@ -155,6 +154,7 @@ class RobotControlConverter(Node):
                     response.x = self.current_x
                     response.y = self.current_y
                     response.theta = self.current_theta
+                    response.stamp = self.get_clock().now().to_msg()
                     return response
                 
                 # Define condition for state update
@@ -169,15 +169,18 @@ class RobotControlConverter(Node):
                     response.x = self.current_x
                     response.y = self.current_y
                     response.theta = self.current_theta
+                    response.stamp = self.get_clock().now().to_msg()
                 else:
                     self.get_logger().warn('Timeout waiting for state update')
                     response.success = False
+                    response.stamp = self.get_clock().now().to_msg()
             
             return response
             
         except Exception as e:
             self.get_logger().error(f'Error in send_command_callback: {str(e)}')
             response.success = False
+            response.stamp = self.get_clock().now().to_msg()
             return response
     
     def odom_callback(self, msg):

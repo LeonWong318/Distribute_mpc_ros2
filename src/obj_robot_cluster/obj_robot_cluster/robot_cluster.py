@@ -249,9 +249,9 @@ class ClusterNode(Node):
             self.robot_state = msg
             self.idle = msg.idle
             self._state = np.array([msg.x, msg.y, msg.theta])
-            self.publish_state_to_manager()
+            self.publish_state_to_manager(msg.stamp)
 
-            self.get_logger().debug(f'Updated robot state: x={msg.x}, y={msg.y}, theta={msg.theta}')
+            self.get_logger().info(f'Updated robot state: x={msg.x}, y={msg.y}, theta={msg.theta}')
 
         except Exception as e:
             self.get_logger().error(f'Error in robot_state_callback: {str(e)}')
@@ -420,7 +420,7 @@ class ClusterNode(Node):
         except Exception as e:
             self.get_logger().error(f'Error publishing trajectory: {str(e)}')
         
-    def publish_state_to_manager(self):
+    def publish_state_to_manager(self, stamp):
         try:
             state_msg = ClusterToManagerState()
             state_msg.robot_id = self.robot_id
@@ -428,7 +428,7 @@ class ClusterNode(Node):
             state_msg.y = self._state[1]
             state_msg.theta = self._state[2]
             state_msg.idle = self.idle
-            state_msg.stamp = self.get_clock().now().to_msg()
+            state_msg.stamp = stamp
 
             if self.pred_states is not None:
                 flattened_states = []

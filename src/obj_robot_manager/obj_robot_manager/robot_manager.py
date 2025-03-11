@@ -9,7 +9,7 @@ import os
 import json
 import threading
 
-from msg_interfaces.msg import ManagerToClusterStateSet, ClusterToManagerState, ManagerToClusterStart
+from msg_interfaces.msg import ManagerToClusterStateSet, ClusterToManagerState, ManagerToClusterStart, GazeboToManagerState
 from msg_interfaces.srv import RegisterRobot
 
 
@@ -47,6 +47,9 @@ class RobotManager(Node):
         self.cluster_subscribers = {}
         self.robot_states = {}
         
+        self.converter_states = {}
+        self._converter_lock = Lock()
+        self.converter_subscribers = {}
         
         self._lock = Lock()
         self._registration_lock = Lock()
@@ -188,7 +191,7 @@ class RobotManager(Node):
             
             # create cluster node
             success = self.create_cluster_node(robot_id)
-            # success = self.create_cluster_node_with_terminal(robot_id)
+            #success = self.create_cluster_node_with_terminal(robot_id)
             if not success:
                 response.success = False
                 response.message = f"Failed to create cluster node for robot {robot_id}"
@@ -196,6 +199,8 @@ class RobotManager(Node):
             
             # Create Subscriber for cluster status
             self.create_cluster_subscriber(robot_id)
+            
+            self.create_converter_subscriber(robot_id)
             
             with self._registration_lock:
                 self.registered_robots.add(robot_id)
@@ -227,6 +232,18 @@ class RobotManager(Node):
         self.cluster_subscribers[robot_id] = subscriber
         self.get_logger().info(f'Created subscriber for cluster {robot_id} state')
     
+    def create_converter_subscriber(self, robot_id):
+        subscriber = self.create_subscription(
+            GazeboToManagerState,
+            f'/robot_{robot_id}/sim_state',
+            lambda msg: self.converter_state_callback(msg, robot_id),
+            self.qos_profile,
+            callback_group=self.service_group
+        )
+
+        self.converter_subscribers[robot_id] = subscriber
+        self.get_logger().info(f'Created subscriber for converter {robot_id} state')
+    
     def cluster_state_callback(self, msg, robot_id):
         with self._state_lock:
             if msg.robot_id != robot_id:
@@ -236,19 +253,84 @@ class RobotManager(Node):
             self.robot_states[robot_id] = msg
             self.get_logger().debug(f'Updated state for robot {robot_id}: x={msg.x}, y={msg.y}, theta={msg.theta}, idle={msg.idle}')
     
+    def converter_state_callback(self, msg, robot_id):
+        with self._converter_lock:
+            if msg.robot_id != robot_id:
+                self.get_logger().warn(f'Received converter state with mismatched robot_id: expected {robot_id}, got {msg.robot_id}')
+                return
+
+            if robot_id in self.converter_states:
+                # ignore outdated msg due to latency in system
+                existing_stamp = self.converter_states[robot_id].stamp
+                new_stamp = msg.stamp
+
+                # compare the time stamp
+                if (new_stamp.sec > existing_stamp.sec or 
+                   (new_stamp.sec == existing_stamp.sec and new_stamp.nanosec > existing_stamp.nanosec)):
+                    self.converter_states[robot_id] = msg
+                    self.get_logger().debug(f'Updated converter state for robot {robot_id}: x={msg.x}, y={msg.y}, theta={msg.theta}')
+            else:
+                self.converter_states[robot_id] = msg
+                self.get_logger().debug(f'Received first converter state for robot {robot_id}: x={msg.x}, y={msg.y}, theta={msg.theta}')
+    
+    
     def publish_robot_states(self):
         try:
-            with self._state_lock:
+            # get locks of cluster and converter
+            with self._state_lock, self._converter_lock:
                 msg = ManagerToClusterStateSet()
                 msg.stamp = self.get_clock().now().to_msg()
-                
-                for robot_id, state in self.robot_states.items():
-                    if state is not None:
-                        msg.robot_states.append(state)
-                
+
+                for robot_id in self.registered_robots:
+                    cluster_state = self.robot_states.get(robot_id)
+                    converter_state = self.converter_states.get(robot_id)
+
+                    if cluster_state is not None and converter_state is not None:
+                        # get the latest state
+                        cluster_stamp = cluster_state.stamp
+                        converter_stamp = converter_state.stamp
+
+                        merged_state = ClusterToManagerState()
+                        merged_state.robot_id = robot_id
+
+                        if (converter_stamp.sec > cluster_stamp.sec or 
+                           (converter_stamp.sec == cluster_stamp.sec and converter_stamp.nanosec > cluster_stamp.nanosec)):
+                            # using state from converter
+                            merged_state.x = converter_state.x
+                            merged_state.y = converter_state.y
+                            merged_state.theta = converter_state.theta
+                            merged_state.stamp = converter_stamp
+                        else:
+                            # using state from cluster
+                            merged_state.x = cluster_state.x
+                            merged_state.y = cluster_state.y
+                            merged_state.theta = cluster_state.theta
+                            merged_state.stamp = cluster_stamp
+
+                        # update predict trajectory
+                        merged_state.pred_states = cluster_state.pred_states
+                        merged_state.idle = cluster_state.idle
+
+                        msg.robot_states.append(merged_state)
+
+                    elif cluster_state is not None:
+                        msg.robot_states.append(cluster_state)
+
+                    elif converter_state is not None:
+                        new_state = ClusterToManagerState()
+                        new_state.robot_id = robot_id
+                        new_state.x = converter_state.x
+                        new_state.y = converter_state.y
+                        new_state.theta = converter_state.theta
+                        new_state.stamp = converter_state.stamp
+                        new_state.pred_states = []
+                        new_state.idle = False 
+
+                        msg.robot_states.append(new_state)
+
                 self.states_publisher.publish(msg)
-                self.get_logger().debug(f'Published states for {len(msg.robot_states)} robots')
-        
+                self.get_logger().debug(f'Published merged states for {len(msg.robot_states)} robots')
+
         except Exception as e:
             self.get_logger().error(f'Error publishing robot states: {str(e)}')
     
@@ -385,6 +467,10 @@ class RobotManager(Node):
         if robot_id in self.cluster_subscribers:
             self.destroy_subscription(self.cluster_subscribers[robot_id])
             del self.cluster_subscribers[robot_id]
+            
+        if robot_id in self.converter_subscribers:
+            self.destroy_subscription(self.converter_subscribers[robot_id])
+            del self.converter_subscribers[robot_id]
 
         # update registration status
         with self._registration_lock:
@@ -392,9 +478,11 @@ class RobotManager(Node):
             if robot_id in self.active_robots:
                 self.active_robots.remove(robot_id)
                 
-            with self._state_lock:
+            with self._state_lock, self._converter_lock:
                 if robot_id in self.robot_states:
                     del self.robot_states[robot_id]
+                if robot_id in self.converter_states:
+                    del self.converter_states[robot_id]
 
         self.get_logger().info(f'Robot {robot_id} unregistered')
     

@@ -124,6 +124,7 @@ class RobotNode(Node):
         self._state = None  # Current state
         self.current_trajectory = None  # Current trajectory
         self.trajectory_received = False  # Flag for trajectory reception
+        self.last_received_state_from_gazebo_time = self.get_clock().now().to_msg()
         
         # Create callback group
         self.callback_group = ReentrantCallbackGroup()
@@ -326,8 +327,8 @@ class RobotNode(Node):
 
     def gazebo_state_callback(self, msg):
         try:
-            new_state = [msg.x, msg.y, msg.theta]
-            self.set_state(new_state)
+            self._state = [msg.x, msg.y, msg.theta]
+            self.last_received_state_from_gazebo_time = msg.stamp
             self.get_logger().debug(f'Updated from Gazebo: x={msg.x:.2f}, y={msg.y:.2f}, θ={msg.theta:.2f}')
 
         except Exception as e:
@@ -366,9 +367,12 @@ class RobotNode(Node):
         try:
             if self.idle:
                 return
-                
+            
+            if self._state is None:
+                return
+            
             # Check if trajectory and state are available
-            if self.current_trajectory is None or self._state is None:
+            if self.current_trajectory is None:
                 return
             
             # Get current position and heading
@@ -414,18 +418,10 @@ class RobotNode(Node):
             v = np.clip(v, -self.max_velocity, self.max_velocity)
             omega = np.clip(omega, -self.max_angular_velocity, self.max_angular_velocity)
             
-            # Send command and wait for state update (blocking call)
-            success, new_state = self.send_command_to_gazebo(v, omega)
-
-            if success:
-                self._state = new_state
-
-                # Publish state to cluster
-                self.publish_state_to_cluster()
-
-                self.get_logger().debug(f'Control commands ({self.controller_type}): v={v:.2f}, omega={omega:.2f}')
-            else:
-                self.get_logger().warn('Failed to send command to Gazebo')
+            self.get_logger().debug(f'Sending Control commands ({self.controller_type}): v={v:.2f}, omega={omega:.2f}')
+            
+            # Send command and wait for state update
+            self.send_command_to_gazebo(v, omega)
             
         except Exception as e:
             self.get_logger().error(f'Error in control_loop_callback: {str(e)}')
@@ -443,25 +439,24 @@ class RobotNode(Node):
 
             # end request and wait to get response
             future = self.send_command_client.call_async(request)
-            rclpy.spin_until_future_complete(self, future)
-
-            # check result
-            if future.result() is not None:
-                response = future.result()
-                if response.success:
-                    new_state = np.array([response.x, response.y, response.theta])
-                    return True, new_state
-                else:
-                    self.get_logger().warn('Command sent but state update failed')
-                    return False, None
-            else:
-                self.get_logger().error(f'Service call failed: {future.exception()}')
-                return False, None
+            future.add_done_callback(self.command_response_callback)
 
         except Exception as e:
             self.get_logger().error(f'Error sending command to Gazebo: {str(e)}')
             return False, None
     
+    def command_response_callback(self, future):
+        try:
+            response = future.result()
+            if response.success:
+                new_state = np.array([response.x, response.y, response.theta])
+                self._state = new_state
+                self.publish_state_to_cluster()
+            else:
+                self.get_logger().warn('Command sent but state update failed')
+        except Exception as e:
+            self.get_logger().error(f'Error in command response callback: {str(e)}')
+
     def publish_state_to_cluster(self):
         """Publish robot state to cluster"""
         try:
@@ -475,10 +470,12 @@ class RobotNode(Node):
             state_msg.y = self._state[1]
             state_msg.theta = self._state[2]
             state_msg.idle = self.check_termination_condition()
-            state_msg.stamp = self.get_clock().now().to_msg()
+            state_msg.stamp = self.last_received_state_from_gazebo_time
             
             # Publish state
             self.to_cluster_state_pub.publish(state_msg)
+            
+            self.get_logger().debug(f'publish state to cluster x={self._state[0]:.2f} y={self._state[1]:.2f} theta={self._state[2]:.2f}')
             
         except Exception as e:
             self.get_logger().error(f'Error publishing state: {str(e)}')
