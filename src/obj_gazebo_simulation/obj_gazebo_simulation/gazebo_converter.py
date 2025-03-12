@@ -73,7 +73,7 @@ class RobotControlConverter(Node):
         self.current_y = 0.0
         self.current_theta = 0.0
         self.last_update_time = self.get_clock().now()
-        self.last_cmd_time = None
+        self.last_cmd_time = self.get_clock().now()
         
         # Use condition variable for thread synchronization
         self.state_lock = threading.RLock()
@@ -115,18 +115,19 @@ class RobotControlConverter(Node):
             self.get_logger().error(f'Error in publish_state: {str(e)}')
     
     
-    
     def send_command_callback(self, request, response):
         """
         Service callback to send a command to Gazebo and wait for state update.
-        
+
         Args:
             request: SendCommand.Request with v and omega fields
             response: SendCommand.Response with success field
-            
+
         Returns:
             response: Filled response with robot state
         """
+        self.get_logger().info(f"Starting send_command_callback with v={request.v}, omega={request.omega}")
+
         try:
             # Create Twist message for Gazebo
             twist_msg = Twist()
@@ -136,57 +137,108 @@ class RobotControlConverter(Node):
             twist_msg.angular.x = 0.0
             twist_msg.angular.y = 0.0
             twist_msg.angular.z = request.omega
-            
-            with self.state_lock:
+
+            # Set command time before acquiring lock to avoid potential deadlock
+            cmd_time = self.get_clock().now()
+            self.get_logger().info(f"Created command at time: {cmd_time.nanoseconds}")
+
+            # First lock acquisition - just for setting command time and publishing
+            lock_acquired = self.state_lock.acquire(timeout=0.5)  # Add timeout to prevent deadlock
+            if not lock_acquired:
+                self.get_logger().error("Failed to acquire state_lock in 0.5s - potential deadlock")
+                response.success = False
+                response.stamp = self.get_clock().now().to_msg()
+                return response
+
+            try:
                 # Record time before sending command
-                self.last_cmd_time = self.get_clock().now()
-                
+                self.last_cmd_time = cmd_time
+                self.get_logger().info(f"Set last_cmd_time to {self.last_cmd_time.nanoseconds}")
+
                 # Publish to Gazebo
                 self.cmd_vel_pub.publish(twist_msg)
-            
+                self.get_logger().info("Published twist message to Gazebo")
+            finally:
+                # Always release lock
+                self.state_lock.release()
+                self.get_logger().info("Released state_lock after publishing command")
+
             # Give odometry callback a chance to process
             time.sleep(0.01)
-            
-            with self.state_lock:
+
+            # Second lock acquisition - for checking state update and waiting if needed
+            lock_acquired = self.state_lock.acquire(timeout=0.5)
+            if not lock_acquired:
+                self.get_logger().error("Failed to acquire state_lock for state checking - potential deadlock")
+                response.success = False
+                response.stamp = self.get_clock().now().to_msg()
+                return response
+
+            try:
+                # Safety check for last_cmd_time
+                if self.last_cmd_time is None:
+                    self.get_logger().error("last_cmd_time is None before state check - unexpected reset")
+                    self.last_cmd_time = cmd_time  # Use local backup
+
                 # Check if state was already updated before waiting
-                if (self.last_update_time.nanoseconds > self.last_cmd_time.nanoseconds):
+                self.get_logger().info(f"Checking immediate update: update_time={self.last_update_time.nanoseconds}, cmd_time={self.last_cmd_time.nanoseconds}")
+
+                if self.last_update_time.nanoseconds >= self.last_cmd_time.nanoseconds:
+                    self.get_logger().info("State already updated, returning immediate success")
                     response.success = True
                     response.x = self.current_x
                     response.y = self.current_y
                     response.theta = self.current_theta
                     response.stamp = self.get_clock().now().to_msg()
                     return response
-                
-                # Define condition for state update
+
+                # Define condition for state update - using >= instead of > for safer comparison
                 def state_updated():
-                    return self.last_update_time.nanoseconds > self.last_cmd_time.nanoseconds
-                
+                    updated = (self.last_update_time.nanoseconds >= self.last_cmd_time.nanoseconds)
+                    self.get_logger().debug(f"State updated check: {updated}, update_time={self.last_update_time.nanoseconds}, cmd_time={self.last_cmd_time.nanoseconds}")
+                    return updated
+
                 # Wait for state update with timeout
+                self.get_logger().info(f"Waiting for state update with timeout={self.command_timeout}s")
                 result = self.state_cv.wait_for(state_updated, self.command_timeout)
-                
+
                 if result:
+                    self.get_logger().info("State update received within timeout")
                     response.success = True
                     response.x = self.current_x
                     response.y = self.current_y
                     response.theta = self.current_theta
                     response.stamp = self.get_clock().now().to_msg()
                 else:
-                    self.get_logger().warn('Timeout waiting for state update')
+                    self.get_logger().warn(f'Timeout waiting for state update. Last update time: {self.last_update_time.nanoseconds}, command time: {self.last_cmd_time.nanoseconds}')
                     response.success = False
                     response.stamp = self.get_clock().now().to_msg()
-            
+            finally:
+                # Always release lock
+                self.state_lock.release()
+                self.get_logger().info("Released state_lock after state check/wait")
+
             return response
-            
+
         except Exception as e:
             self.get_logger().error(f'Error in send_command_callback: {str(e)}')
+            # Make sure lock is released in case of exception
+            try:
+                if self.state_lock._is_owned():
+                    self.state_lock.release()
+                    self.get_logger().info("Released lock after exception")
+            except Exception as unlock_e:
+                self.get_logger().error(f'Error releasing lock: {str(unlock_e)}')
+
             response.success = False
             response.stamp = self.get_clock().now().to_msg()
             return response
-    
+
+
     def odom_callback(self, msg):
         """
         Process odometry data from Gazebo.
-        
+
         Args:
             msg (Odometry): Odometry message with pose and twist
         """
@@ -195,20 +247,143 @@ class RobotControlConverter(Node):
             quat = msg.pose.pose.orientation
             # Convert quaternion to euler angles
             euler_angles = euler.quat2euler([quat.w, quat.x, quat.y, quat.z], 'sxyz')
-            
-            with self.state_lock:
+
+            # Add timeout to avoid deadlock
+            lock_acquired = self.state_lock.acquire(timeout=0.5)
+            if not lock_acquired:
+                self.get_logger().error("Failed to acquire state_lock in odom_callback - potential deadlock")
+                return
+
+            try:
                 # Update current state
                 self.current_x = msg.pose.pose.position.x
                 self.current_y = msg.pose.pose.position.y
                 self.current_theta = euler_angles[2]
                 self.last_update_time = self.get_clock().now()
-                
+
+                update_time = self.last_update_time.nanoseconds
+                cmd_time = self.last_cmd_time.nanoseconds if self.last_cmd_time is not None else None
+
+                # Debug log
+                self.get_logger().debug(f'odom_callback: pos=({self.current_x:.2f},{self.current_y:.2f}), theta={self.current_theta:.2f}')
+
                 # Notify waiting threads if a command was sent
-                if self.last_cmd_time is not None and self.last_update_time.nanoseconds > self.last_cmd_time.nanoseconds:
+                if self.last_cmd_time is not None:
+                    condition = update_time >= cmd_time
+                    self.get_logger().debug(f'odom_callback: update_time={update_time}, cmd_time={cmd_time}, notify={condition}')
+
+                    # Always notify - let the waiting thread decide if the condition is satisfied
+                    # This prevents potential deadlocks if time comparison has issues
                     self.state_cv.notify_all()
-            
+                    self.get_logger().debug('Notified all waiting threads')
+            finally:
+                # Always release lock
+                self.state_lock.release()
+
         except Exception as e:
             self.get_logger().error(f'Error in odom_callback: {str(e)}')
+            # Make sure lock is released in case of exception
+            try:
+                if self.state_lock._is_owned():
+                    self.state_lock.release()
+                    self.get_logger().info("Released lock after exception in odom_callback")
+            except Exception as unlock_e:
+                self.get_logger().error(f'Error releasing lock: {str(unlock_e)}')
+
+    
+    # def send_command_callback(self, request, response):
+    #     """
+    #     Service callback to send a command to Gazebo and wait for state update.
+        
+    #     Args:
+    #         request: SendCommand.Request with v and omega fields
+    #         response: SendCommand.Response with success field
+            
+    #     Returns:
+    #         response: Filled response with robot state
+    #     """
+    #     try:
+    #         # Create Twist message for Gazebo
+    #         twist_msg = Twist()
+    #         twist_msg.linear.x = request.v
+    #         twist_msg.linear.y = 0.0
+    #         twist_msg.linear.z = 0.0
+    #         twist_msg.angular.x = 0.0
+    #         twist_msg.angular.y = 0.0
+    #         twist_msg.angular.z = request.omega
+            
+    #         with self.state_lock:
+    #             # Record time before sending command
+    #             self.last_cmd_time = self.get_clock().now()
+                
+    #             # Publish to Gazebo
+    #             self.cmd_vel_pub.publish(twist_msg)
+            
+    #         # Give odometry callback a chance to process
+    #         time.sleep(0.01)
+            
+    #         with self.state_lock:
+    #             # Check if state was already updated before waiting
+    #             if (self.last_update_time.nanoseconds > self.last_cmd_time.nanoseconds):
+    #                 response.success = True
+    #                 response.x = self.current_x
+    #                 response.y = self.current_y
+    #                 response.theta = self.current_theta
+    #                 response.stamp = self.get_clock().now().to_msg()
+    #                 return response
+                
+    #             # Define condition for state update
+    #             def state_updated():
+    #                 return self.last_update_time.nanoseconds > self.last_cmd_time.nanoseconds
+                
+    #             # Wait for state update with timeout
+    #             result = self.state_cv.wait_for(state_updated, self.command_timeout)
+                
+    #             if result:
+    #                 response.success = True
+    #                 response.x = self.current_x
+    #                 response.y = self.current_y
+    #                 response.theta = self.current_theta
+    #                 response.stamp = self.get_clock().now().to_msg()
+    #             else:
+    #                 self.get_logger().warn('Timeout waiting for state update')
+    #                 response.success = False
+    #                 response.stamp = self.get_clock().now().to_msg()
+            
+    #         return response
+            
+    #     except Exception as e:
+    #         self.get_logger().error(f'Error in send_command_callback: {str(e)}')
+    #         response.success = False
+    #         response.stamp = self.get_clock().now().to_msg()
+    #         return response
+    
+    # def odom_callback(self, msg):
+    #     """
+    #     Process odometry data from Gazebo.
+        
+    #     Args:
+    #         msg (Odometry): Odometry message with pose and twist
+    #     """
+    #     try:
+    #         # Extract orientation (yaw/theta)
+    #         quat = msg.pose.pose.orientation
+    #         # Convert quaternion to euler angles
+    #         euler_angles = euler.quat2euler([quat.w, quat.x, quat.y, quat.z], 'sxyz')
+            
+    #         with self.state_lock:
+    #             # Update current state
+    #             self.current_x = msg.pose.pose.position.x
+    #             self.current_y = msg.pose.pose.position.y
+    #             self.current_theta = euler_angles[2]
+    #             self.last_update_time = self.get_clock().now()
+                
+    #             # Notify waiting threads if a command was sent
+    #             if self.last_cmd_time is not None:
+    #                 self.state_cv.notify_all()
+            
+    #     except Exception as e:
+    #         self.get_logger().error(f'Error in odom_callback: {str(e)}')
 
 def main(args=None):
     rclpy.init(args=args)
@@ -217,7 +392,7 @@ def main(args=None):
         # Create node
         node = RobotControlConverter()
     
-        executor = MultiThreadedExecutor(num_threads=2)
+        executor = MultiThreadedExecutor(num_threads=4)
         executor.add_node(node)
         
         try:

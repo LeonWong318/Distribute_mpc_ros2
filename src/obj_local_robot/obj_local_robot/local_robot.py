@@ -343,7 +343,7 @@ class RobotNode(Node):
 
     def execute_stop(self):
         try:
-            _, _ = self.send_command_to_gazebo(0, 0)
+            self.send_command_to_gazebo(0, 0)
             self.get_logger().warn(f'Robot {self.robot_id} stop executed')
         except Exception as e:
             self.get_logger().error(f'Error during stop: {str(e)}')
@@ -430,7 +430,7 @@ class RobotNode(Node):
         try:
             if not self.send_command_client.wait_for_service(timeout_sec=1.0):
                 self.get_logger().warn('Send command service not available')
-                return False, None
+                return
 
             # Create request
             request = ExecuteCommand.Request()
@@ -443,7 +443,6 @@ class RobotNode(Node):
 
         except Exception as e:
             self.get_logger().error(f'Error sending command to Gazebo: {str(e)}')
-            return False, None
     
     def command_response_callback(self, future):
         try:
