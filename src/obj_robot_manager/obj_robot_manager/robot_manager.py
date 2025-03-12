@@ -235,7 +235,7 @@ class RobotManager(Node):
     def create_converter_subscriber(self, robot_id):
         subscriber = self.create_subscription(
             GazeboToManagerState,
-            f'/robot_{robot_id}/sim_state',
+            f'/robot_{robot_id}/sim_state_delayed',
             lambda msg: self.converter_state_callback(msg, robot_id),
             self.qos_profile,
             callback_group=self.service_group

@@ -19,7 +19,8 @@ from msg_interfaces.msg import (
     ClusterToRobotTrajectory,
     RobotToClusterState,
     ManagerToClusterStart,
-    ClusterBetweenRobotHeartBeat
+    ClusterBetweenRobotHeartBeat,
+    GazeboToManagerState
 )
 
 class TopicConfig:
@@ -141,6 +142,15 @@ class MultiTopicMessageBuffer(Node, QWidget):
                 self.mean_delay
             )
             
+            # Gazebo to Manager topics
+
+            self._topic_configs[f"robot_{robot_id}_sim_state"] = TopicConfig(
+                ClusterBetweenRobotHeartBeat,
+                f"/robot_{robot_id}/sim_state",
+                f"/robot_{robot_id}/sim_state_delayed",
+                True,
+                self.mean_delay
+            )
             
     
     def setup_pub_sub(self):
@@ -253,7 +263,8 @@ class MultiTopicMessageBuffer(Node, QWidget):
         categories = {
             
             "Cluster to Robot": [t for t in self._topic_configs if "cluster" in t],
-            "Robot to Cluster": [t for t in self._topic_configs if "robot" in t]
+            "Robot to Cluster": [t for t in self._topic_configs if "robot" in t and not "sim" in t],
+            "Gazebo to Manager": [t for t in self._topic_configs if "sim" in t]
             
         }
         
