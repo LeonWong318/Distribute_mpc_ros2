@@ -3,13 +3,13 @@
   <model name="mobile_warehouse_robot">
     <static>false</static>
 
-    <!-- Circular Base -->
+    <!-- Base -->
     <link name='chassis'>
       <pose>0 0 0.02 0 0 0</pose>  <!-- Lower the chassis slightly -->
       
       <!-- Inertial properties: Lowering center of mass -->
       <inertial>
-        <mass>5.0</mass>  <!-- Heavy base to stabilize -->
+        <mass>3.0</mass>  <!-- Heavy base to stabilize -->
         <pose>0 0 0.1 0 0 0</pose>
         <inertia>
           <ixx>0.2</ixx>
@@ -18,13 +18,13 @@
         </inertia>
       </inertial>
 
-      <!-- Circular shape for collisions -->
+      <!-- shape for collisions -->
       <collision name='collision'>
         <geometry>
-          <cylinder>
-            <radius>0.5</radius>
-            <length>0.1</length>
-          </cylinder>
+          <box>
+            <size>.5 .4 .1</size>
+            
+          </box>
         </geometry>
       </collision>
 
@@ -32,17 +32,17 @@
       <visual name='visual'>
         <pose>0 0 0.1 0 0 0</pose>
         <geometry>
-          <cylinder>
-            <radius>0.5</radius>
-            <length>0.1</length>
-          </cylinder>
+          <box>
+            <size>.5 .4 .1</size>
+            
+          </box>
         </geometry>
       </visual>
     </link>
 
     <!-- Left Wheel -->
     <link name="left_wheel">
-      <pose>0 0.45 0.08 0 1.5707 1.5707</pose>
+      <pose>0 0.18 0.08 0 1.5707 1.5707</pose>
       
       <!-- Heavy wheel to lower CoM -->
       <inertial>
@@ -71,7 +71,7 @@
 
     <!-- Right Wheel -->
     <link name="right_wheel">
-      <pose>0 -0.45 0.08 0 1.5707 1.5707</pose>
+      <pose>0 -0.18 0.08 0 1.5707 1.5707</pose>
 
       <!-- Heavy wheel -->
       <inertial>
