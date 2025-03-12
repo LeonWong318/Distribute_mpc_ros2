@@ -275,36 +275,6 @@ class ClusterNode(Node):
 
         except Exception as e:
             self.get_logger().error(f'Error in robot_state_callback: {str(e)}')
-    
-    
-    def from_manager_states_callback(self, msg: ManagerToClusterStateSet):
-        try:
-            self.other_robot_states.clear()
-            for state in msg.robot_states:
-                if state.robot_id != self.robot_id:
-                    self.other_robot_states[state.robot_id] = state
-                else:
-                    if self.update_robot_state(state.x, state.y, state.theta, msg.stamp):
-                        self.get_logger().debug(f'Updated state from manager: x={state.x}, y={state.y}, theta={state.theta}')
-        except Exception as e:
-            self.get_logger().error(f'Error processing robot states: {str(e)}')
-    
-    def from_robot_state_callback(self, msg: RobotToClusterState):
-        try:
-            if self.waiting_for_robot:
-                self.waiting_for_robot = False
-                self.robot_ready = True
-                self.get_logger().info(f'Robot {self.robot_id} is ready, starting heartbeat')
-                self.start_heart_beat()
-
-            self.robot_state = msg
-            self.idle = msg.idle
-            if self.update_robot_state(msg.x, msg.y, msg.theta, msg.stamp):
-                self.get_logger().info(f'Updated robot state: x={msg.x}, y={msg.y}, theta={msg.theta}')
-            self.publish_state_to_manager(msg.stamp)
-
-        except Exception as e:
-            self.get_logger().error(f'Error in robot_state_callback: {str(e)}')
 
     def check_robot_ready(self):
         if self.waiting_for_robot:
