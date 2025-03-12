@@ -190,8 +190,8 @@ class RobotManager(Node):
                 return response
             
             # create cluster node
-            success = self.create_cluster_node(robot_id)
-            #success = self.create_cluster_node_with_terminal(robot_id)
+            # success = self.create_cluster_node(robot_id)
+            success = self.create_cluster_node_with_terminal(robot_id)
             if not success:
                 response.success = False
                 response.message = f"Failed to create cluster node for robot {robot_id}"

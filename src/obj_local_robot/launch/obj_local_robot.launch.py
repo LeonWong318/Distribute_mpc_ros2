@@ -57,8 +57,8 @@ def generate_launch_description():
             # --- LQR Parameters ---
             'lqr_q_pos': 1000.0,    # Position error weight
             'lqr_q_theta': 100.0,    # Heading error weight
-            'lqr_r_v': 0.01,        # Linear velocity control weight
-            'lqr_r_omega': 0.1,    # Angular velocity control weight
+            'lqr_r_v': 0.001,        # Linear velocity control weight
+            'lqr_r_omega': 0.01,    # Angular velocity control weight
             
             # --- CBF Parameters (for future implementation) ---
 
