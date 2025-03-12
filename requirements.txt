@@ -30,5 +30,4 @@ ros2run==0.9.13
 ros2topic==0.9.13
 
 transforms3d==0.4.2
-
 PyQt5
