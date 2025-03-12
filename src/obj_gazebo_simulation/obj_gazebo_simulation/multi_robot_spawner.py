@@ -34,8 +34,8 @@ class MultiRobotSpawner(Node):
         self.spawn_all_robots()
         
         # Start converter nodes for each robot
-        # self.start_converters()
-        self.start_converters_with_terminal()
+        self.start_converters()
+        # self.start_converters_with_terminal()
 
     def load_robot_positions(self):
         """ Loads multiple robot initial positions from a JSON file """
