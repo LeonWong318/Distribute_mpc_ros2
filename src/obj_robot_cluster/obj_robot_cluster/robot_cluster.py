@@ -14,6 +14,8 @@ from pkg_motion_plan.local_traj_plan import LocalTrajPlanner
 from pkg_tracker_mpc.trajectory_tracker import TrajectoryTracker
 from pkg_motion_plan.global_path_coordinate import GlobalPathCoordinator
 
+import threading
+
 from msg_interfaces.msg import (
     ClusterToManagerState, 
     ManagerToClusterStateSet, 
@@ -73,6 +75,9 @@ class ClusterNode(Node):
         self.predicted_trajectory = None
         self.pred_states = None
         self.idle = True
+        
+        self._state_lock = threading.Lock()
+        self._last_state_update_time = None
         
         self.create_pub_and_sub()
     
@@ -228,6 +233,20 @@ class ClusterNode(Node):
             import traceback
             self.get_logger().error(traceback.format_exc())
     
+    def update_robot_state(self, x, y, theta, timestamp, source="unknown"):
+        current_time = self.get_clock().now()
+        current_stamp = current_time.nanoseconds / 1e9
+
+        with self._state_lock:
+            if self._last_state_update_time is None or current_stamp > self._last_state_update_time:
+                self._state = np.array([x, y, theta])
+                self._last_state_update_time = current_stamp
+                self.get_logger().info(f'Updated state from {source}')
+                return True
+            else:
+                self.get_logger().warn(f'Unusual: Current time {current_stamp} not greater than last update time {self._last_state_update_time}')
+                return False
+    
     def from_manager_states_callback(self, msg: ManagerToClusterStateSet):
         try:
             self.other_robot_states.clear()
@@ -235,7 +254,8 @@ class ClusterNode(Node):
                 if state.robot_id != self.robot_id:
                     self.other_robot_states[state.robot_id] = state
                 else:
-                    self._state = np.array([state.x, state.y, state.theta])
+                    if self.update_robot_state(state.x, state.y, state.theta, msg.stamp, "manager"):
+                        self.get_logger().info(f'Updated state from manager: x={state.x}, y={state.y}, theta={state.theta}')
         except Exception as e:
             self.get_logger().error(f'Error processing robot states: {str(e)}')
     
@@ -249,10 +269,39 @@ class ClusterNode(Node):
 
             self.robot_state = msg
             self.idle = msg.idle
-            self._state = np.array([msg.x, msg.y, msg.theta])
+            if self.update_robot_state(msg.x, msg.y, msg.theta, msg.stamp, "local robot"):
+                self.get_logger().info(f'Updated robot state: x={msg.x}, y={msg.y}, theta={msg.theta}')
             self.publish_state_to_manager(msg.stamp)
 
-            self.get_logger().info(f'Updated robot state: x={msg.x}, y={msg.y}, theta={msg.theta}')
+        except Exception as e:
+            self.get_logger().error(f'Error in robot_state_callback: {str(e)}')
+    
+    
+    def from_manager_states_callback(self, msg: ManagerToClusterStateSet):
+        try:
+            self.other_robot_states.clear()
+            for state in msg.robot_states:
+                if state.robot_id != self.robot_id:
+                    self.other_robot_states[state.robot_id] = state
+                else:
+                    if self.update_robot_state(state.x, state.y, state.theta, msg.stamp):
+                        self.get_logger().debug(f'Updated state from manager: x={state.x}, y={state.y}, theta={state.theta}')
+        except Exception as e:
+            self.get_logger().error(f'Error processing robot states: {str(e)}')
+    
+    def from_robot_state_callback(self, msg: RobotToClusterState):
+        try:
+            if self.waiting_for_robot:
+                self.waiting_for_robot = False
+                self.robot_ready = True
+                self.get_logger().info(f'Robot {self.robot_id} is ready, starting heartbeat')
+                self.start_heart_beat()
+
+            self.robot_state = msg
+            self.idle = msg.idle
+            if self.update_robot_state(msg.x, msg.y, msg.theta, msg.stamp):
+                self.get_logger().info(f'Updated robot state: x={msg.x}, y={msg.y}, theta={msg.theta}')
+            self.publish_state_to_manager(msg.stamp)
 
         except Exception as e:
             self.get_logger().error(f'Error in robot_state_callback: {str(e)}')
