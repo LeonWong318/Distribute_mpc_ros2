@@ -21,7 +21,7 @@ def generate_launch_description():
     # Controller type argument
     controller_type_arg = DeclareLaunchArgument(
         'controller_type',
-        default_value='pure_pursuit' # choose pure_pursuit/cbf/lqr
+        default_value='lqr' # choose pure_pursuit/cbf/lqr
     )
     
     # === Node Configuration ===
@@ -36,7 +36,7 @@ def generate_launch_description():
             # --- Motion Constraints ---
             'max_velocity': 1.0,
             'max_angular_velocity': 1.0,
-            'control_frequency': 50.0,
+            'control_frequency': 30.0,
             
             # --- File Paths ---
             'robot_config_path': "config/spec_robot.yaml",
@@ -51,12 +51,12 @@ def generate_launch_description():
             'controller_type': LaunchConfiguration('controller_type'),
             
             # --- Pure Pursuit Parameters ---
-            'lookahead_distance': 1.0,
+            'lookahead_distance': .8,
             'alpha': 0.1,  # Tuning parameter for velocity reduction at high curvature
             
             # --- LQR Parameters ---
-            'lqr_q_pos': 100.0,    # Position error weight
-            'lqr_q_theta': 100,    # Heading error weight
+            'lqr_q_pos': 1000.0,    # Position error weight
+            'lqr_q_theta': 100.0,    # Heading error weight
             'lqr_r_v': 0.01,        # Linear velocity control weight
             'lqr_r_omega': 0.1,    # Angular velocity control weight
             
