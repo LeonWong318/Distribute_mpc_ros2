@@ -36,7 +36,7 @@ def generate_launch_description():
             # --- Motion Constraints ---
             'max_velocity': 1.0,
             'max_angular_velocity': 1.0,
-            'control_frequency': 10.0,
+            'control_frequency': 50.0,
             
             # --- File Paths ---
             'robot_config_path': "config/spec_robot.yaml",
@@ -56,9 +56,9 @@ def generate_launch_description():
             
             # --- LQR Parameters ---
             'lqr_q_pos': 100.0,    # Position error weight
-            'lqr_q_theta': 10,    # Heading error weight
+            'lqr_q_theta': 100,    # Heading error weight
             'lqr_r_v': 0.01,        # Linear velocity control weight
-            'lqr_r_omega': 0.01,    # Angular velocity control weight
+            'lqr_r_omega': 0.1,    # Angular velocity control weight
             
             # --- CBF Parameters (for future implementation) ---
 
