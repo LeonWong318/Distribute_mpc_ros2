@@ -235,7 +235,7 @@ class ClusterNode(Node):
                 if state.robot_id != self.robot_id:
                     self.other_robot_states[state.robot_id] = state
                 else:
-                    self._state = state
+                    self._state = np.array([state.x, state.y, state.theta])
         except Exception as e:
             self.get_logger().error(f'Error processing robot states: {str(e)}')
     
@@ -383,7 +383,7 @@ class ClusterNode(Node):
                 )
                 
                 # run step
-                self.controller.set_current_state = self._state
+                self.controller.set_current_state(self._state)
                 
                 # publish traj to robot after calculating
                 self.publish_trajectory_to_robot()
