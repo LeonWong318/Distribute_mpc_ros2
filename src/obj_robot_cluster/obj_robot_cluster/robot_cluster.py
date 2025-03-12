@@ -234,7 +234,8 @@ class ClusterNode(Node):
             for state in msg.robot_states:
                 if state.robot_id != self.robot_id:
                     self.other_robot_states[state.robot_id] = state
-                        
+                else:
+                    self._state = state
         except Exception as e:
             self.get_logger().error(f'Error processing robot states: {str(e)}')
     
