@@ -18,9 +18,13 @@ fi
 # Get the current working directory
 CURRENT_DIR=$(pwd)
 
+# Setup ROS domain
+echo "export ROS_DOMAIN_ID=0"
+
 # Remove build, install, and log directories
 echo "Cleaning build, install, and log directories..."
 rm -rf build/ install/ log/ *.log *.out
+
 
 # Build the workspace
 echo "Building with colcon..."
