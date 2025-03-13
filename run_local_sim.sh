@@ -41,31 +41,31 @@ fi
 pkill -f "ros2 topic echo"
 
 # Launch robot visualizer
-echo "Launching visualization node..."
-gnome-terminal --working-directory="$CURRENT_DIR" -- bash -c "echo Robot Visualizer; source install/setup.bash; ros2 launch obj_robot_visualizer robot_visualizer.launch.py; exec bash"
+# echo "Launching visualization node..."
+# gnome-terminal --working-directory="$CURRENT_DIR" -- bash -c "echo Robot Visualizer; source install/setup.bash; ros2 launch obj_robot_visualizer robot_visualizer.launch.py; exec bash"
 
-# echo "Launching msg buffer..."
-# gnome-terminal --working-directory="$CURRENT_DIR" -- bash -c "echo Message Buffer; source install/setup.bash; ros2 launch obj_msg_buffer msg_buffer.launch.py; exec bash"
+echo "Launching msg buffer..."
+gnome-terminal --working-directory="$CURRENT_DIR" -- bash -c "echo Message Buffer; source install/setup.bash; ros2 launch obj_msg_buffer msg_buffer.launch.py; exec bash"
 
 # Read robot IDs from CSV using Python
-# echo "Determining required robot nodes..."
-# ROBOT_LAUNCH_COMMANDS=$(python cluster_robot_id.py)
+echo "Determining required robot nodes..."
+ROBOT_LAUNCH_COMMANDS=$(python cluster_robot_id.py)
 
 # Launch robot manager and wait for it to initialize
-echo "Launching robot manager..."
-gnome-terminal --working-directory="$CURRENT_DIR" -- bash -c "echo Robot Manager; source install/setup.bash; ros2 launch obj_robot_manager obj_robot_manager.launch.py; exec bash"
+# echo "Launching robot manager..."
+# gnome-terminal --working-directory="$CURRENT_DIR" -- bash -c "echo Robot Manager; source install/setup.bash; ros2 launch obj_robot_manager obj_robot_manager.launch.py; exec bash"
 
 
-# echo "Launching Gazebo Node"
-# gnome-terminal --working-directory="$CURRENT_DIR" -- bash -c "echo Robot Visualizer; source install/setup.bash; ros2 launch obj_gazebo_simulation gazebo_simulation.launch.py; exec bash"
+echo "Launching Gazebo Node"
+gnome-terminal --working-directory="$CURRENT_DIR" -- bash -c "echo Robot Visualizer; source install/setup.bash; ros2 launch obj_gazebo_simulation gazebo_simulation.launch.py; exec bash"
 
 # Wait for manager to initialize
 echo "Waiting for Gazebo to initialize (5 seconds)..."
 sleep 5
 
 # Launch local robot nodes (will register with manager)
-# echo "Launching local robot nodes..."
-# eval "$ROBOT_LAUNCH_COMMANDS"
+echo "Launching local robot nodes..."
+eval "$ROBOT_LAUNCH_COMMANDS"
 
 # Wait for robots to register and clusters to be created
 # echo "Waiting for robots to register and cluster nodes to initialize (2 seconds)..."
