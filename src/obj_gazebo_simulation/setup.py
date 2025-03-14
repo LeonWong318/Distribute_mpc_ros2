@@ -1,17 +1,17 @@
 import os
-import shutil
 from glob import glob
 from setuptools import setup, find_packages
 
 package_name = 'obj_gazebo_simulation'
 
-# Ensure models folder is copied completely
-def package_files(directory):
-    """Recursively collect all files under 'directory'"""
+# Function to collect all files while keeping directory structure
+def package_files(source_dir, target_dir):
     paths = []
-    for (path, directories, filenames) in os.walk(directory):
-        for filename in filenames:
-            paths.append(os.path.join(path, filename))
+    for root, _, files in os.walk(source_dir):
+        for file in files:
+            full_path = os.path.join(root, file)
+            relative_path = os.path.relpath(full_path, source_dir)
+            paths.append((os.path.join('share', package_name, target_dir, os.path.dirname(relative_path)), [full_path]))
     return paths
 
 setup(
@@ -25,10 +25,9 @@ setup(
         (os.path.join('share', package_name, 'launch'), glob('launch/*.launch.py')),
         # World files
         (os.path.join('share', package_name, 'worlds'), glob('worlds/*')),
-        # Models - Copy entire directory contents
-        (os.path.join('share', package_name, 'models/mobile_robot'), package_files('models/mobile_robot')),
-        (os.path.join('share', package_name, 'models/test_data'), package_files('models/test_data')),
-    ],
+        # Models - Preserve structure
+    ] + package_files('models/mobile_robot', 'models/mobile_robot') 
+      + package_files('models/test_data', 'models/test_data'),
     install_requires=['setuptools'],
     zip_safe=True,
     maintainer='Yinsong Wang',
