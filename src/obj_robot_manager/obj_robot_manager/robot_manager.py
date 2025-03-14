@@ -337,28 +337,18 @@ class RobotManager(Node):
     def create_cluster_node(self, robot_id):
         try:
             cmd = [
-                'ros2', 'run',
+                'ros2', 'launch',
                 self.cluster_package,
-                'robot_cluster',
-                '--ros-args',
-                '-p', f'robot_id:={robot_id}',
-                '-p', f'control_frequency:=10.0',
-                '-p', f'mpc_config_path:={self.mpc_config_path}',
-                '-p', f'robot_config_path:={self.robot_config_path}',
-                '-p', f'map_path:={self.map_path}',
-                '-p', f'graph_path:={self.graph_path}',
-                '-p', f'schedule_path:={self.schedule_path}',
-                '-p', f'robot_start_path:={self.robot_start_path}'
+                'obj_robot_cluster.launch.py',
+                f'robot_id:={robot_id}'
             ]
-            
-            # Set Env Parameters
+
             env = os.environ.copy()
             conda_prefix = os.environ.get('CONDA_PREFIX', '')
             if conda_prefix:
                 pythonpath = os.environ.get('PYTHONPATH', '')
                 env['PYTHONPATH'] = f"{conda_prefix}/lib/python3.8/site-packages:{pythonpath}"
-            
-            # Start Cluster Node Process
+
             process = subprocess.Popen(
                 cmd,
                 stdout=subprocess.PIPE,
@@ -366,32 +356,31 @@ class RobotManager(Node):
                 text=True,
                 env=env
             )
-            
+
             self.cluster_processes[robot_id] = process
-            
+
             def monitor_output(process, robot_id):
                 for line in process.stdout:
                     self.get_logger().info(f'Cluster[{robot_id}]: {line.strip()}')
                 for line in process.stderr:
                     self.get_logger().error(f'Cluster[{robot_id}]: {line.strip()}')
-            
+
             log_thread = threading.Thread(
                 target=monitor_output,
                 args=(process, robot_id),
                 daemon=True
             )
             log_thread.start()
-            
-            # check if started successfully
+
             returncode = process.poll()
             if returncode is not None and returncode != 0:
                 stderr = process.stderr.read()
                 self.get_logger().error(f'Failed to start cluster for robot {robot_id}: {stderr}')
                 return False
-                
-            self.get_logger().info(f'Cluster node for robot {robot_id} started')
+
+            self.get_logger().info(f'Cluster node for robot {robot_id} started using launch file')
             return True
-                
+
         except Exception as e:
             self.get_logger().error(f'Error creating cluster node: {str(e)}')
             import traceback
@@ -401,18 +390,10 @@ class RobotManager(Node):
     def create_cluster_node_with_terminal(self, robot_id):
         try:
             cmd = [
-                'ros2', 'run',
+                'ros2', 'launch',
                 self.cluster_package,
-                'robot_cluster',
-                '--ros-args',
-                '-p', f'robot_id:={robot_id}',
-                '-p', f'control_frequency:=10.0',
-                '-p', f'mpc_config_path:={self.mpc_config_path}',
-                '-p', f'robot_config_path:={self.robot_config_path}',
-                '-p', f'map_path:={self.map_path}',
-                '-p', f'graph_path:={self.graph_path}',
-                '-p', f'schedule_path:={self.schedule_path}',
-                '-p', f'robot_start_path:={self.robot_start_path}'
+                'obj_robot_cluster.launch.py',
+                f'robot_id:={robot_id}'
             ]
 
             env = os.environ.copy()
@@ -422,28 +403,27 @@ class RobotManager(Node):
                 env['PYTHONPATH'] = f"{conda_prefix}/lib/python3.8/site-packages:{pythonpath}"
 
             terminal_cmd = [
-                'gnome-terminal', 
-                '--', 
-                'bash', '-c', 
+                'gnome-terminal',
+                '--',
+                'bash', '-c',
                 f'{" ".join(cmd)}; exec bash'
             ]
 
             process = subprocess.Popen(
-                terminal_cmd, 
-                env=env, 
+                terminal_cmd,
+                env=env,
                 shell=False
             )
 
             self.cluster_processes[robot_id] = process
-
-            self.get_logger().info(f'Cluster node for robot {robot_id} started in new terminal')
+            self.get_logger().info(f'Cluster node for robot {robot_id} started in new terminal using launch file')
             return True
 
         except Exception as e:
             self.get_logger().error(f'Error creating cluster node: {str(e)}')
             import traceback
             self.get_logger().error(traceback.format_exc())
-            return False    
+            return False
     
     def unregister_robot(self, robot_id):
         if robot_id not in self.registered_robots:
