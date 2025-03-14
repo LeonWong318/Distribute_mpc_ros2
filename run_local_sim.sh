@@ -45,8 +45,8 @@ fi
 pkill -f "ros2 topic echo"
 
 # Launch robot visualizer
-# echo "Launching visualization node..."
-# gnome-terminal --working-directory="$CURRENT_DIR" -- bash -c "echo Robot Visualizer; source install/setup.bash; ros2 launch obj_robot_visualizer robot_visualizer.launch.py; exec bash"
+echo "Launching visualization node..."
+gnome-terminal --working-directory="$CURRENT_DIR" -- bash -c "echo Robot Visualizer; source install/setup.bash; ros2 launch obj_robot_visualizer robot_visualizer.launch.py; exec bash"
 
 echo "Launching msg buffer..."
 gnome-terminal --working-directory="$CURRENT_DIR" -- bash -c "echo Message Buffer; source install/setup.bash; ros2 launch obj_msg_buffer msg_buffer.launch.py; exec bash"

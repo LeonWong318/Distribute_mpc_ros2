@@ -1,103 +1,934 @@
-<?xml version='1.0'?>
-<sdf version='1.4'>
-  <model name="mobile_warehouse_robot">
-    <static>false</static>
-
-    <!-- Circular Base -->
-    <link name='chassis'>
-      <pose>0 0 0.02 0 0 0</pose>  <!-- Lower the chassis slightly -->
-      
-      <!-- Inertial properties: Lowering center of mass -->
+<?xml version="1.0" ?>
+<sdf version='1.7'>
+  <model name='mobile_robot'>
+    <link name='mirX/base_footprint'>
       <inertial>
-        <mass>5.0</mass>  <!-- Heavy base to stabilize -->
-        <pose>0 0 0.1 0 0 0</pose>
+        <pose>-0.010843 0 0.151251 0 -0 0</pose>
+        <mass>79.4</mass>
         <inertia>
-          <ixx>0.2</ixx>
-          <iyy>0.2</iyy>
-          <izz>0.3</izz>
+          <ixx>0.983281</ixx>
+          <ixy>-0.221872</ixy>
+          <ixz>-0.00481783</ixz>
+          <iyy>2.25112</iyy>
+          <iyz>0</iyz>
+          <izz>2.69939</izz>
         </inertia>
       </inertial>
-
-      <!-- Circular shape for collisions -->
-      <collision name='collision'>
+      <collision name='mirX/base_footprint_fixed_joint_lump__mirX/base_link_collision'>
+        <pose>0.037646 0 0 0 -0 0</pose>
         <geometry>
-          <cylinder>
-            <radius>0.5</radius>
-            <length>0.1</length>
-          </cylinder>
+          <mesh>
+            <scale>1 1 1</scale>
+            <uri>model://mobile_robot/meshes/collision/mir_100_base.stl</uri>
+          </mesh>
         </geometry>
+        <surface>
+          <contact>
+            <ode/>
+          </contact>
+          <friction>
+            <ode/>
+          </friction>
+        </surface>
       </collision>
-
-      <!-- Visualization -->
-      <visual name='visual'>
-        <pose>0 0 0.1 0 0 0</pose>
+      <collision name='mirX/base_footprint_fixed_joint_lump__mirX/back_laser_link_collision_1'>
+        <pose>-0.354354 -0.2358 0.1914 3.14159 -0 -2.35619</pose>
         <geometry>
-          <cylinder>
-            <radius>0.5</radius>
-            <length>0.1</length>
-          </cylinder>
+          <mesh>
+            <scale>1 1 1</scale>
+            <uri>model://mobile_robot/meshes/visual/sick_lms-100.stl</uri>
+          </mesh>
         </geometry>
+        <surface>
+          <contact>
+            <ode/>
+          </contact>
+          <friction>
+            <ode/>
+          </friction>
+        </surface>
+      </collision>
+      <collision name='mirX/base_footprint_fixed_joint_lump__mirX/front_laser_link_collision_2'>
+        <pose>0.429646 0.2358 0.1914 3.14159 -0 0.785398</pose>
+        <geometry>
+          <mesh>
+            <scale>1 1 1</scale>
+            <uri>model://mobile_robot/meshes/visual/sick_lms-100.stl</uri>
+          </mesh>
+        </geometry>
+        <surface>
+          <contact>
+            <ode/>
+          </contact>
+          <friction>
+            <ode/>
+          </friction>
+        </surface>
+      </collision>
+      <visual name='mirX/base_footprint_fixed_joint_lump__mirX/base_link_visual'>
+        <pose>0.037646 0 0 0 -0 0</pose>
+        <geometry>
+          <mesh>
+            <scale>1 1 1</scale>
+            <uri>model://mobile_robot/meshes/visual/mir_100_base.stl</uri>
+          </mesh>
+        </geometry>
+        <material>
+          <script>
+            <name>Gazebo/White</name>
+            <uri>file://media/materials/scripts/gazebo.material</uri>
+          </script>
+        </material>
       </visual>
+      <visual name='mirX/base_footprint_fixed_joint_lump__mirX/back_laser_link_visual_1'>
+        <pose>-0.354354 -0.2358 0.1914 3.14159 -0 -2.35619</pose>
+        <geometry>
+          <mesh>
+            <scale>1 1 1</scale>
+            <uri>model://mobile_robot/meshes/visual/sick_lms-100.stl</uri>
+          </mesh>
+        </geometry>
+        <material>
+          <script>
+            <name>Gazebo/FlatBlack</name>
+            <uri>file://media/materials/scripts/gazebo.material</uri>
+          </script>
+        </material>
+      </visual>
+      <visual name='mirX/base_footprint_fixed_joint_lump__mirX/front_laser_link_visual_2'>
+        <pose>0.429646 0.2358 0.1914 3.14159 -0 0.785398</pose>
+        <geometry>
+          <mesh>
+            <scale>1 1 1</scale>
+            <uri>model://mobile_robot/meshes/visual/sick_lms-100.stl</uri>
+          </mesh>
+        </geometry>
+        <material>
+          <script>
+            <name>Gazebo/FlatBlack</name>
+            <uri>file://media/materials/scripts/gazebo.material</uri>
+          </script>
+        </material>
+      </visual>
+      <sensor name='mirX/back_laser_link' type='ray'>
+        <visualize>0</visualize>
+        <update_rate>12.5</update_rate>
+        <ray>
+          <scan>
+            <horizontal>
+              <samples>541</samples>
+              <resolution>1</resolution>
+              <min_angle>-2.35619</min_angle>
+              <max_angle>2.35619</max_angle>
+            </horizontal>
+          </scan>
+          <range>
+            <min>0.05</min>
+            <max>29</max>
+            <resolution>0.01</resolution>
+          </range>
+          <noise>
+            <type>gaussian</type>
+            <mean>0</mean>
+            <stddev>0.01</stddev>
+          </noise>
+        </ray>
+        <plugin name='back_laser_link_laserscan' filename='libgazebo_ros_ray_sensor.so'>
+          <ros>
+            <namespace>mirX</namespace>
+            <remapping>~/out:=b_scan</remapping>
+          </ros>
+          <frame_name>mirX/back_laser_link</frame_name>
+          <output_type>sensor_msgs/LaserScan</output_type>
+        </plugin>
+        <pose>-0.354354 -0.2358 0.1914 0 0 -2.35619</pose>
+      </sensor>
+      <sensor name='mirX/front_laser_link' type='ray'>
+        <visualize>0</visualize>
+        <update_rate>12.5</update_rate>
+        <ray>
+          <scan>
+            <horizontal>
+              <samples>541</samples>
+              <resolution>1</resolution>
+              <min_angle>-2.35619</min_angle>
+              <max_angle>2.35619</max_angle>
+            </horizontal>
+          </scan>
+          <range>
+            <min>0.05</min>
+            <max>29</max>
+            <resolution>0.01</resolution>
+          </range>
+          <noise>
+            <type>gaussian</type>
+            <mean>0</mean>
+            <stddev>0.01</stddev>
+          </noise>
+        </ray>
+        <plugin name='front_laser_link_laserscan' filename='libgazebo_ros_ray_sensor.so'>
+          <ros>
+            <namespace>mirX</namespace>
+            <remapping>~/out:=f_scan</remapping>
+          </ros>
+          <frame_name>mirX/front_laser_link</frame_name>
+          <output_type>sensor_msgs/LaserScan</output_type>
+        </plugin>
+        <pose>0.429646 0.2358 0.1914 0 -0 0.785398</pose>
+      </sensor>
+      <sensor name='imu_sensor' type='imu'>
+        <plugin name='imu_plugin' filename='libgazebo_ros_imu_sensor.so'>
+          <ros>
+            <namespace>mirX</namespace>
+            <remapping>~/out:=imu_data</remapping>
+          </ros>
+          <initial_orientation_as_reference>0</initial_orientation_as_reference>
+          <frame_id>mirX/imu_frame</frame_id>
+        </plugin>
+        <update_rate>50</update_rate>
+        <always_on>1</always_on>
+        <visualize>1</visualize>
+        <imu>
+          <angular_velocity>
+            <x>
+              <noise type='gaussian'>
+                <mean>0</mean>
+                <stddev>0.0002</stddev>
+                <bias_mean>7.5e-06</bias_mean>
+                <bias_stddev>8e-07</bias_stddev>
+              </noise>
+            </x>
+            <y>
+              <noise type='gaussian'>
+                <mean>0</mean>
+                <stddev>0.0002</stddev>
+                <bias_mean>7.5e-06</bias_mean>
+                <bias_stddev>8e-07</bias_stddev>
+              </noise>
+            </y>
+            <z>
+              <noise type='gaussian'>
+                <mean>0</mean>
+                <stddev>0.0002</stddev>
+                <bias_mean>7.5e-06</bias_mean>
+                <bias_stddev>8e-07</bias_stddev>
+              </noise>
+            </z>
+          </angular_velocity>
+          <linear_acceleration>
+            <x>
+              <noise type='gaussian'>
+                <mean>0</mean>
+                <stddev>0.017</stddev>
+                <bias_mean>0.1</bias_mean>
+                <bias_stddev>0.001</bias_stddev>
+              </noise>
+            </x>
+            <y>
+              <noise type='gaussian'>
+                <mean>0</mean>
+                <stddev>0.017</stddev>
+                <bias_mean>0.1</bias_mean>
+                <bias_stddev>0.001</bias_stddev>
+              </noise>
+            </y>
+            <z>
+              <noise type='gaussian'>
+                <mean>0</mean>
+                <stddev>0.017</stddev>
+                <bias_mean>0.1</bias_mean>
+                <bias_stddev>0.001</bias_stddev>
+              </noise>
+            </z>
+          </linear_acceleration>
+        </imu>
+        <pose>0 0 0.25 0 -0 0</pose>
+      </sensor>
     </link>
-
-    <!-- Left Wheel -->
-    <link name="left_wheel">
-      <pose>0 0.45 0.08 0 1.5707 1.5707</pose>
-      
-      <!-- Heavy wheel to lower CoM -->
+    <joint name='mirX/bl_caster_rotation_joint' type='revolute'>
+      <pose relative_to='mirX/base_footprint'>-0.270154 0.203 0.1565 0 -0 0</pose>
+      <parent>mirX/base_footprint</parent>
+      <child>mirX/bl_caster_rotation_link</child>
+      <axis>
+        <xyz>0 0 1</xyz>
+        <limit>
+          <lower>-1e+16</lower>
+          <upper>1e+16</upper>
+        </limit>
+        <dynamics>
+          <damping>0.01</damping>
+          <friction>0</friction>
+          <spring_reference>0</spring_reference>
+          <spring_stiffness>0</spring_stiffness>
+        </dynamics>
+      </axis>
+    </joint>
+    <link name='mirX/bl_caster_rotation_link'>
+      <pose relative_to='mirX/bl_caster_rotation_joint'>0 0 0 0 -0 0</pose>
       <inertial>
-        <mass>2.0</mass>  <!-- Increase mass of wheel -->
-        <pose>0 0 0 0 0 0</pose>
+        <pose>0 0 -0.0425 0.418879 0 1.5708</pose>
+        <mass>0.309754</mass>
+        <inertia>
+          <ixx>0.000584452</ixx>
+          <ixy>0</ixy>
+          <ixz>0</ixz>
+          <iyy>0.000528726</iyy>
+          <iyz>0</iyz>
+          <izz>0.000179236</izz>
+        </inertia>
       </inertial>
-
-      <collision name="collision">
+      <collision name='mirX/bl_caster_rotation_link_collision'>
+        <pose>0 0 0 0 -0 0</pose>
         <geometry>
-          <cylinder>
-            <radius>0.12</radius>
-            <length>0.08</length>
-          </cylinder>
+          <mesh>
+            <scale>1 1 1</scale>
+            <uri>model://mobile_robot/meshes/collision/caster_wheel_base.stl</uri>
+          </mesh>
         </geometry>
+        <surface>
+          <contact>
+            <ode/>
+          </contact>
+          <friction>
+            <ode/>
+          </friction>
+        </surface>
       </collision>
-
-      <visual name="visual">
+      <visual name='mirX/bl_caster_rotation_link_visual'>
+        <pose>0 0 0 0 -0 0</pose>
         <geometry>
-          <cylinder>
-            <radius>0.12</radius>
-            <length>0.08</length>
-          </cylinder>
+          <mesh>
+            <scale>1 1 1</scale>
+            <uri>model://mobile_robot/meshes/visual/caster_wheel_base.stl</uri>
+          </mesh>
         </geometry>
+        <material>
+          <script>
+            <name>Gazebo/Grey</name>
+            <uri>file://media/materials/scripts/gazebo.material</uri>
+          </script>
+        </material>
       </visual>
     </link>
-
-    <!-- Right Wheel -->
-    <link name="right_wheel">
-      <pose>0 -0.45 0.08 0 1.5707 1.5707</pose>
-
-      <!-- Heavy wheel -->
+    <joint name='mirX/bl_caster_wheel_joint' type='revolute'>
+      <pose relative_to='mirX/bl_caster_rotation_link'>-0.0382 0 -0.094 0 -0 0</pose>
+      <parent>mirX/bl_caster_rotation_link</parent>
+      <child>mirX/bl_caster_wheel_link</child>
+      <axis>
+        <xyz>0 1 0</xyz>
+        <limit>
+          <lower>-1e+16</lower>
+          <upper>1e+16</upper>
+        </limit>
+        <dynamics>
+          <spring_reference>0</spring_reference>
+          <spring_stiffness>0</spring_stiffness>
+        </dynamics>
+      </axis>
+    </joint>
+    <link name='mirX/bl_caster_wheel_link'>
+      <pose relative_to='mirX/bl_caster_wheel_joint'>0 0 0 0 -0 0</pose>
       <inertial>
-        <mass>2.0</mass>
-        <pose>0 0 0 0 0 0</pose>
+        <pose>0 0 0 1.5708 -0 0</pose>
+        <mass>1</mass>
+        <inertia>
+          <ixx>0.0010619</ixx>
+          <ixy>0</ixy>
+          <ixz>0</ixz>
+          <iyy>0.0010619</iyy>
+          <iyz>0</iyz>
+          <izz>0.00195312</izz>
+        </inertia>
       </inertial>
-
-      <collision name="collision">
+      <collision name='mirX/bl_caster_wheel_link_collision'>
+        <pose>0 0 0 1.5708 -0 0</pose>
         <geometry>
           <cylinder>
-            <radius>0.12</radius>
-            <length>0.08</length>
+            <length>0.032</length>
+            <radius>0.0625</radius>
           </cylinder>
         </geometry>
+        <surface>
+          <contact>
+            <ode>
+              <kp>1e+07</kp>
+              <kd>1</kd>
+            </ode>
+          </contact>
+          <friction>
+            <ode>
+              <mu>1</mu>
+              <mu2>1</mu2>
+            </ode>
+          </friction>
+        </surface>
       </collision>
-
-      <visual name="visual">
+      <visual name='mirX/bl_caster_wheel_link_visual'>
+        <pose>0 0 0 1.5708 -0 0</pose>
         <geometry>
           <cylinder>
-            <radius>0.12</radius>
-            <length>0.08</length>
+            <length>0.032</length>
+            <radius>0.0625</radius>
           </cylinder>
         </geometry>
+        <material>
+          <script>
+            <name>Gazebo/FlatBlack</name>
+            <uri>file://media/materials/scripts/gazebo.material</uri>
+          </script>
+        </material>
+      </visual>
+      <min_depth>0.01</min_depth>
+    </link>
+    <joint name='mirX/br_caster_rotation_joint' type='revolute'>
+      <pose relative_to='mirX/base_footprint'>-0.270154 -0.203 0.1565 0 -0 0</pose>
+      <parent>mirX/base_footprint</parent>
+      <child>mirX/br_caster_rotation_link</child>
+      <axis>
+        <xyz>0 0 1</xyz>
+        <limit>
+          <lower>-1e+16</lower>
+          <upper>1e+16</upper>
+        </limit>
+        <dynamics>
+          <damping>0.01</damping>
+          <friction>0</friction>
+          <spring_reference>0</spring_reference>
+          <spring_stiffness>0</spring_stiffness>
+        </dynamics>
+      </axis>
+    </joint>
+    <link name='mirX/br_caster_rotation_link'>
+      <pose relative_to='mirX/br_caster_rotation_joint'>0 0 0 0 -0 0</pose>
+      <inertial>
+        <pose>0 0 -0.0425 0.418879 0 1.5708</pose>
+        <mass>0.309754</mass>
+        <inertia>
+          <ixx>0.000584452</ixx>
+          <ixy>0</ixy>
+          <ixz>0</ixz>
+          <iyy>0.000528726</iyy>
+          <iyz>0</iyz>
+          <izz>0.000179236</izz>
+        </inertia>
+      </inertial>
+      <collision name='mirX/br_caster_rotation_link_collision'>
+        <pose>0 0 0 0 -0 0</pose>
+        <geometry>
+          <mesh>
+            <scale>1 1 1</scale>
+            <uri>model://mobile_robot/meshes/collision/caster_wheel_base.stl</uri>
+          </mesh>
+        </geometry>
+        <surface>
+          <contact>
+            <ode/>
+          </contact>
+          <friction>
+            <ode/>
+          </friction>
+        </surface>
+      </collision>
+      <visual name='mirX/br_caster_rotation_link_visual'>
+        <pose>0 0 0 0 -0 0</pose>
+        <geometry>
+          <mesh>
+            <scale>1 1 1</scale>
+            <uri>model://mobile_robot/meshes/visual/caster_wheel_base.stl</uri>
+          </mesh>
+        </geometry>
+        <material>
+          <script>
+            <name>Gazebo/Grey</name>
+            <uri>file://media/materials/scripts/gazebo.material</uri>
+          </script>
+        </material>
       </visual>
     </link>
-
+    <joint name='mirX/br_caster_wheel_joint' type='revolute'>
+      <pose relative_to='mirX/br_caster_rotation_link'>-0.0382 0 -0.094 0 -0 0</pose>
+      <parent>mirX/br_caster_rotation_link</parent>
+      <child>mirX/br_caster_wheel_link</child>
+      <axis>
+        <xyz>0 1 0</xyz>
+        <limit>
+          <lower>-1e+16</lower>
+          <upper>1e+16</upper>
+        </limit>
+        <dynamics>
+          <spring_reference>0</spring_reference>
+          <spring_stiffness>0</spring_stiffness>
+        </dynamics>
+      </axis>
+    </joint>
+    <link name='mirX/br_caster_wheel_link'>
+      <pose relative_to='mirX/br_caster_wheel_joint'>0 0 0 0 -0 0</pose>
+      <inertial>
+        <pose>0 0 0 1.5708 -0 0</pose>
+        <mass>1</mass>
+        <inertia>
+          <ixx>0.0010619</ixx>
+          <ixy>0</ixy>
+          <ixz>0</ixz>
+          <iyy>0.0010619</iyy>
+          <iyz>0</iyz>
+          <izz>0.00195312</izz>
+        </inertia>
+      </inertial>
+      <collision name='mirX/br_caster_wheel_link_collision'>
+        <pose>0 0 0 1.5708 -0 0</pose>
+        <geometry>
+          <cylinder>
+            <length>0.032</length>
+            <radius>0.0625</radius>
+          </cylinder>
+        </geometry>
+        <surface>
+          <contact>
+            <ode>
+              <kp>1e+07</kp>
+              <kd>1</kd>
+            </ode>
+          </contact>
+          <friction>
+            <ode>
+              <mu>1</mu>
+              <mu2>1</mu2>
+            </ode>
+          </friction>
+        </surface>
+      </collision>
+      <visual name='mirX/br_caster_wheel_link_visual'>
+        <pose>0 0 0 1.5708 -0 0</pose>
+        <geometry>
+          <cylinder>
+            <length>0.032</length>
+            <radius>0.0625</radius>
+          </cylinder>
+        </geometry>
+        <material>
+          <script>
+            <name>Gazebo/FlatBlack</name>
+            <uri>file://media/materials/scripts/gazebo.material</uri>
+          </script>
+        </material>
+      </visual>
+      <min_depth>0.01</min_depth>
+    </link>
+    <joint name='mirX/fl_caster_rotation_joint' type='revolute'>
+      <pose relative_to='mirX/base_footprint'>0.341346 0.203 0.1565 0 -0 0</pose>
+      <parent>mirX/base_footprint</parent>
+      <child>mirX/fl_caster_rotation_link</child>
+      <axis>
+        <xyz>0 0 1</xyz>
+        <limit>
+          <lower>-1e+16</lower>
+          <upper>1e+16</upper>
+        </limit>
+        <dynamics>
+          <damping>0.01</damping>
+          <friction>0</friction>
+          <spring_reference>0</spring_reference>
+          <spring_stiffness>0</spring_stiffness>
+        </dynamics>
+      </axis>
+    </joint>
+    <link name='mirX/fl_caster_rotation_link'>
+      <pose relative_to='mirX/fl_caster_rotation_joint'>0 0 0 0 -0 0</pose>
+      <inertial>
+        <pose>0 0 -0.0425 0.418879 0 1.5708</pose>
+        <mass>0.309754</mass>
+        <inertia>
+          <ixx>0.000584452</ixx>
+          <ixy>0</ixy>
+          <ixz>0</ixz>
+          <iyy>0.000528726</iyy>
+          <iyz>0</iyz>
+          <izz>0.000179236</izz>
+        </inertia>
+      </inertial>
+      <collision name='mirX/fl_caster_rotation_link_collision'>
+        <pose>0 0 0 0 -0 0</pose>
+        <geometry>
+          <mesh>
+            <scale>1 1 1</scale>
+            <uri>model://mobile_robot/meshes/collision/caster_wheel_base.stl</uri>
+          </mesh>
+        </geometry>
+        <surface>
+          <contact>
+            <ode/>
+          </contact>
+          <friction>
+            <ode/>
+          </friction>
+        </surface>
+      </collision>
+      <visual name='mirX/fl_caster_rotation_link_visual'>
+        <pose>0 0 0 0 -0 0</pose>
+        <geometry>
+          <mesh>
+            <scale>1 1 1</scale>
+            <uri>model://mobile_robot/meshes/visual/caster_wheel_base.stl</uri>
+          </mesh>
+        </geometry>
+        <material>
+          <script>
+            <name>Gazebo/Grey</name>
+            <uri>file://media/materials/scripts/gazebo.material</uri>
+          </script>
+        </material>
+      </visual>
+    </link>
+    <joint name='mirX/fl_caster_wheel_joint' type='revolute'>
+      <pose relative_to='mirX/fl_caster_rotation_link'>-0.0382 0 -0.094 0 -0 0</pose>
+      <parent>mirX/fl_caster_rotation_link</parent>
+      <child>mirX/fl_caster_wheel_link</child>
+      <axis>
+        <xyz>0 1 0</xyz>
+        <limit>
+          <lower>-1e+16</lower>
+          <upper>1e+16</upper>
+        </limit>
+        <dynamics>
+          <spring_reference>0</spring_reference>
+          <spring_stiffness>0</spring_stiffness>
+        </dynamics>
+      </axis>
+    </joint>
+    <link name='mirX/fl_caster_wheel_link'>
+      <pose relative_to='mirX/fl_caster_wheel_joint'>0 0 0 0 -0 0</pose>
+      <inertial>
+        <pose>0 0 0 1.5708 -0 0</pose>
+        <mass>1</mass>
+        <inertia>
+          <ixx>0.0010619</ixx>
+          <ixy>0</ixy>
+          <ixz>0</ixz>
+          <iyy>0.0010619</iyy>
+          <iyz>0</iyz>
+          <izz>0.00195312</izz>
+        </inertia>
+      </inertial>
+      <collision name='mirX/fl_caster_wheel_link_collision'>
+        <pose>0 0 0 1.5708 -0 0</pose>
+        <geometry>
+          <cylinder>
+            <length>0.032</length>
+            <radius>0.0625</radius>
+          </cylinder>
+        </geometry>
+        <surface>
+          <contact>
+            <ode>
+              <kp>1e+07</kp>
+              <kd>1</kd>
+            </ode>
+          </contact>
+          <friction>
+            <ode>
+              <mu>1</mu>
+              <mu2>1</mu2>
+            </ode>
+          </friction>
+        </surface>
+      </collision>
+      <visual name='mirX/fl_caster_wheel_link_visual'>
+        <pose>0 0 0 1.5708 -0 0</pose>
+        <geometry>
+          <cylinder>
+            <length>0.032</length>
+            <radius>0.0625</radius>
+          </cylinder>
+        </geometry>
+        <material>
+          <script>
+            <name>Gazebo/FlatBlack</name>
+            <uri>file://media/materials/scripts/gazebo.material</uri>
+          </script>
+        </material>
+      </visual>
+      <min_depth>0.01</min_depth>
+    </link>
+    <joint name='mirX/fr_caster_rotation_joint' type='revolute'>
+      <pose relative_to='mirX/base_footprint'>0.341346 -0.203 0.1565 0 -0 0</pose>
+      <parent>mirX/base_footprint</parent>
+      <child>mirX/fr_caster_rotation_link</child>
+      <axis>
+        <xyz>0 0 1</xyz>
+        <limit>
+          <lower>-1e+16</lower>
+          <upper>1e+16</upper>
+        </limit>
+        <dynamics>
+          <damping>0.01</damping>
+          <friction>0</friction>
+          <spring_reference>0</spring_reference>
+          <spring_stiffness>0</spring_stiffness>
+        </dynamics>
+      </axis>
+    </joint>
+    <link name='mirX/fr_caster_rotation_link'>
+      <pose relative_to='mirX/fr_caster_rotation_joint'>0 0 0 0 -0 0</pose>
+      <inertial>
+        <pose>0 0 -0.0425 0.418879 0 1.5708</pose>
+        <mass>0.309754</mass>
+        <inertia>
+          <ixx>0.000584452</ixx>
+          <ixy>0</ixy>
+          <ixz>0</ixz>
+          <iyy>0.000528726</iyy>
+          <iyz>0</iyz>
+          <izz>0.000179236</izz>
+        </inertia>
+      </inertial>
+      <collision name='mirX/fr_caster_rotation_link_collision'>
+        <pose>0 0 0 0 -0 0</pose>
+        <geometry>
+          <mesh>
+            <scale>1 1 1</scale>
+            <uri>model://mobile_robot/meshes/collision/caster_wheel_base.stl</uri>
+          </mesh>
+        </geometry>
+        <surface>
+          <contact>
+            <ode/>
+          </contact>
+          <friction>
+            <ode/>
+          </friction>
+        </surface>
+      </collision>
+      <visual name='mirX/fr_caster_rotation_link_visual'>
+        <pose>0 0 0 0 -0 0</pose>
+        <geometry>
+          <mesh>
+            <scale>1 1 1</scale>
+            <uri>model://mobile_robot/meshes/visual/caster_wheel_base.stl</uri>
+          </mesh>
+        </geometry>
+        <material>
+          <script>
+            <name>Gazebo/Grey</name>
+            <uri>file://media/materials/scripts/gazebo.material</uri>
+          </script>
+        </material>
+      </visual>
+    </link>
+    <joint name='mirX/fr_caster_wheel_joint' type='revolute'>
+      <pose relative_to='mirX/fr_caster_rotation_link'>-0.0382 0 -0.094 0 -0 0</pose>
+      <parent>mirX/fr_caster_rotation_link</parent>
+      <child>mirX/fr_caster_wheel_link</child>
+      <axis>
+        <xyz>0 1 0</xyz>
+        <limit>
+          <lower>-1e+16</lower>
+          <upper>1e+16</upper>
+        </limit>
+        <dynamics>
+          <spring_reference>0</spring_reference>
+          <spring_stiffness>0</spring_stiffness>
+        </dynamics>
+      </axis>
+    </joint>
+    <link name='mirX/fr_caster_wheel_link'>
+      <pose relative_to='mirX/fr_caster_wheel_joint'>0 0 0 0 -0 0</pose>
+      <inertial>
+        <pose>0 0 0 1.5708 -0 0</pose>
+        <mass>1</mass>
+        <inertia>
+          <ixx>0.0010619</ixx>
+          <ixy>0</ixy>
+          <ixz>0</ixz>
+          <iyy>0.0010619</iyy>
+          <iyz>0</iyz>
+          <izz>0.00195312</izz>
+        </inertia>
+      </inertial>
+      <collision name='mirX/fr_caster_wheel_link_collision'>
+        <pose>0 0 0 1.5708 -0 0</pose>
+        <geometry>
+          <cylinder>
+            <length>0.032</length>
+            <radius>0.0625</radius>
+          </cylinder>
+        </geometry>
+        <surface>
+          <contact>
+            <ode>
+              <kp>1e+07</kp>
+              <kd>1</kd>
+            </ode>
+          </contact>
+          <friction>
+            <ode>
+              <mu>1</mu>
+              <mu2>1</mu2>
+            </ode>
+          </friction>
+        </surface>
+      </collision>
+      <visual name='mirX/fr_caster_wheel_link_visual'>
+        <pose>0 0 0 1.5708 -0 0</pose>
+        <geometry>
+          <cylinder>
+            <length>0.032</length>
+            <radius>0.0625</radius>
+          </cylinder>
+        </geometry>
+        <material>
+          <script>
+            <name>Gazebo/FlatBlack</name>
+            <uri>file://media/materials/scripts/gazebo.material</uri>
+          </script>
+        </material>
+      </visual>
+      <min_depth>0.01</min_depth>
+    </link>
+    <joint name='mirX/left_wheel_joint' type='revolute'>
+      <pose relative_to='mirX/base_footprint'>0 0.222604 0.0625 0 -0 0</pose>
+      <parent>mirX/base_footprint</parent>
+      <child>mirX/left_wheel_link</child>
+      <axis>
+        <xyz>0 1 0</xyz>
+        <limit>
+          <effort>100</effort>
+          <velocity>20</velocity>
+          <lower>-1e+16</lower>
+          <upper>1e+16</upper>
+        </limit>
+        <dynamics>
+          <spring_reference>0</spring_reference>
+          <spring_stiffness>0</spring_stiffness>
+        </dynamics>
+      </axis>
+    </joint>
+    <link name='mirX/left_wheel_link'>
+      <pose relative_to='mirX/left_wheel_joint'>0 0 0 0 -0 0</pose>
+      <inertial>
+        <pose>0 0 0 1.5708 -0 0</pose>
+        <mass>1</mass>
+        <inertia>
+          <ixx>0.0010619</ixx>
+          <ixy>0</ixy>
+          <ixz>0</ixz>
+          <iyy>0.0010619</iyy>
+          <iyz>0</iyz>
+          <izz>0.00195312</izz>
+        </inertia>
+      </inertial>
+      <collision name='mirX/left_wheel_link_collision'>
+        <pose>0 0 0 1.5708 -0 0</pose>
+        <geometry>
+          <cylinder>
+            <length>0.032</length>
+            <radius>0.0625</radius>
+          </cylinder>
+        </geometry>
+        <surface>
+          <contact>
+            <ode>
+              <kp>1e+07</kp>
+              <kd>1</kd>
+            </ode>
+          </contact>
+          <friction>
+            <ode>
+              <mu>200</mu>
+              <mu2>200</mu2>
+            </ode>
+          </friction>
+        </surface>
+      </collision>
+      <visual name='mirX/left_wheel_link_visual'>
+        <pose>0 0 0 1.5708 -0 0</pose>
+        <geometry>
+          <cylinder>
+            <length>0.032</length>
+            <radius>0.0625</radius>
+          </cylinder>
+        </geometry>
+        <material>
+          <script>
+            <name>Gazebo/FlatBlack</name>
+            <uri>file://media/materials/scripts/gazebo.material</uri>
+          </script>
+        </material>
+      </visual>
+      <min_depth>0.01</min_depth>
+    </link>
+    <joint name='mirX/right_wheel_joint' type='revolute'>
+      <pose relative_to='mirX/base_footprint'>0 -0.222604 0.0625 0 -0 0</pose>
+      <parent>mirX/base_footprint</parent>
+      <child>mirX/right_wheel_link</child>
+      <axis>
+        <xyz>0 1 0</xyz>
+        <limit>
+          <effort>100</effort>
+          <velocity>20</velocity>
+          <lower>-1e+16</lower>
+          <upper>1e+16</upper>
+        </limit>
+        <dynamics>
+          <spring_reference>0</spring_reference>
+          <spring_stiffness>0</spring_stiffness>
+        </dynamics>
+      </axis>
+    </joint>
+    <link name='mirX/right_wheel_link'>
+      <pose relative_to='mirX/right_wheel_joint'>0 0 0 0 -0 0</pose>
+      <inertial>
+        <pose>0 0 0 1.5708 -0 0</pose>
+        <mass>1</mass>
+        <inertia>
+          <ixx>0.0010619</ixx>
+          <ixy>0</ixy>
+          <ixz>0</ixz>
+          <iyy>0.0010619</iyy>
+          <iyz>0</iyz>
+          <izz>0.00195312</izz>
+        </inertia>
+      </inertial>
+      <collision name='mirX/right_wheel_link_collision'>
+        <pose>0 0 0 1.5708 -0 0</pose>
+        <geometry>
+          <cylinder>
+            <length>0.032</length>
+            <radius>0.0625</radius>
+          </cylinder>
+        </geometry>
+        <surface>
+          <contact>
+            <ode>
+              <kp>1e+07</kp>
+              <kd>1</kd>
+            </ode>
+          </contact>
+          <friction>
+            <ode>
+              <mu>200</mu>
+              <mu2>200</mu2>
+            </ode>
+          </friction>
+        </surface>
+      </collision>
+      <visual name='mirX/right_wheel_link_visual'>
+        <pose>0 0 0 1.5708 -0 0</pose>
+        <geometry>
+          <cylinder>
+            <length>0.032</length>
+            <radius>0.0625</radius>
+          </cylinder>
+        </geometry>
+        <material>
+          <script>
+            <name>Gazebo/FlatBlack</name>
+            <uri>file://media/materials/scripts/gazebo.material</uri>
+          </script>
+        </material>
+      </visual>
+      <min_depth>0.01</min_depth>
+    </link>
     <!-- Laser Range Finder -->
     <link name="laser_link">
       <inertial>
@@ -162,54 +993,75 @@
         </plugin>
       </sensor>
     </link>
-
-    <!-- Wheel Joints -->
-    <joint type="revolute" name="left_wheel_hinge">
-      <pose>0 0 -0.03 0 0 0</pose>
-      <child>left_wheel</child>
-      <parent>chassis</parent>
-      <axis>
-        <xyz>0 1 0</xyz>
-      </axis>
-    </joint>
-
-    <joint type="revolute" name="right_wheel_hinge">
-      <pose>0 0 0.03 0 0 0</pose>
-      <child>right_wheel</child>
-      <parent>chassis</parent>
-      <axis>
-        <xyz>0 1 0</xyz>
-      </axis>
-    </joint>
-
-    <joint type="fixed" name="laser_joint">
-      <child>laser_link</child>
-      <parent>chassis</parent>
-    </joint>
-
-    <!-- Differential Drive Plugin -->
-    <plugin name='diff_drive' filename='libgazebo_ros_diff_drive.so'>
+    <plugin name='p3d_base_controller' filename='libgazebo_ros_p3d.so'>
       <ros>
-        <namespace>/demo</namespace>
+        <namespace>mirX</namespace>
+        <remapping>odom:=odom_p3d</remapping>
+      </ros>
+      <always_on>1</always_on>
+      <update_rate>50.0</update_rate>
+      <body_name>mirX/base_footprint</body_name>
+      <gaussian_noise>0.01</gaussian_noise>
+      <frame_name>map</frame_name>
+      <topic_name>base_pose_ground_truth</topic_name>
+      <xyz_offset>0 0 0</xyz_offset>
+      <rpy_offset>0 0 0</rpy_offset>
+    </plugin>
+    <plugin name='diff_drive_controller' filename='libgazebo_ros_diff_drive.so'>
+      <ros>
+        <namespace>mirX</namespace>
         <remapping>cmd_vel:=cmd_vel</remapping>
         <remapping>odom:=odom</remapping>
       </ros>
-
-      <left_joint>left_wheel_hinge</left_joint>
-      <right_joint>right_wheel_hinge</right_joint>
-
-      <wheel_separation>1.0</wheel_separation>
-      <wheel_diameter>0.2</wheel_diameter>
-
-      <max_wheel_torque>20</max_wheel_torque>
-      <max_wheel_acceleration>1.0</max_wheel_acceleration>
-
-      <publish_odom>true</publish_odom>
-      <publish_odom_tf>true</publish_odom_tf>
-      <publish_wheel_tf>true</publish_wheel_tf>
-
-      <odometry_frame>odom</odometry_frame>
-      <robot_base_frame>chassis</robot_base_frame>
+      <legacy_mode>0</legacy_mode>
+      <always_on>1</always_on>
+      <update_rate>1000.0</update_rate>
+      <left_joint>mirX/left_wheel_joint</left_joint>
+      <right_joint>mirX/right_wheel_joint</right_joint>
+      <wheel_separation>0.445208</wheel_separation>
+      <wheel_diameter>0.125</wheel_diameter>
+      <wheel_torque>10</wheel_torque>
+      <wheel_acceleration>2.8</wheel_acceleration>
+      <odometry_frame>mirX/odom</odometry_frame>
+      <robot_base_frame>mirX/base_footprint</robot_base_frame>
+      <publish_tf>1</publish_tf>
+      <publish_wheel_tf>0</publish_wheel_tf>
+      <publish_wheel_joint_state>1</publish_wheel_joint_state>
+      <publish_odom>1</publish_odom>
+      <publish_odom_tf>1</publish_odom_tf>
+      <ros_debug_level>Debug</ros_debug_level>
     </plugin>
+    <frame name='mirX/base_link_surface_joint' attached_to='mirX/base_link'>
+      <pose>0.037646 0 0.352 0 -0 0</pose>
+    </frame>
+    <frame name='mirX/surface' attached_to='mirX/base_link_surface_joint'/>
+    <frame name='mirX/base_link_to_back_laser_joint' attached_to='mirX/base_link'>
+      <pose>-0.354354 -0.2358 0.1914 0 0 -2.35619</pose>
+    </frame>
+    <frame name='mirX/back_laser_link' attached_to='mirX/base_link_to_back_laser_joint'/>
+    <frame name='mirX/base_link_to_front_laser_joint' attached_to='mirX/base_link'>
+      <pose>0.429646 0.2358 0.1914 0 -0 0.785398</pose>
+    </frame>
+    <frame name='mirX/front_laser_link' attached_to='mirX/base_link_to_front_laser_joint'/>
+    <frame name='mirX/imu_link_to_imu_frame_joint' attached_to='mirX/imu_link'>
+      <pose>0 0 0 0 -0 0</pose>
+    </frame>
+    <frame name='mirX/imu_frame' attached_to='mirX/imu_link_to_imu_frame_joint'/>
+    <frame name='mirX/base_link_to_imu_joint' attached_to='mirX/base_link'>
+      <pose>0 0 0.25 0 -0 0</pose>
+    </frame>
+    <frame name='mirX/imu_link' attached_to='mirX/base_link_to_imu_joint'/>
+    <frame name='mirX/us_1_joint' attached_to='mirX/base_link'>
+      <pose>0.45 -0.12 0.16 0 -0 0</pose>
+    </frame>
+    <frame name='mirX/us_1_frame' attached_to='mirX/us_1_joint'/>
+    <frame name='mirX/us_2_joint' attached_to='mirX/base_link'>
+      <pose>0.45 0.12 0.16 0 -0 0</pose>
+    </frame>
+    <frame name='mirX/us_2_frame' attached_to='mirX/us_2_joint'/>
+    <frame name='mirX/base_joint' attached_to='mirX/base_footprint'>
+      <pose>0 0 0 0 -0 0</pose>
+    </frame>
+    <frame name='mirX/base_link' attached_to='mirX/base_joint'/>
   </model>
 </sdf>
