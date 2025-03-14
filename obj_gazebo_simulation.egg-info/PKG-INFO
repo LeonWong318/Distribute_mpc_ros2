@@ -1,0 +1,8 @@
+Metadata-Version: 2.1
+Name: obj_gazebo_simulation
+Version: 0.0.0
+Summary: Package to launch Gazebo simulation by ROS2 node
+Maintainer: Yinsong Wang
+Maintainer-email: wangyinsong01@gmail.com
+License: MIT
+Requires-Dist: setuptools

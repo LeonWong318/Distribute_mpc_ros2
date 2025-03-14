@@ -19,7 +19,7 @@
         <geometry>
           <mesh>
             <scale>1 1 1</scale>
-            <uri>model://mobile_robot/meshes/collision/mir_100_base.stl</uri>
+            <filename>model://mobile_robot/meshes/collision/mir_100_base.stl</filename>
           </mesh>
         </geometry>
         <surface>
@@ -36,7 +36,7 @@
         <geometry>
           <mesh>
             <scale>1 1 1</scale>
-            <uri>model://mobile_robot/meshes/visual/sick_lms-100.stl</uri>
+            <filename>model://mobile_robot/meshes/visual/sick_lms-100.stl</filename>
           </mesh>
         </geometry>
         <surface>
@@ -53,7 +53,7 @@
         <geometry>
           <mesh>
             <scale>1 1 1</scale>
-            <uri>model://mobile_robot/meshes/visual/sick_lms-100.stl</uri>
+            <filename>model://mobile_robot/meshes/visual/sick_lms-100.stl</filename>
           </mesh>
         </geometry>
         <surface>
@@ -70,7 +70,7 @@
         <geometry>
           <mesh>
             <scale>1 1 1</scale>
-            <uri>model://mobile_robot/meshes/visual/mir_100_base.stl</uri>
+            <filename>model://mobile_robot/meshes/visual/mir_100_base.stl</filename>
           </mesh>
         </geometry>
         <material>
@@ -85,7 +85,7 @@
         <geometry>
           <mesh>
             <scale>1 1 1</scale>
-            <uri>model://mobile_robot/meshes/visual/sick_lms-100.stl</uri>
+            <filename>model://mobile_robot/meshes/visual/sick_lms-100.stl</filename>
           </mesh>
         </geometry>
         <material>
@@ -100,7 +100,7 @@
         <geometry>
           <mesh>
             <scale>1 1 1</scale>
-            <uri>model://mobile_robot/meshes/visual/sick_lms-100.stl</uri>
+            <filename>model://mobile_robot/meshes/visual/sick_lms-100.stl</filename>
           </mesh>
         </geometry>
         <material>
@@ -282,7 +282,7 @@
         <geometry>
           <mesh>
             <scale>1 1 1</scale>
-            <uri>model://mobile_robot/meshes/collision/caster_wheel_base.stl</uri>
+            <filename>model://mobile_robot/meshes/collision/caster_wheel_base.stl</filename>
           </mesh>
         </geometry>
         <surface>
@@ -299,7 +299,7 @@
         <geometry>
           <mesh>
             <scale>1 1 1</scale>
-            <uri>model://mobile_robot/meshes/visual/caster_wheel_base.stl</uri>
+            <filename>model://mobile_robot/meshes/visual/caster_wheel_base.stl</filename>
           </mesh>
         </geometry>
         <material>
@@ -417,7 +417,7 @@
         <geometry>
           <mesh>
             <scale>1 1 1</scale>
-            <uri>model://mobile_robot/meshes/collision/caster_wheel_base.stl</uri>
+            <filename>model://mobile_robot/meshes/collision/caster_wheel_base.stl</filename>
           </mesh>
         </geometry>
         <surface>
@@ -434,7 +434,7 @@
         <geometry>
           <mesh>
             <scale>1 1 1</scale>
-            <uri>model://mobile_robot/meshes/visual/caster_wheel_base.stl</uri>
+            <filename>model://mobile_robot/meshes/visual/caster_wheel_base.stl</filename>
           </mesh>
         </geometry>
         <material>
@@ -552,7 +552,7 @@
         <geometry>
           <mesh>
             <scale>1 1 1</scale>
-            <uri>model://mobile_robot/meshes/collision/caster_wheel_base.stl</uri>
+            <filename>model://mobile_robot/meshes/collision/caster_wheel_base.stl</filename>
           </mesh>
         </geometry>
         <surface>
@@ -569,7 +569,7 @@
         <geometry>
           <mesh>
             <scale>1 1 1</scale>
-            <uri>model://mobile_robot/meshes/visual/caster_wheel_base.stl</uri>
+            <filename>model://mobile_robot/meshes/visual/caster_wheel_base.stl</filename>
           </mesh>
         </geometry>
         <material>
@@ -687,7 +687,7 @@
         <geometry>
           <mesh>
             <scale>1 1 1</scale>
-            <uri>model://mobile_robot/meshes/collision/caster_wheel_base.stl</uri>
+            <filename>model://mobile_robot/meshes/collision/caster_wheel_base.stl</filename>
           </mesh>
         </geometry>
         <surface>
@@ -704,7 +704,7 @@
         <geometry>
           <mesh>
             <scale>1 1 1</scale>
-            <uri>model://mobile_robot/meshes/visual/caster_wheel_base.stl</uri>
+            <filename>model://mobile_robot/meshes/visual/caster_wheel_base.stl</filename>
           </mesh>
         </geometry>
         <material>
@@ -929,7 +929,7 @@
       </visual>
       <min_depth>0.01</min_depth>
     </link>
-    <!-- Laser Range Finder -->
+    Laser Range Finder
     <link name="laser_link">
       <inertial>
         <mass>0.1</mass>
@@ -939,7 +939,7 @@
       <visual name="visual">
         <geometry>
           <mesh>
-            <uri>model://hokuyo/meshes/hokuyo.dae</uri>
+            <filename>model://hokuyo/meshes/hokuyo.dae</filename>
           </mesh>
         </geometry>
       </visual>
@@ -1035,14 +1035,14 @@
       <pose>0.037646 0 0.352 0 -0 0</pose>
     </frame>
     <frame name='mirX/surface' attached_to='mirX/base_link_surface_joint'/>
-    <frame name='mirX/base_link_to_back_laser_joint' attached_to='mirX/base_link'>
+    <!-- <frame name='mirX/base_link_to_back_laser_joint' attached_to='mirX/base_link'>
       <pose>-0.354354 -0.2358 0.1914 0 0 -2.35619</pose>
     </frame>
     <frame name='mirX/back_laser_link' attached_to='mirX/base_link_to_back_laser_joint'/>
     <frame name='mirX/base_link_to_front_laser_joint' attached_to='mirX/base_link'>
       <pose>0.429646 0.2358 0.1914 0 -0 0.785398</pose>
     </frame>
-    <frame name='mirX/front_laser_link' attached_to='mirX/base_link_to_front_laser_joint'/>
+    <frame name='mirX/front_laser_link' attached_to='mirX/base_link_to_front_laser_joint'/> -->
     <frame name='mirX/imu_link_to_imu_frame_joint' attached_to='mirX/imu_link'>
       <pose>0 0 0 0 -0 0</pose>
     </frame>

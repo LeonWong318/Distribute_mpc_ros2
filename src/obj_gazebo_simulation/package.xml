@@ -5,7 +5,7 @@
   <version>0.0.0</version>
   <description>Package to do the gazebo simulation based on ROS2</description>
   <maintainer email="wangyinsong01@gmail.com">Yinsong Wang</maintainer>
-  <license>MIT</license>
+  <license>TODO</license>
 
   <test_depend>ament_copyright</test_depend>
   <test_depend>ament_flake8</test_depend>
@@ -17,6 +17,18 @@
   <depend>launch_ros</depend>
   <depend>gazebo_ros</depend>
   <depend>ament_index_python</depend>
+
+  <exec_depend>diff_drive_controller</exec_depend>
+  <exec_depend>gazebo_plugins</exec_depend>
+  <exec_depend>gazebo_ros_control</exec_depend>
+  <exec_depend>hector_gazebo_plugins</exec_depend>
+  <exec_depend>joint_state_controller</exec_depend>
+  <exec_depend>joint_state_publisher</exec_depend>
+  <exec_depend>joint_state_publisher_gui</exec_depend>
+  <exec_depend>position_controllers</exec_depend>
+  <exec_depend>robot_state_publisher</exec_depend>
+  <exec_depend>xacro</exec_depend>
+  <exec_depend>gazebo</exec_depend>
 
 
   <export>
