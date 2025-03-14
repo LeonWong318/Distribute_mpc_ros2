@@ -395,11 +395,17 @@ class ClusterNode(Node):
                         robot_states_for_control[idx_pred:idx_pred+state_dim*horizon] = state.pred_states[:state_dim*horizon]
                     idx_pred += state_dim * horizon
                 
+                start_time = self.get_clock().now()
+                
                 # run controller
                 self.last_actions, self.pred_states, self.current_refs, self.debug_info = self.controller.run_step(
                     static_obstacles=self.static_obstacles,
                     other_robot_states=robot_states_for_control
                 )
+                
+                end_time = self.get_clock().now()
+                duration_ms = (end_time.nanoseconds - start_time.nanoseconds) / 1e9
+                self.get_logger().warning(f'Controller run_step() took {duration_ms:.3f} s')
                 
                 # run step
                 self.controller.set_current_state(self._state)
