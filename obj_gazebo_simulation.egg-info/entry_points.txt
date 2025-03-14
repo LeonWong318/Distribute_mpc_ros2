@@ -1,3 +1,0 @@
-[console_scripts]
-gazebo_converter = obj_gazebo_simulation.gazebo_converter:main
-multi_robot_spawner = obj_gazebo_simulation.multi_robot_spawner:main

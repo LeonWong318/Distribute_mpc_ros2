@@ -76,7 +76,7 @@
         <material>
           <script>
             <name>Gazebo/White</name>
-            <uri>model://media/materials/scripts/gazebo.material</uri>
+            <uri>file://media/materials/scripts/gazebo.material</uri>
           </script>
         </material>
       </visual>
@@ -91,7 +91,7 @@
         <material>
           <script>
             <name>Gazebo/FlatBlack</name>
-            <uri>model://media/materials/scripts/gazebo.material</uri>
+            <uri>file://media/materials/scripts/gazebo.material</uri>
           </script>
         </material>
       </visual>
@@ -106,7 +106,7 @@
         <material>
           <script>
             <name>Gazebo/FlatBlack</name>
-            <uri>model://media/materials/scripts/gazebo.material</uri>
+            <uri>file://media/materials/scripts/gazebo.material</uri>
           </script>
         </material>
       </visual>
@@ -305,7 +305,7 @@
         <material>
           <script>
             <name>Gazebo/Grey</name>
-            <uri>model://media/materials/scripts/gazebo.material</uri>
+            <uri>file://media/materials/scripts/gazebo.material</uri>
           </script>
         </material>
       </visual>
@@ -374,7 +374,7 @@
         <material>
           <script>
             <name>Gazebo/FlatBlack</name>
-            <uri>model://media/materials/scripts/gazebo.material</uri>
+            <uri>file://media/materials/scripts/gazebo.material</uri>
           </script>
         </material>
       </visual>
@@ -440,7 +440,7 @@
         <material>
           <script>
             <name>Gazebo/Grey</name>
-            <uri>model://media/materials/scripts/gazebo.material</uri>
+            <uri>file://media/materials/scripts/gazebo.material</uri>
           </script>
         </material>
       </visual>
@@ -509,7 +509,7 @@
         <material>
           <script>
             <name>Gazebo/FlatBlack</name>
-            <uri>model://media/materials/scripts/gazebo.material</uri>
+            <uri>file://media/materials/scripts/gazebo.material</uri>
           </script>
         </material>
       </visual>
@@ -575,7 +575,7 @@
         <material>
           <script>
             <name>Gazebo/Grey</name>
-            <uri>model://media/materials/scripts/gazebo.material</uri>
+            <uri>file://media/materials/scripts/gazebo.material</uri>
           </script>
         </material>
       </visual>
@@ -644,7 +644,7 @@
         <material>
           <script>
             <name>Gazebo/FlatBlack</name>
-            <uri>model://media/materials/scripts/gazebo.material</uri>
+            <uri>file://media/materials/scripts/gazebo.material</uri>
           </script>
         </material>
       </visual>
@@ -710,7 +710,7 @@
         <material>
           <script>
             <name>Gazebo/Grey</name>
-            <uri>model://media/materials/scripts/gazebo.material</uri>
+            <uri>file://media/materials/scripts/gazebo.material</uri>
           </script>
         </material>
       </visual>
@@ -779,13 +779,13 @@
         <material>
           <script>
             <name>Gazebo/FlatBlack</name>
-            <uri>model://media/materials/scripts/gazebo.material</uri>
+            <uri>file://media/materials/scripts/gazebo.material</uri>
           </script>
         </material>
       </visual>
       <min_depth>0.01</min_depth>
     </link>
-    <joint name='left_wheel_joint' type='revolute'>
+    <joint name='left_wheel_hinge' type='revolute'>
       <pose relative_to='base_footprint'>0 0.222604 0.0625 0 -0 0</pose>
       <parent>base_footprint</parent>
       <child>left_wheel_link</child>
@@ -804,7 +804,7 @@
       </axis>
     </joint>
     <link name='left_wheel_link'>
-      <pose relative_to='left_wheel_joint'>0 0 0 0 -0 0</pose>
+      <pose relative_to='left_wheel_hinge'>0 0 0 0 -0 0</pose>
       <inertial>
         <pose>0 0 0 1.5708 -0 0</pose>
         <mass>1</mass>
@@ -851,13 +851,13 @@
         <material>
           <script>
             <name>Gazebo/FlatBlack</name>
-            <uri>model://media/materials/scripts/gazebo.material</uri>
+            <uri>file://media/materials/scripts/gazebo.material</uri>
           </script>
         </material>
       </visual>
       <min_depth>0.01</min_depth>
     </link>
-    <joint name='right_wheel_joint' type='revolute'>
+    <joint name='right_wheel_hinge' type='revolute'>
       <pose relative_to='base_footprint'>0 -0.222604 0.0625 0 -0 0</pose>
       <parent>base_footprint</parent>
       <child>right_wheel_link</child>
@@ -876,7 +876,7 @@
       </axis>
     </joint>
     <link name='right_wheel_link'>
-      <pose relative_to='right_wheel_joint'>0 0 0 0 -0 0</pose>
+      <pose relative_to='right_wheel_hinge'>0 0 0 0 -0 0</pose>
       <inertial>
         <pose>0 0 0 1.5708 -0 0</pose>
         <mass>1</mass>
@@ -923,7 +923,7 @@
         <material>
           <script>
             <name>Gazebo/FlatBlack</name>
-            <uri>model://media/materials/scripts/gazebo.material</uri>
+            <uri>file://media/materials/scripts/gazebo.material</uri>
           </script>
         </material>
       </visual>
@@ -953,8 +953,8 @@
       <legacy_mode>0</legacy_mode>
       <always_on>1</always_on>
       <update_rate>1000.0</update_rate>
-      <left_joint>left_wheel_joint</left_joint>
-      <right_joint>right_wheel_joint</right_joint>
+      <left_joint>left_wheel_hinge</left_joint>
+      <right_joint>right_wheel_hinge</right_joint>
       <wheel_separation>0.445208</wheel_separation>
       <wheel_diameter>0.125</wheel_diameter>
       <wheel_torque>10</wheel_torque>
