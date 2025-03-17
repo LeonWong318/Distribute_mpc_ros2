@@ -1,5 +1,24 @@
 #!/bin/bash
 
+# Configuration flag for hiding terminals
+# Set to 'true' to run certain components in background, 'false' to show all terminals
+HIDE_TERMINALS=false
+
+# Function to launch either in terminal or background based on flag
+launch_component() {
+    local component_name=$1
+    local launch_command=$2
+    local always_visible=$3
+    
+    if [ "$HIDE_TERMINALS" = true ] && [ "$always_visible" != "true" ]; then
+        echo "Launching $component_name in background..."
+        nohup bash -c "source install/setup.bash && $launch_command" > "${component_name}.log" 2>&1 &
+    else
+        echo "Launching $component_name in terminal..."
+        gnome-terminal --working-directory="$CURRENT_DIR" -- bash -c "echo $component_name; source install/setup.bash; $launch_command; exec bash"
+    fi
+}
+
 # Check for gnome-terminal
 if ! command -v gnome-terminal &> /dev/null; then
     echo "installing gnome-terminal"
@@ -17,6 +36,7 @@ fi
 
 # Get the current working directory
 CURRENT_DIR=$(pwd)
+export GAZEBO_MODEL_PATH=$GAZEBO_MODEL_PATH:${CURRENT_DIR}/src/obj_gazebo_simulation/models
 
 # Remove build, install, and log directories
 echo "Cleaning build, install, and log directories..."
@@ -40,24 +60,21 @@ fi
 
 pkill -f "ros2 topic echo"
 
-# Launch robot visualizer
-echo "Launching visualization node..."
-gnome-terminal --working-directory="$CURRENT_DIR" -- bash -c "echo Robot Visualizer; source install/setup.bash; ros2 launch obj_robot_visualizer robot_visualizer.launch.py; exec bash"
+# Launch RViz visualization node - always visible
+launch_component "Robot Visualizer" "ros2 launch obj_robot_visualizer robot_visualizer.launch.py" "true"
 
-echo "Launching msg buffer..."
-gnome-terminal --working-directory="$CURRENT_DIR" -- bash -c "echo Message Buffer; source install/setup.bash; ros2 launch obj_msg_buffer msg_buffer.launch.py; exec bash"
+# Launch message buffer - can be hidden
+launch_component "Message Buffer" "ros2 launch obj_msg_buffer msg_buffer.launch.py" "false"
 
 # Read robot IDs from CSV using Python
 echo "Determining required robot nodes..."
 ROBOT_LAUNCH_COMMANDS=$(python cluster_robot_id.py)
 
-# Launch robot manager and wait for it to initialize
-echo "Launching robot manager..."
-gnome-terminal --working-directory="$CURRENT_DIR" -- bash -c "echo Robot Manager; source install/setup.bash; ros2 launch obj_robot_manager obj_robot_manager.launch.py; exec bash"
+# Launch robot manager - can be hidden
+launch_component "Robot Manager" "ros2 launch obj_robot_manager obj_robot_manager.launch.py" "false"
 
-
-echo "Launching Gazebo Node"
-gnome-terminal --working-directory="$CURRENT_DIR" -- bash -c "echo Robot Visualizer; source install/setup.bash; ros2 launch obj_gazebo_simulation gazebo_simulation.launch.py; exec bash"
+# Launch Gazebo node - always visible
+launch_component "Gazebo Simulation" "ros2 launch obj_gazebo_simulation gazebo_simulation.launch.py" "true"
 
 # Wait for manager to initialize
 echo "Waiting for Gazebo to initialize (5 seconds)..."
@@ -66,18 +83,3 @@ sleep 5
 # Launch local robot nodes (will register with manager)
 echo "Launching local robot nodes..."
 eval "$ROBOT_LAUNCH_COMMANDS"
-
-# Wait for robots to register and clusters to be created
-# echo "Waiting for robots to register and cluster nodes to initialize (2 seconds)..."
-# sleep 2
-# echo "Launching listening and logging..."
-
-# nohup bash -c "source install/setup.bash && ros2 topic echo /manager/robot_states > robot_state.log 2>&1" &
-# echo "Started monitoring /manager/robot_states"
-
-# nohup bash -c "source install/setup.bash && ros2 topic echo /robot_0/state > robot_0_state.log 2>&1" &
-# echo "Started monitoring /robot_0/state"
-
-# nohup bash -c "source install/setup.bash && ros2 topic echo /robot_1/state > robot_1_state.log 2>&1" &
-# echo "Started monitoring /robot_1/state"
-

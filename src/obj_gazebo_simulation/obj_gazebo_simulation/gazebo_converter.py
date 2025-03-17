@@ -10,6 +10,8 @@ from msg_interfaces.srv import ExecuteCommand
 from transforms3d import euler
 import threading
 import time
+import random
+import numpy as np
 from rclpy.callback_groups import ReentrantCallbackGroup, MutuallyExclusiveCallbackGroup
 
 class RobotControlConverter(Node):
@@ -18,6 +20,7 @@ class RobotControlConverter(Node):
     - Converts RobotToGazeboCmd messages to Twist messages for Gazebo
     - Converts Odometry messages from Gazebo to GazeboToRobotState
     - Publishes state information when control commands are received
+    - Can simulate noise in state information for testing localization errors
     """
     
     def __init__(self):
@@ -29,12 +32,28 @@ class RobotControlConverter(Node):
         self.declare_parameter('state_publish_frequency', 50.0)  # 50Hz state publish frequency
         self.declare_parameter('min_cmd_interval', 0.0)  # Minimum interval between commands (0 = no limit)
         
+        # Noise simulation parameters
+        self.declare_parameter('enable_noise', False)  # Enable/disable noise simulation
+        self.declare_parameter('gaussian_stddev', 0.05)  # Standard deviation for Gaussian noise (meters/radians)
+        self.declare_parameter('failure_probability', 0.05)  # Probability of complete failure (0.05 = 5%)
+        self.declare_parameter('failure_max_deviation', 1.0)  # Maximum deviation on failure (meters)
+        
         self.robot_id = self.get_parameter('robot_id').value
         self.command_timeout = self.get_parameter('command_timeout').value
         self.state_publish_frequency = self.get_parameter('state_publish_frequency').value
         self.min_cmd_interval = self.get_parameter('min_cmd_interval').value
         
+        # Get noise parameters
+        self.enable_noise = self.get_parameter('enable_noise').value
+        self.gaussian_stddev = self.get_parameter('gaussian_stddev').value
+        self.failure_probability = self.get_parameter('failure_probability').value
+        self.failure_max_deviation = self.get_parameter('failure_max_deviation').value
+        
         self.get_logger().info(f'Starting converter for robot_{self.robot_id} at {self.state_publish_frequency}Hz')
+        if self.enable_noise:
+            self.get_logger().info(f'Noise simulation enabled: stddev={self.gaussian_stddev}, '
+                                  f'failure_prob={self.failure_probability}, '
+                                  f'max_dev={self.failure_max_deviation}')
         
         # Use separate callback groups for better performance
         self.odom_callback_group = ReentrantCallbackGroup()
@@ -72,10 +91,20 @@ class RobotControlConverter(Node):
             self.reliable_qos
         )
         
+        # Publisher for robot state without noise
+        self.real_state_pub = self.create_publisher(
+            GazeboToManagerState,
+            f'/robot_{self.robot_id}/real_state',
+            self.reliable_qos
+        )
+        
         # Initialize robot state
         self.current_x = 0.0
         self.current_y = 0.0
         self.current_theta = 0.0
+        self.true_x = 0.0  # Store true positions for reference
+        self.true_y = 0.0
+        self.true_theta = 0.0
         self.last_update_time = self.get_clock().now()
         self.last_update_time_ns = self.last_update_time.nanoseconds
         self.last_cmd_time = self.get_clock().now()
@@ -100,22 +129,90 @@ class RobotControlConverter(Node):
             callback_group=self.timer_callback_group
         )
         
-        # Stats for monitoring
-        self.command_count = 0
-        self.timeout_count = 0
+        self.odom_update_count = 0
         self.stats_timer = self.create_timer(
-            5.0,  # Report stats every 5 seconds
+            1.0,  # Report stats every 1 seconds
             self.report_stats,
             callback_group=self.timer_callback_group
         )
         
+        # Stats for monitoring
+        self.command_count = 0
+        self.timeout_count = 0
+        self.noise_failure_count = 0
+        self.stats_timer = self.create_timer(
+            1.0,  # Report stats every 1 seconds
+            self.report_stats,
+            callback_group=self.timer_callback_group
+        )
+        
+        # Initialize random seed for noise generation
+        random.seed()
+        np.random.seed()
+        
         self.get_logger().info(f'Converter for robot_{self.robot_id} initialized')
     
     def report_stats(self):
-        """Report statistics on command processing"""
+        """Report statistics on command processing and noise simulation"""
         if self.command_count > 0:
             timeout_percent = (self.timeout_count / self.command_count) * 100
-            self.get_logger().info(f'Commands: {self.command_count}, Timeouts: {self.timeout_count} ({timeout_percent:.1f}%)')
+            message = f'Commands: {self.command_count}, Timeouts: {self.timeout_count} ({timeout_percent:.1f}%)'
+
+            if self.enable_noise and self.odom_update_count > 0:
+                failure_percent = (self.noise_failure_count / self.odom_update_count) * 100
+                message += f', Odom updates: {self.odom_update_count}, Simulated failures: {self.noise_failure_count} ({failure_percent:.1f}%)'
+
+            self.get_logger().info(message)
+
+    
+    def apply_noise_to_state(self, x, y, theta):
+        """
+        Apply noise to the state variables based on configured parameters.
+        
+        Args:
+            x, y, theta: Original state values from odometry
+                
+        Returns:
+            noisy_x, noisy_y, noisy_theta: State values with noise applied
+            true_x, true_y, true_theta: Original state values without noise
+        """
+        # Always store the original values as true state
+        true_x, true_y, true_theta = x, y, theta
+        
+        # Initialize noisy values with true values
+        noisy_x, noisy_y, noisy_theta = x, y, theta
+        
+        if not self.enable_noise:
+            return noisy_x, noisy_y, noisy_theta, true_x, true_y, true_theta
+                
+        # Determine if we should simulate a complete failure
+        if random.random() < self.failure_probability:
+            # Complete failure mode - significant deviation
+            self.noise_failure_count += 1
+            self.get_logger().debug('Simulating localization failure')
+            
+            # Generate random deviations within the configured range
+            x_dev = random.uniform(-self.failure_max_deviation, self.failure_max_deviation)
+            y_dev = random.uniform(-self.failure_max_deviation, self.failure_max_deviation)
+            theta_dev = random.uniform(-self.failure_max_deviation, self.failure_max_deviation)
+            
+            # Apply the large deviations
+            noisy_x += x_dev
+            noisy_y += y_dev
+            noisy_theta += theta_dev
+            
+            # Normalize theta to [-pi, pi]
+            noisy_theta = np.arctan2(np.sin(noisy_theta), np.cos(noisy_theta))
+        else:
+            # Normal Gaussian noise mode
+            noisy_x += np.random.normal(0, self.gaussian_stddev)
+            noisy_y += np.random.normal(0, self.gaussian_stddev)
+            noisy_theta += np.random.normal(0, self.gaussian_stddev)
+            
+            # Normalize theta to [-pi, pi]
+            noisy_theta = np.arctan2(np.sin(noisy_theta), np.cos(noisy_theta))
+        
+        return noisy_x, noisy_y, noisy_theta, true_x, true_y, true_theta
     
     def publish_state(self):
         """
@@ -136,15 +233,27 @@ class RobotControlConverter(Node):
                     
                     # Publish state
                     self.state_pub.publish(state_msg)
+                    
+                    # Create real state message (without noise)
+                    real_state_msg = GazeboToManagerState()
+                    real_state_msg.robot_id = self.robot_id
+                    real_state_msg.x = self.true_x 
+                    real_state_msg.y = self.true_y
+                    real_state_msg.theta = self.true_theta
+                    real_state_msg.stamp = self.last_update_time.to_msg()
+                    
+                    # Publish real state
+                    self.real_state_pub.publish(real_state_msg)
+                    
                 finally:
                     self.state_lock.release()
         except Exception as e:
             self.get_logger().error(f'Error in publish_state: {str(e)}')
     
-    
     def send_command_callback(self, request, response):
         """
         Service callback to send a command to Gazebo and wait for state update.
+        Now uses real state values (without noise) to fill the response.
 
         Args:
             request: SendCommand.Request with v and omega fields
@@ -179,7 +288,6 @@ class RobotControlConverter(Node):
             cmd_time_ns = cmd_time.nanoseconds
             
             # Use polling approach for high-frequency operation
-            # First, publish command and set timestamp
             if not self.state_lock.acquire(timeout=0.01):
                 self.get_logger().error("Failed to acquire state_lock for command - skipping")
                 response.success = False
@@ -213,9 +321,10 @@ class RobotControlConverter(Node):
                         if self.last_update_time_ns >= cmd_time_ns:
                             # State is updated
                             response.success = True
-                            response.x = self.current_x
-                            response.y = self.current_y
-                            response.theta = self.current_theta
+                            # Use real state values (without noise)
+                            response.x = self.true_x
+                            response.y = self.true_y
+                            response.theta = self.true_theta
                             response.stamp = self.get_clock().now().to_msg()
                             success = True
                             break
@@ -245,10 +354,10 @@ class RobotControlConverter(Node):
             response.stamp = self.get_clock().now().to_msg()
             return response
 
-
     def odom_callback(self, msg):
         """
         Process odometry data from Gazebo.
+        Now stores both noisy and real state values separately.
 
         Args:
             msg (Odometry): Odometry message with pose and twist
@@ -259,28 +368,40 @@ class RobotControlConverter(Node):
             # Convert quaternion to euler angles
             euler_angles = euler.quat2euler([quat.w, quat.x, quat.y, quat.z], 'sxyz')
             
+            # Extract position data
+            x = msg.pose.pose.position.x
+            y = msg.pose.pose.position.y
+            theta = euler_angles[2]
+            
+            # Get both noisy and real state values
+            noisy_x, noisy_y, noisy_theta, true_x, true_y, true_theta = self.apply_noise_to_state(x, y, theta)
+            
             # Update timestamp before attempting to acquire lock
             now = self.get_clock().now()
             now_ns = now.nanoseconds
             
             # Try to acquire lock with very short timeout - don't block if lock is busy
-            # This makes the odom callback non-blocking, preventing backlog in high-frequency scenarios
             if self.state_lock.acquire(timeout=0.002):
                 try:
-                    # Update current state
-                    self.current_x = msg.pose.pose.position.x
-                    self.current_y = msg.pose.pose.position.y
-                    self.current_theta = euler_angles[2]
+                    # Update current state with potentially noisy values
+                    self.current_x = noisy_x      # Noisy state
+                    self.current_y = noisy_y
+                    self.current_theta = noisy_theta
+                    
+                    # Update real state values (without noise)
+                    self.true_x = true_x          # Real state
+                    self.true_y = true_y
+                    self.true_theta = true_theta
+                    
                     self.last_update_time = now
                     self.last_update_time_ns = now_ns
-                    
-                    # Always notify waiting threads - they will check the condition themselves
+                    self.odom_update_count += 1
+                    # Notify waiting threads
                     self.state_cv.notify_all()
                 finally:
                     self.state_lock.release()
             else:
-                # Skip this update if lock is busy - this prevents odometry processing backlog
-                # in high-frequency scenarios
+                # Skip this update if lock is busy - prevents odometry processing backlog
                 pass
                 
         except Exception as e:

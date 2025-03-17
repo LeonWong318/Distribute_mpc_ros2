@@ -200,7 +200,7 @@ class MultiTopicMessageBuffer(Node, QWidget):
         heapq.heappush(self._buffers[topic_id], (release_time, msg))
         
         # Log information about buffered message
-        self.get_logger().info(f"Buffered {topic_id} message with delay: {delay:.2f} sec")
+        self.get_logger().debug(f"Buffered {topic_id} message with delay: {delay:.2f} sec")
     
     def publish_pending_msgs(self):
         """Publishes messages whose delay time has expired for all topics."""
@@ -215,7 +215,7 @@ class MultiTopicMessageBuffer(Node, QWidget):
             while buffer and buffer[0][0] <= now:
                 _, msg = heapq.heappop(buffer)
                 self._publishers[topic_id].publish(msg)
-                self.get_logger().info(f"Published delayed {topic_id} message")
+                self.get_logger().debug(f"Published delayed {topic_id} message")
     
     def init_gui(self):
         """Initialize the GUI for adjusting delay parameters."""

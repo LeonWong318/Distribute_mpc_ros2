@@ -241,7 +241,7 @@ class ClusterNode(Node):
             if self._last_state_update_time is None or current_stamp > self._last_state_update_time:
                 self._state = np.array([x, y, theta])
                 self._last_state_update_time = current_stamp
-                self.get_logger().info(f'Updated state from {source}')
+                self.get_logger().debug(f'Updated state from {source}')
                 return True
             else:
                 self.get_logger().warn(f'Unusual: Current time {current_stamp} not greater than last update time {self._last_state_update_time}')
@@ -255,7 +255,7 @@ class ClusterNode(Node):
                     self.other_robot_states[state.robot_id] = state
                 else:
                     if self.update_robot_state(state.x, state.y, state.theta, msg.stamp, "manager"):
-                        self.get_logger().info(f'Updated state from manager: x={state.x}, y={state.y}, theta={state.theta}')
+                        self.get_logger().debug(f'Updated state from manager: x={state.x}, y={state.y}, theta={state.theta}')
         except Exception as e:
             self.get_logger().error(f'Error processing robot states: {str(e)}')
     
@@ -270,7 +270,7 @@ class ClusterNode(Node):
             self.robot_state = msg
             self.idle = msg.idle
             if self.update_robot_state(msg.x, msg.y, msg.theta, msg.stamp, "local robot"):
-                self.get_logger().info(f'Updated robot state: x={msg.x}, y={msg.y}, theta={msg.theta}')
+                self.get_logger().debug(f'Updated robot state: x={msg.x}, y={msg.y}, theta={msg.theta}')
             self.publish_state_to_manager(msg.stamp)
 
         except Exception as e:

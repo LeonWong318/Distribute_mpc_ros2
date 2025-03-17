@@ -34,8 +34,8 @@ class MultiRobotSpawner(Node):
         self.spawn_all_robots()
         
         # Start converter nodes for each robot
-        self.start_converters()
-        #self.start_converters_with_terminal()
+        #self.start_converters()
+        self.start_converters_with_terminal()
 
     def load_robot_positions(self):
         """ Loads multiple robot initial positions from a JSON file """
@@ -177,58 +177,57 @@ class MultiRobotSpawner(Node):
             self.get_logger().error("Failed to spawn any robots!")
     
     def start_converters_with_terminal(self):
-        """Start converter nodes for each successfully spawned robot"""
+        """Start converter nodes for each successfully spawned robot using a terminal and ros2 launch"""
         self.converter_processes = []
-        
+
         for robot_id in self.spawned_robots:
             try:
-                # Launch a converter process for this robot
                 cmd = [
                     'gnome-terminal', '--', 'bash', '-c',
-                    f'ros2 run obj_gazebo_simulation gazebo_converter --ros-args -p robot_id:={robot_id}; exec bash'
+                    f'ros2 launch obj_gazebo_simulation gazebo_converter.launch.py robot_id:={robot_id}; exec bash'
                 ]
-                
+
                 process = subprocess.Popen(
                     cmd, 
                     stdout=subprocess.PIPE,
                     stderr=subprocess.PIPE,
                     text=True
                 )
-                
+
                 self.converter_processes.append(process)
-                                
+                self.get_logger().info(f"Started converter for robot: {robot_id}")
+
             except Exception as e:
                 self.get_logger().error(f"Failed to start converter for robot {robot_id}: {str(e)}")
-        
-        self.get_logger().info("All converters started")
-    
+
+        self.get_logger().info("All converters started with launch files")
+
     def start_converters(self):
-        """Start converter nodes for each successfully spawned robot"""
+        """Start converter nodes for each successfully spawned robot using ros2 launch without terminal"""
         self.converter_processes = []
-        
+
         for robot_id in self.spawned_robots:
             try:
-                # Launch a converter process for this robot
-                
                 cmd = [
-                    'ros2', 'run', 
-                    'obj_gazebo_simulation', 'gazebo_converter',
-                    '--ros-args', '-p', f'robot_id:={robot_id}'
+                    'ros2', 'launch', 
+                    'obj_gazebo_simulation', 'gazebo_converter.launch.py',
+                    f'robot_id:={robot_id}'
                 ]
-                
+
                 process = subprocess.Popen(
                     cmd, 
                     stdout=subprocess.PIPE,
                     stderr=subprocess.PIPE,
                     text=True
                 )
-                
+
                 self.converter_processes.append(process)
-                                
+                self.get_logger().info(f"Started converter for robot: {robot_id}")
+
             except Exception as e:
                 self.get_logger().error(f"Failed to start converter for robot {robot_id}: {str(e)}")
-        
-        self.get_logger().info("All converters started")
+
+        self.get_logger().info("All converters started with launch files")
         
     def __del__(self):
         """Clean up processes when the node is destroyed"""

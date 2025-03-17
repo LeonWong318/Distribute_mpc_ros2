@@ -354,10 +354,33 @@ class RobotNode(Node):
             # Mark trajectory as received
             self.trajectory_received = True
             
-            # Store current trajectory
-            self.current_trajectory = msg
+            # Check if state is initialized
+            if self._state is None:
+                self.get_logger().warn('Received trajectory but state is not initialized yet')
+                self.current_trajectory = msg
+                return
             
-            self.get_logger().debug(f'Received trajectory with {len(msg.x)} points')
+            # Calculate minimum distance between current state and trajectory points
+            min_distance = float('inf')
+            current_position = np.array([self._state[0], self._state[1]])
+
+            for i in range(len(msg.x)):
+                traj_point = np.array([msg.x[i], msg.y[i]])
+                distance = np.linalg.norm(current_position - traj_point)
+                min_distance = min(min_distance, distance)
+
+            # Define threshold for acceptable distance (you can make this a parameter)
+            distance_threshold = 1.0  # meters
+
+            if min_distance > distance_threshold:
+                self.get_logger().warn(f'Current position too far from trajectory (min distance: {min_distance:.2f}m). Stopping robot until next update.')
+                self.execute_stop()
+                self.current_trajectory = None
+            else:
+                # Store current trajectory if distance is acceptable
+                self.current_trajectory = msg
+                self.get_logger().debug(f'Received valid trajectory with {len(msg.x)} points (min distance: {min_distance:.2f}m)')
+
             
         except Exception as e:
             self.get_logger().error(f'Error in trajectory_callback: {str(e)}')
@@ -373,6 +396,8 @@ class RobotNode(Node):
             
             # Check if trajectory and state are available
             if self.current_trajectory is None:
+                # traj is None when first initialization or state/traj separate
+                self.send_command_to_gazebo(0, 0) 
                 return
             
             # Get current position and heading
