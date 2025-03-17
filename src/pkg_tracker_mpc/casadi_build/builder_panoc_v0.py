@@ -31,7 +31,7 @@ class PanocBuilder:
         build: Build the MPC problem and solver.
     """
     _large_weight = 1000
-    _small_weight = 10
+    _small_weight = 100
 
     def __init__(self, mpc_config: MpcConfiguration, robot_config: CircularRobotSpecification):
         self._cfg = mpc_config

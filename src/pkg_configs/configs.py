@@ -109,6 +109,8 @@ class MpcConfiguration(_Configuration):
         self.qdynobs = config.qdynobs                   # Cost for dynamic obstacle avoidance
         self.qpN = config.qpN                           # Terminal cost; error relative to final reference position       
         self.qthetaN = config.qthetaN                   # Terminal cost; error relative to final reference heading
+        self.qorobot = config.qorobot                   # Cost for other robot
+        self.qpredrobot = config.qpredrobot             # COst for other robot's predicted trajectory
 
 ### Agent Specifications
 class CircularRobotSpecification(_Configuration):

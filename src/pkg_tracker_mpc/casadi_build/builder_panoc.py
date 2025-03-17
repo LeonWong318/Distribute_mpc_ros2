@@ -30,8 +30,8 @@ class PanocBuilder:
         load_motion_model: Load the motion model for the MPC problem.
         build: Build the MPC problem and solver.
     """
-    _large_weight = 1000
-    _small_weight = 100
+    # _large_weight = 1000
+    # _small_weight = 300
 
     def __init__(self, mpc_config: MpcConfiguration, robot_config: CircularRobotSpecification):
         self._cfg = mpc_config
@@ -41,7 +41,7 @@ class PanocBuilder:
         self.ns = self._cfg.ns        # number of states
         self.nu = self._cfg.nu        # number of inputs
         self.N_hor = self._cfg.N_hor  # control/pred horizon
-
+        
         self._load_variables()
 
     @classmethod
@@ -71,6 +71,7 @@ class PanocBuilder:
         self._o_d = ca.SX.sym('od', self._cfg.Ndynobs*self._cfg.ndynobs*(N+1))  # 10. Dynamic obstacles
         self._q_stc = ca.SX.sym('qstc', N) # 11. Static obstacle weights
         self._q_dyn = ca.SX.sym('qdyn', N) # 12. Dynamic obstacle weights
+        
 
         self._z = ca.vertcat(self._u_m1, self._s_0, self._s_N, self._q, 
                              self._r_s, self._r_v, 
@@ -78,7 +79,8 @@ class PanocBuilder:
                              self._o_s, self._o_d, self._q_stc, self._q_dyn)
         self._z = cast(ca.SX, self._z)
         self._num_params = self._z.shape[0]
-
+        self._large_weight = self._cfg.qorobot
+        self._small_weight = self._cfg.qpredrobot
         self._q_terms = PenaltyTerms(
             pos=self._q[0], 
             vel=self._q[1], 

@@ -26,7 +26,7 @@ def generate_launch_description():
         name='robot_cluster',
         parameters=[{
             'robot_id': LaunchConfiguration('robot_id'),
-            'control_frequency': 1.0,
+            'control_frequency': 2.0,
             'mpc_config_path': "config/mpc_default.yaml",
             'robot_config_path': "config/spec_robot.yaml",
             'map_path': LaunchConfiguration('map_path'),
