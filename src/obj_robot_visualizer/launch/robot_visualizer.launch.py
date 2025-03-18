@@ -45,7 +45,8 @@ def generate_launch_description():
             'map_path': LaunchConfiguration('map_path'),
             'graph_path': LaunchConfiguration('graph_path'),
             'robot_start_path': LaunchConfiguration('robot_start_path'),
-            'robot_spec_path': LaunchConfiguration('robot_spec_path')
+            'robot_spec_path': LaunchConfiguration('robot_spec_path'),
+            'path_min_distance': 0.1
         }],
         output='screen'
     )
