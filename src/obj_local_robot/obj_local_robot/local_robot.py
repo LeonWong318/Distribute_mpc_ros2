@@ -13,6 +13,7 @@ import time
 import asyncio
 from pkg_local_control.pure_pursuit import PurePursuit
 from pkg_local_control.lqr import LQRController
+from pkg_local_control.lqr_update import LQR_Update_Controller
 
 from msg_interfaces.msg import ClusterToRobotTrajectory, RobotToClusterState, ClusterBetweenRobotHeartBeat
 from msg_interfaces.srv import RegisterRobot, ExecuteCommand
@@ -83,7 +84,12 @@ class RobotNode(Node):
                 ('lqr_q_pos', 1.0),
                 ('lqr_q_theta', 0.5),
                 ('lqr_r_v', 0.1),
-                ('lqr_r_omega', 0.1)
+                ('lqr_r_omega', 0.1),
+                ('lqr_update_q_pos', 1.0),
+                ('lqr_update_q_theta', 0.5),
+                ('lqr_update_r_v', 0.1),
+                ('lqr_update_r_omega', 0.1),
+                ('lqr_lookahead_dist',1)
             ]
         )
         
@@ -111,6 +117,13 @@ class RobotNode(Node):
         self.lqr_q_theta = self.get_parameter('lqr_q_theta').value
         self.lqr_r_v = self.get_parameter('lqr_r_v').value
         self.lqr_r_omega = self.get_parameter('lqr_r_omega').value
+
+        # Get lqr update parameters
+        self.lqr_update_q_pos = self.get_parameter('lqr_update_q_pos').value
+        self.lqr_update_q_theta = self.get_parameter('lqr_update_q_theta').value
+        self.lqr_update_r_v = self.get_parameter('lqr_update_r_v').value
+        self.lqr_update_r_omega = self.get_parameter('lqr_update_r_omega').value
+        self.lqr_lookahead_dist = self.get_parameter('lqr_lookahead_dist').value
         
         # Load robot configuration
         self.config_robot = CircularRobotSpecification.from_yaml(self.robot_config_path)
@@ -200,6 +213,11 @@ class RobotNode(Node):
         Q = np.diag([self.lqr_q_pos, self.lqr_q_pos, self.lqr_q_theta])
         R = np.diag([self.lqr_r_v, self.lqr_r_omega])
         self.lqr_controller = LQRController(self.ts, Q, R, self.max_velocity)
+
+        # Initialize LQR update controller
+        Q_update = np.diag([self.lqr_update_q_pos, self.lqr_update_q_pos, self.lqr_update_q_theta])
+        R_update = np.diag([self.lqr_update_r_v, self.lqr_update_r_omega])
+        self.lqr_update_controller = LQR_Update_Controller(self.ts,Q_update,R_update, self.max_velocity, self.lqr_lookahead_dist)
         
         # TODO:Initialize CBF controller if needed in the future
         # self.cbf_controller = ...
@@ -423,6 +441,12 @@ class RobotNode(Node):
                 )
             elif self.controller_type == 'lqr':
                 v, omega = self.lqr_controller.compute_control_commands(
+                    current_position,
+                    current_heading,
+                    trajectory_list
+                )
+            elif self.controller_type == 'lqr_update':
+                v, omega = self.lqr_update_controller.compute_control_commands(
                     current_position,
                     current_heading,
                     trajectory_list
