@@ -1,7 +1,7 @@
 import rclpy
 from rclpy.node import Node
 from visualization_msgs.msg import MarkerArray, Marker
-from msg_interfaces.msg import ManagerToClusterStateSet
+from msg_interfaces.msg import ManagerToClusterStateSet, GazeboToManagerState
 from geometry_msgs.msg import Point
 from tf2_ros import TransformBroadcaster
 from geometry_msgs.msg import TransformStamped
@@ -68,14 +68,21 @@ class RobotStateVisualizer(Node):
         
         self.tf_broadcaster = TransformBroadcaster(self)
         
-        self.subscription = self.create_subscription(
+        # Store robot real state subscriptions
+        self.real_state_subscriptions = {}
+        # Store robot real states
+        self.robot_real_states = {}
+        
+        # Original subscription for planned trajectories
+        self.trajectory_subscription = self.create_subscription(
             ManagerToClusterStateSet,
             '/manager/robot_states',
-            self.robot_states_callback,
+            self.robot_trajectories_callback,
             10
         )
         
         self.static_timer = self.create_timer(1.0, self.publish_static_markers)
+        self.visualization_timer = self.create_timer(0.1, self.publish_robot_visualization)
         
         self.map_data = None
         self.graph_data = None
@@ -85,11 +92,54 @@ class RobotStateVisualizer(Node):
         # Dictionary to store robot path histories
         # Format: {robot_id: [(x1, y1), (x2, y2), ...]}
         self.robot_paths = {}
+        # Dictionary to store planned trajectories
+        # Format: {robot_id: [(x1, y1), (x2, y2), ...]}
+        self.robot_trajectories = {}
         
         self.load_data()
+        self.create_robot_subscriptions()
         
-        self.get_logger().info('Robot state visualizer initialized')
+        self.get_logger().info('Enhanced robot state visualizer initialized')
         self.get_logger().info(f'Path tracking enabled with min distance: {self.path_min_distance}m')
+    
+    def create_robot_subscriptions(self):
+        """Create individual subscriptions for each robot's real state"""
+        if not self.robot_start_data:
+            self.get_logger().warn('No robot start data available, cannot create real state subscriptions')
+            return
+            
+        for robot_id_str in self.robot_start_data:
+            try:
+                robot_id = int(robot_id_str)
+                # Create a subscription for this robot
+                subscription = self.create_subscription(
+                    GazeboToManagerState,
+                    f'/robot_{robot_id}/real_state',
+                    lambda msg, rid=robot_id: self.robot_real_state_callback(msg, rid),
+                    10
+                )
+                self.real_state_subscriptions[robot_id] = subscription
+                self.get_logger().info(f'Created subscription for robot {robot_id} real state')
+            except ValueError:
+                self.get_logger().error(f'Invalid robot ID in robot_start.json: {robot_id_str}')
+    
+    def robot_real_state_callback(self, msg, robot_id):
+        """Callback for individual robot real state messages"""
+        # Store the real state
+        self.robot_real_states[robot_id] = msg
+        
+        # Update path history for this robot
+        x = msg.x
+        y = msg.y
+        
+        # Initialize path list if this is a new robot
+        if robot_id not in self.robot_paths:
+            self.robot_paths[robot_id] = []
+        
+        # Add position to path if it's far enough from the last recorded point
+        if self.should_add_to_path(robot_id, x, y):
+            self.robot_paths[robot_id].append((x, y))
+            self.get_logger().debug(f'Added new path point for robot {robot_id}: ({x}, {y})')
     
     def load_data(self):
         try:
@@ -302,9 +352,6 @@ class RobotStateVisualizer(Node):
 
                             marker_array.markers.append(edge_marker)
 
-        # Add path history markers to the array
-        self.publish_path_markers(marker_array)
-
         if marker_array.markers:
             self.marker_publisher.publish(marker_array)
     
@@ -350,60 +397,103 @@ class RobotStateVisualizer(Node):
             
             marker_array.markers.append(path_marker)
     
-    def robot_states_callback(self, msg):
+    def publish_trajectory_markers(self, marker_array):
+        """Create and add trajectory markers to the marker array"""
+        for robot_id, trajectory_points in self.robot_trajectories.items():
+            if len(trajectory_points) < 2:
+                continue
+            
+            trajectory_marker = Marker()
+            trajectory_marker.header.frame_id = "map"
+            trajectory_marker.header.stamp = self.get_clock().now().to_msg()
+            trajectory_marker.ns = "trajectories"
+            trajectory_marker.id = robot_id
+            trajectory_marker.type = Marker.LINE_STRIP
+            trajectory_marker.action = Marker.ADD
+            
+            trajectory_marker.scale.x = 0.05  # Line width
+            
+            # Orange color for planned trajectories
+            trajectory_marker.color.r = 1.0
+            trajectory_marker.color.g = 0.5
+            trajectory_marker.color.b = 0.0
+            trajectory_marker.color.a = 0.7  # Slightly transparent
+            
+            # Add all points in the trajectory
+            for point in trajectory_points:
+                p = Point()
+                p.x = point[0]
+                p.y = point[1]
+                p.z = 0.05  # Slightly above ground to avoid z-fighting
+                trajectory_marker.points.append(p)
+            
+            marker_array.markers.append(trajectory_marker)
+    
+    def robot_trajectories_callback(self, msg):
+        """Callback for robot planned trajectories"""
+        # Extract and store planned trajectories from the message
+        for robot_state in msg.robot_states:
+            robot_id = robot_state.robot_id
+            
+            # If there are predicted states, convert them to trajectory points
+            if len(robot_state.pred_states) > 0:
+                trajectory_points = []
+                # Start from current robot position
+                trajectory_points.append((robot_state.x, robot_state.y))
+                
+                # Add the predicted states (taking only x, y coordinates)
+                for i in range(0, len(robot_state.pred_states), 3):
+                    if i + 1 < len(robot_state.pred_states):
+                        x = robot_state.pred_states[i]
+                        y = robot_state.pred_states[i + 1]
+                        trajectory_points.append((x, y))
+                
+                self.robot_trajectories[robot_id] = trajectory_points
+    
+    def publish_robot_visualization(self):
+        """Publish all robot visualization markers at a fixed rate"""
         marker_array = MarkerArray()
         
-        for robot_state in msg.robot_states:
-            # Update path history for this robot
-            robot_id = robot_state.robot_id
-            x = robot_state.x
-            y = robot_state.y
-            
-            # Initialize path list if this is a new robot
-            if robot_id not in self.robot_paths:
-                self.robot_paths[robot_id] = []
-            
-            # Add position to path if it's far enough from the last recorded point
-            if self.should_add_to_path(robot_id, x, y):
-                self.robot_paths[robot_id].append((x, y))
-                self.get_logger().debug(f'Added new path point for robot {robot_id}: ({x}, {y})')
-            
+        # Visualize robot real states
+        for robot_id, state_msg in self.robot_real_states.items():
+            # 1. Robot circle (representing size)
             robot_circle = Marker()
             robot_circle.header.frame_id = "map"
-            robot_circle.header.stamp = msg.stamp
+            robot_circle.header.stamp = self.get_clock().now().to_msg()
             robot_circle.ns = "robot_size"
-            robot_circle.id = robot_state.robot_id
+            robot_circle.id = robot_id
             robot_circle.type = Marker.CYLINDER
             robot_circle.action = Marker.ADD
             
-            robot_circle.pose.position.x = robot_state.x
-            robot_circle.pose.position.y = robot_state.y
+            robot_circle.pose.position.x = state_msg.x
+            robot_circle.pose.position.y = state_msg.y
             robot_circle.pose.position.z = 0.05
             
             robot_circle.scale.x = self.vehicle_width
             robot_circle.scale.y = self.vehicle_width
             robot_circle.scale.z = 0.5
             
-            robot_circle.color.r = 1.0
-            robot_circle.color.g = 1.0
-            robot_circle.color.b = 0.0
+            robot_circle.color.r = 0.0
+            robot_circle.color.g = 0.7
+            robot_circle.color.b = 0.2
             robot_circle.color.a = 0.9
             
             marker_array.markers.append(robot_circle)
             
+            # 2. Robot direction arrow
             robot_marker = Marker()
             robot_marker.header.frame_id = "map"
-            robot_marker.header.stamp = msg.stamp
+            robot_marker.header.stamp = self.get_clock().now().to_msg()
             robot_marker.ns = "robots"
-            robot_marker.id = robot_state.robot_id
+            robot_marker.id = robot_id
             robot_marker.type = Marker.ARROW
             robot_marker.action = Marker.ADD
             
-            robot_marker.pose.position.x = robot_state.x
-            robot_marker.pose.position.y = robot_state.y
+            robot_marker.pose.position.x = state_msg.x
+            robot_marker.pose.position.y = state_msg.y
             robot_marker.pose.position.z = 0.1
             
-            q = quaternion_from_euler(0, 0, robot_state.theta)
+            q = quaternion_from_euler(0, 0, state_msg.theta)
             robot_marker.pose.orientation.x = q[0]
             robot_marker.pose.orientation.y = q[1]
             robot_marker.pose.orientation.z = q[2]
@@ -414,28 +504,24 @@ class RobotStateVisualizer(Node):
             robot_marker.scale.z = 0.1 
             
             robot_marker.color.a = 1.0
-            if robot_state.idle:
-                robot_marker.color.r = 0.0
-                robot_marker.color.g = 0.0
-                robot_marker.color.b = 1.0
-            else:
-                robot_marker.color.r = 0.0
-                robot_marker.color.g = 1.0
-                robot_marker.color.b = 0.0
+            robot_marker.color.r = 0.0
+            robot_marker.color.g = 1.0
+            robot_marker.color.b = 0.0
             
             marker_array.markers.append(robot_marker)
             
+            # 3. Robot label
             text_marker = Marker()
             text_marker.header.frame_id = "map"
-            text_marker.header.stamp = msg.stamp
+            text_marker.header.stamp = self.get_clock().now().to_msg()
             text_marker.ns = "robot_ids"
-            text_marker.id = robot_state.robot_id
+            text_marker.id = robot_id
             text_marker.type = Marker.TEXT_VIEW_FACING
             text_marker.action = Marker.ADD
-            text_marker.pose.position.x = robot_state.x
-            text_marker.pose.position.y = robot_state.y
+            text_marker.pose.position.x = state_msg.x
+            text_marker.pose.position.y = state_msg.y
             text_marker.pose.position.z = 0.3
-            text_marker.text = f"Robot {robot_state.robot_id}"
+            text_marker.text = f"Robot {robot_id}"
             text_marker.scale.z = 0.2
             text_marker.color.a = 1.0
             text_marker.color.r = 1.0
@@ -443,38 +529,14 @@ class RobotStateVisualizer(Node):
             text_marker.color.b = 1.0
             marker_array.markers.append(text_marker)
             
-            if len(robot_state.pred_states) > 0:
-                trajectory_marker = Marker()
-                trajectory_marker.header.frame_id = "map"
-                trajectory_marker.header.stamp = msg.stamp
-                trajectory_marker.ns = "trajectories"
-                trajectory_marker.id = robot_state.robot_id
-                trajectory_marker.type = Marker.LINE_STRIP
-                trajectory_marker.action = Marker.ADD
-                
-                trajectory_marker.scale.x = 0.05 
-                trajectory_marker.color.a = 0.7 
-                trajectory_marker.color.r = 1.0
-                trajectory_marker.color.g = 0.5
-                trajectory_marker.color.b = 0.0
-
-                for i in range(0, len(robot_state.pred_states), 3):
-                    if i + 1 < len(robot_state.pred_states):
-                        p = Point()
-                        p.x = robot_state.pred_states[i]
-                        p.y = robot_state.pred_states[i + 1]
-                        p.z = 0.05
-                        trajectory_marker.points.append(p)
-                
-                marker_array.markers.append(trajectory_marker)
-            
+            # 4. TF transform
             transform = TransformStamped()
             transform.header.frame_id = "map"
-            transform.header.stamp = msg.stamp
-            transform.child_frame_id = f"robot_{robot_state.robot_id}"
+            transform.header.stamp = self.get_clock().now().to_msg()
+            transform.child_frame_id = f"robot_{robot_id}"
             
-            transform.transform.translation.x = robot_state.x
-            transform.transform.translation.y = robot_state.y
+            transform.transform.translation.x = state_msg.x
+            transform.transform.translation.y = state_msg.y
             transform.transform.translation.z = 0.0
             
             transform.transform.rotation.x = q[0]
@@ -484,10 +546,15 @@ class RobotStateVisualizer(Node):
             
             self.tf_broadcaster.sendTransform(transform)
         
-        # Add path history markers to the array
+        # Add path history markers
         self.publish_path_markers(marker_array)
         
-        self.marker_publisher.publish(marker_array)
+        # Add trajectory markers 
+        self.publish_trajectory_markers(marker_array)
+        
+        # Publish all markers
+        if marker_array.markers:
+            self.marker_publisher.publish(marker_array)
 
 def main(args=None):
     rclpy.init(args=args)
