@@ -24,39 +24,7 @@ class CBF_LQR_Controller:
         # Define the optimizer
         self.optimizer = self.build_optimizer()
 
-    def build_optimizer(self):
-        """ Build the OpEn optimizer for nonlinear LQR + CBF. """
-
-        def cost_function(u, p):
-            x, y, theta, x_ref, y_ref, v_ref, omega_ref = p[:7]
-            v, omega = u[0], u[1]
-
-            # Quadratic cost based on state deviation and control effort
-            state_error = np.array([x - x_ref, y - y_ref])
-            control_error = np.array([v - v_ref, omega - omega_ref])
-            Q = np.diag([self.Q[0], self.Q[1]])  # State weight
-            R = np.diag([self.R[0], self.R[1]])  # Control weight
-
-            return control_error.T @ R @ control_error + state_error.T @ Q @ state_error
-
-        def cbf_constraint(u, p):
-            x, y, theta, _, _, _, _, x_o, y_o, alpha = p
-
-            v, omega = u[0], u[1]
-
-            h = self.d_safe**2 - (x - x_o)**2 - (y - y_o)**2
-            dh_dt = 2 * (x - x_o) * v * np.cos(theta) + 2 * (y - y_o) * v * np.sin(theta)
-
-            return [dh_dt + alpha * h]
-
-        # Configure the optimizer
-        builder = og.Builder()
-        builder.add_cost_function(cost_function)
-        builder.add_constraint_function(cbf_constraint)
-        builder.add_bounds([-self.max_velocity, -1.0], [self.max_velocity, 1.0])
-
-        return builder.build()
-
+    
     def compute_control(self, x, x_ref, u_ref, obstacles):
         """
         Solve the QP for the optimal control input.

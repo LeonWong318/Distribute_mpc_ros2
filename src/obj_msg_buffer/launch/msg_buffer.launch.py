@@ -24,7 +24,7 @@ def generate_launch_description():
     
     mean_delay_arg = DeclareLaunchArgument(
         'mean_delay',
-        default_value='0.2'
+        default_value='.3'
     )
     
     # === Node Configuration ===

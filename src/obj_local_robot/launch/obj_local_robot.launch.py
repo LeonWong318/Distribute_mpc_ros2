@@ -21,7 +21,7 @@ def generate_launch_description():
     # Controller type argument
     controller_type_arg = DeclareLaunchArgument(
         'controller_type',
-        default_value='pure_pursuit' # choose pure_pursuit/cbf/lqr/lqr_update
+        default_value='lqr' # choose pure_pursuit/cbf/lqr/lqr_update
     )
     
     # === Node Configuration ===
@@ -52,7 +52,7 @@ def generate_launch_description():
             
             # --- Pure Pursuit Parameters ---
             'lookahead_distance': .8,
-            'alpha': 0.0,  # Tuning parameter for velocity reduction at high curvature
+            'alpha': 0.1,  # Tuning parameter for velocity reduction at high curvature
             
             # --- LQR Parameters ---
             'lqr_q_pos': 1000.0,    # Position error weight
