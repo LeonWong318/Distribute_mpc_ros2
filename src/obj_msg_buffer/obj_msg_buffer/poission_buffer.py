@@ -2,6 +2,8 @@ import rclpy
 import heapq
 import numpy as np
 import sys
+import json
+import os
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, QoSReliabilityPolicy, QoSHistoryPolicy, QoSDurabilityPolicy
 from rclpy.callback_groups import ReentrantCallbackGroup
@@ -14,13 +16,9 @@ from PyQt5.QtCore import Qt, QTimer
 
 # Import the message types used in your cluster system
 from msg_interfaces.msg import (
-    ClusterToManagerState,
-    ManagerToClusterStateSet,
     ClusterToRobotTrajectory,
     RobotToClusterState,
-    ManagerToClusterStart,
     ClusterBetweenRobotHeartBeat,
-    GazeboToManagerState
 )
 
 class TopicConfig:
@@ -40,13 +38,21 @@ class MultiTopicMessageBuffer(Node, QWidget):
         self.declare_parameters(
             namespace='',
             parameters=[
-                ('num_robots', 2),
+                ('robot_start_path', ''),  # Path to the robot_start.json file
                 ('enable_gui', True),
                 ('mean_delay', 0.2)
             ]
         )
         
-        self.num_robots = self.get_parameter('num_robots').value
+        # Get robot IDs from JSON file
+        robot_start_path = self.get_parameter('robot_start_path').value
+        if not robot_start_path:
+            self.get_logger().error('robot_start_path parameter is required')
+            raise ValueError('robot_start_path parameter is required')
+            
+        self.robot_ids = self.load_robot_ids(robot_start_path)
+        self.get_logger().info(f'Loaded {len(self.robot_ids)} robot IDs: {self.robot_ids}')
+        
         self.enable_gui = self.get_parameter('enable_gui').value
         self.mean_delay = self.get_parameter('mean_delay').value
 
@@ -103,11 +109,37 @@ class MultiTopicMessageBuffer(Node, QWidget):
         
         self.get_logger().info("Multi-Topic Message Buffer Started")
     
+    def load_robot_ids(self, config_path):
+        """Load robot IDs from a JSON file."""
+        try:
+            # Check if file exists
+            if not os.path.exists(config_path):
+                self.get_logger().error(f'Robot configuration file not found: {config_path}')
+                raise FileNotFoundError(f'Robot configuration file not found: {config_path}')
+            
+            # Load and parse JSON
+            with open(config_path, 'r') as f:
+                config = json.load(f)
+            
+            # Extract and convert robot IDs to integers
+            robot_ids = [int(robot_id) for robot_id in config.keys()]
+            
+            if not robot_ids:
+                self.get_logger().error('No robot IDs found in configuration file')
+                raise ValueError('No robot IDs found in configuration file')
+                
+            return robot_ids
+            
+        except json.JSONDecodeError as e:
+            self.get_logger().error(f'Failed to parse robot configuration file: {e}')
+            raise ValueError(f'Failed to parse robot configuration file: {e}')
+        except Exception as e:
+            self.get_logger().error(f'Error loading robot configuration: {e}')
+            raise
+    
     def setup_topic_configs(self):
-        
-        
         # For each robot, set up the topics
-        for robot_id in range(self.num_robots):
+        for robot_id in self.robot_ids:
             # Cluster to Robot topics
             self._topic_configs[f"cluster_{robot_id}_trajectory"] = TopicConfig(
                 ClusterToRobotTrajectory,
@@ -143,7 +175,6 @@ class MultiTopicMessageBuffer(Node, QWidget):
             )
             
             # Gazebo to Manager topics
-
             self._topic_configs[f"robot_{robot_id}_sim_state"] = TopicConfig(
                 ClusterBetweenRobotHeartBeat,
                 f"/robot_{robot_id}/sim_state",
@@ -151,7 +182,6 @@ class MultiTopicMessageBuffer(Node, QWidget):
                 True,
                 self.mean_delay
             )
-            
     
     def setup_pub_sub(self):
         # Create a buffer, subscriber and publisher for each topic
@@ -261,11 +291,9 @@ class MultiTopicMessageBuffer(Node, QWidget):
         
         # Create a section for each topic category
         categories = {
-            
             "Cluster to Robot": [t for t in self._topic_configs if "cluster" in t],
             "Robot to Cluster": [t for t in self._topic_configs if "robot" in t and not "sim" in t],
             "Gazebo to Manager": [t for t in self._topic_configs if "sim" in t]
-            
         }
         
         # Create widgets for each topic
@@ -363,22 +391,28 @@ class MultiTopicMessageBuffer(Node, QWidget):
 def main(args=None):
     rclpy.init(args=args)
     
-    buffer_node = MultiTopicMessageBuffer()
-    
-    if buffer_node.enable_gui:
-        # Run with Qt event loop if GUI is enabled
-        app = QApplication(sys.argv if args is None else args)
-        buffer_node.show()
-        app.exec_()
-    else:
-        # Run with regular ROS2 spin if GUI is disabled
-        try:
-            rclpy.spin(buffer_node)
-        except KeyboardInterrupt:
-            pass
-    
-    buffer_node.destroy_node()
-    rclpy.shutdown()
+    try:
+        buffer_node = MultiTopicMessageBuffer()
+        
+        if buffer_node.enable_gui:
+            # Run with Qt event loop if GUI is enabled
+            app = QApplication(sys.argv if args is None else args)
+            buffer_node.show()
+            app.exec_()
+        else:
+            # Run with regular ROS2 spin if GUI is disabled
+            try:
+                rclpy.spin(buffer_node)
+            except KeyboardInterrupt:
+                pass
+        
+        buffer_node.destroy_node()
+    except Exception as e:
+        import traceback
+        print(f"Error initializing buffer node: {e}")
+        print(traceback.format_exc())
+    finally:
+        rclpy.shutdown()
 
 if __name__ == '__main__':
     main()

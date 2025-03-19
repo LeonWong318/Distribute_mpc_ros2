@@ -21,7 +21,7 @@ def generate_launch_description():
     # Controller type argument
     controller_type_arg = DeclareLaunchArgument(
         'controller_type',
-        default_value='lqr' # choose pure_pursuit/cbf/lqr/lqr_update
+        default_value='pure_pursuit' # choose pure_pursuit/cbf/lqr/lqr_update
     )
     
     # === Node Configuration ===
