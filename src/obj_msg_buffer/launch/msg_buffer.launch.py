@@ -20,7 +20,7 @@ def generate_launch_description():
         parameters=[
                 {'num_robots': 2},
                 {'enable_gui': True},
-                {'mean_delay': 0.0}
+                {'mean_delay': 2.0}
             ],
         output='screen'
     )
