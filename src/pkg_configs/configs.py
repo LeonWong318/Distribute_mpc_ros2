@@ -131,3 +131,37 @@ class CircularRobotSpecification(_Configuration):
         self.lin_acc_max = config.lin_acc_max
         self.ang_vel_max = config.ang_vel_max
         self.ang_acc_max = config.ang_acc_max
+
+### CBF config
+class CBFconfig(_Configuration):
+    """CBF solver configuration"""
+    
+    def __init__(self, config: Configurator):
+        super().__init__(config)
+        self._load_config()
+    
+    def _load_config(self):
+        """Load configuration from the configurator"""
+        config = self._config
+        
+        # State weights
+        self.Q = config.Q
+        self.R = config.R
+        
+        # Safety parameters
+        self.d_safe = config.d_safe
+        self.max_velocity = config.max_velocity
+        self.max_angular_velocity = config.max_angular_velocity
+        
+        # CBF parameters
+        # self.alpha = config.alpha
+        
+        # Solver parameters
+        self.solver_tolerance = config.tolerance
+        self.max_inner_iterations = config.max_inner_iterations
+        self.max_outer_iterations = config.max_outer_iterations
+        self.initial_penalty = config.initial_penalty
+        self.penalty_update_factor = config.penalty_update_factor
+        
+        # Output directory
+        self.output_dir = config.output_dir

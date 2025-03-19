@@ -1,0 +1,27 @@
+# CBF-LQR Controller Configuration
+
+# Controller Parameters
+
+# LQR cost weights
+Q: [1.0, 1.0, 0.5]  # State error weights [x, y, theta]
+R: [0.1, 0.1]  # Control input weights [v, omega]
+  
+# Safety Parameters
+d_safe: 0.5  # Safe distance to obstacles (meters)
+max_velocity: 1.0  # Maximum linear velocity (m/s)
+max_angular_velocity: 1.0  # Maximum angular velocity (rad/s)
+  
+# Solver Parameters
+  
+tolerance: 1.0e-4
+max_inner_iterations: 500
+max_outer_iterations: 10
+initial_penalty: 1.0
+penalty_update_factor: 5.0
+
+# Output Directory
+output_dir: "cbf_solver"
+
+# Robot Parameters
+wheelbase: 0.3  # Distance between front and rear wheels (meters)
+max_steering_angle: 0.5  # Maximum steering angle (radians)
