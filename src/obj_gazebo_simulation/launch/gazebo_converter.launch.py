@@ -31,7 +31,7 @@ def generate_launch_description():
     
     enable_noise_arg = DeclareLaunchArgument(
         'enable_noise',
-        default_value='true',
+        default_value='false',
         description='Enable noise simulation'
     )
     

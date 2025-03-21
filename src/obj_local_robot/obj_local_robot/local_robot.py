@@ -73,6 +73,8 @@ class RobotNode(Node):
                 ('max_angular_velocity', 1.0),
                 ('control_frequency', 10.0),
                 ('lookahead_distance', 0.5),
+                ('lookahead_time', 0.2),
+                ('lookahead_style', 'dist'),
                 ('robot_config_path', ''),
                 ('robot_start_path', ''),
                 ('robot_graph_path',''),
@@ -89,7 +91,9 @@ class RobotNode(Node):
                 ('lqr_update_q_theta', 0.5),
                 ('lqr_update_r_v', 0.1),
                 ('lqr_update_r_omega', 0.1),
-                ('lqr_lookahead_dist',1)
+                ('lqr_lookahead_dist',1),
+                ('lqr_lookahead_time', .2),
+                ('lqr_lookahead_style', 'time'),
             ]
         )
         
@@ -109,6 +113,8 @@ class RobotNode(Node):
         
         # Get purepursuit parameters
         self.lookahead_distance = self.get_parameter('lookahead_distance').value
+        self.lookahead_time = self.get_parameter('lookahead_time').value
+        self.lookahead_style = self.get_parameter('lookahead_style').value
         self.alpha = self.get_parameter('alpha').value
         self.ts = 1.0 / self.control_frequency
         
@@ -124,6 +130,8 @@ class RobotNode(Node):
         self.lqr_update_r_v = self.get_parameter('lqr_update_r_v').value
         self.lqr_update_r_omega = self.get_parameter('lqr_update_r_omega').value
         self.lqr_lookahead_dist = self.get_parameter('lqr_lookahead_dist').value
+        self.lqr_lookahead_time = self.get_parameter('lqr_lookahead_time').value
+        self.lqr_lookahead_style = self.get_parameter('lqr_lookahead_style').value
         
         # Load robot configuration
         self.config_robot = CircularRobotSpecification.from_yaml(self.robot_config_path)
@@ -206,7 +214,9 @@ class RobotNode(Node):
             self.lookahead_distance, 
             self.ts, 
             self.max_velocity, 
-            self.alpha
+            self.alpha,
+            self.lookahead_style,
+            self.lookahead_time
         )
         
         # Initialize LQR controller
@@ -217,7 +227,13 @@ class RobotNode(Node):
         # Initialize LQR update controller
         Q_update = np.diag([self.lqr_update_q_pos, self.lqr_update_q_pos, self.lqr_update_q_theta])
         R_update = np.diag([self.lqr_update_r_v, self.lqr_update_r_omega])
-        self.lqr_update_controller = LQR_Update_Controller(self.ts,Q_update,R_update, self.max_velocity, self.lqr_lookahead_dist)
+        self.lqr_update_controller = LQR_Update_Controller(
+            self.ts,Q_update,R_update, 
+            self.max_velocity, 
+            self.lqr_lookahead_dist,
+            self.lqr_lookahead_style,
+            self.lqr_lookahead_time
+            )
         
         # TODO:Initialize CBF controller if needed in the future
         # self.cbf_controller = ...
