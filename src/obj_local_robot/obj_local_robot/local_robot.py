@@ -461,18 +461,14 @@ class RobotNode(Node):
             if self._state is None:
                 return
             
-            # if (self.current_status != self.STATUS_TARGET_REACHED and
-            #     self.current_status != self.STATUS_EMERGENCY_STOP and
-            #     self.current_status != self.STATUS_SAFETY_STOP):
-            #     self.update_robot_status(self.STATUS_RUNNING)
-
-            self.update_robot_status(self.STATUS_RUNNING)
-            
             # Check if trajectory and state are available
             if self.current_trajectory is None:
                 # traj is None when first initialization or state/traj separate
                 self.send_command_to_gazebo(0, 0) 
+                self.update_robot_status(self.STATUS_EMERGENCY_STOP)
                 return
+            
+            self.update_robot_status(self.STATUS_RUNNING)
             
             # Get current position and heading
             current_position = (self._state[0], self._state[1])
@@ -609,7 +605,7 @@ class RobotNode(Node):
         if self.current_status != new_status:
             old_state_desc = self.status_descriptions[self.current_status]
             new_state_desc = self.status_descriptions[new_status]
-            self.get_logger().info(f'Robot state changed: {old_state_desc} -> {new_state_desc}')
+            self.get_logger().info(f'Robot status changed: {old_state_desc} -> {new_state_desc}')
             self.current_status = new_status
 
             # publish status change
