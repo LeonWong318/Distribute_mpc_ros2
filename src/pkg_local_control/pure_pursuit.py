@@ -40,15 +40,15 @@ class PurePursuit:
                     return point
         elif self.lookahead_style == 'time':
             
-            # Convert lookahead_time (in seconds) to the appropriate ROS time duration
-            current_time_new = current_time.sec+current_time.nanosec*1e-9
+            
+            current_time_new = current_time.sec + current_time.nanosec*1e-9
             target_time = current_time_new + self.lookahead_time
     
             # Convert both times to seconds for proper subtraction
             target_time_sec = target_time.sec + target_time.nanosec * 1e-9
-            traj_time_sec = traj_time.sec + traj_time.nanosec * 1e-9
+            
 
-            index = int((target_time_sec - traj_time_sec) / self.mpc_ts)
+            index = int((target_time_sec - traj_time) / self.mpc_ts)
 
             if 0 <= index < len(trajectory):
                 return trajectory[index]

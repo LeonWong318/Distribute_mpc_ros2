@@ -154,9 +154,9 @@ class LQR_Update_Controller:
 
                 # Convert both times to seconds for proper subtraction
                 target_time_sec = target_time.sec + target_time.nanosec * 1e-9
-                traj_time_sec = traj_time.sec + traj_time.nanosec * 1e-9
+                
 
-                look_ahead_idx = int((target_time_sec - traj_time_sec) / self.mpc_ts)
+                look_ahead_idx = int((target_time_sec - traj_time) / self.mpc_ts)
                 # Ensure the index is within bounds
                 if look_ahead_idx < 0:
                     look_ahead_idx = 0
