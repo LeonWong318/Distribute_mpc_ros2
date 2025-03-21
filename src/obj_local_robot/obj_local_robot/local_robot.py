@@ -486,14 +486,17 @@ class RobotNode(Node):
                 )
                 trajectory_list.append(point)
 
+            traj_time = self.current_trajectory.stamp.sec + self.current_trajectory.stamp.nanosec * 1e-9
+            current_time = self.get_clock().now().to_msg().sec + self.get_clock().now().to_msg().nanosec  * 1e-9
+
             # Compute control commands based on selected controller type
             if self.controller_type == 'pure_pursuit':
                 v, omega = self.pure_pursuit.compute_control_commands(
                     current_position,
                     current_heading,
                     trajectory_list,
-                    self.current_trajectory.stamp,
-                    self.get_clock().now().to_msg()
+                    traj_time,
+                    current_time
                 )
             elif self.controller_type == 'lqr':
                 v, omega = self.lqr_controller.compute_control_commands(
@@ -506,8 +509,8 @@ class RobotNode(Node):
                     current_position,
                     current_heading,
                     trajectory_list,
-                    self.current_trajectory.stamp,
-                    self.get_clock().now().to_msg()
+                    traj_time,
+                    current_time
                 )
             elif self.controller_type == 'cbf':
                 # Future implementation for CBF controller

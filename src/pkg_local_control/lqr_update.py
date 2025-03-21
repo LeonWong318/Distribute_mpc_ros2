@@ -148,15 +148,9 @@ class LQR_Update_Controller:
                         look_ahead_idx = i
             elif self.lookahead_style == 'time':
                 
-                # Convert lookahead_time (in seconds) to the appropriate ROS time duration
-                current_time_new = current_time.sec+current_time.nanosec*1e-9
-                target_time = current_time_new + self.lookahead_time
+                target_time = current_time + self.lookahead_time
 
-                # Convert both times to seconds for proper subtraction
-                target_time_sec = target_time.sec + target_time.nanosec * 1e-9
-                
-
-                look_ahead_idx = int((target_time_sec - traj_time) / self.mpc_ts)
+                look_ahead_idx = int((target_time - traj_time) / self.mpc_ts)
                 # Ensure the index is within bounds
                 if look_ahead_idx < 0:
                     look_ahead_idx = 0
