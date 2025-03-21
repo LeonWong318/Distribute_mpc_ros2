@@ -1,7 +1,9 @@
 import numpy as np
+from rclpy.clock import Clock
+from rclpy.time import Duration
 
 class PurePursuit:
-    def __init__(self, lookahead_distance, Ts, v_max, alpha, lookahead_style, lookahead_time):
+    def __init__(self, lookahead_distance, Ts, v_max, alpha, lookahead_style, lookahead_time, mpc_ts):
         """
         Initialize the Pure Pursuit controller with state-space update parameters.
 
@@ -11,6 +13,7 @@ class PurePursuit:
         :param alpha: Tuning parameter for velocity reduction at high curvature.
         :param lookahead_time: time.
         :param lookahead_style: style
+        :param mpc_ts: mpc sampling time
         """
         self.lookahead_distance = lookahead_distance
         self.Ts = Ts
@@ -18,6 +21,7 @@ class PurePursuit:
         self.alpha = alpha
         self.lookahead_style = lookahead_style
         self.lookahead_time = lookahead_time
+        self.mpc_ts = mpc_ts
 
     def find_lookahead_point(self, trajectory, current_position, traj_time):
         """
@@ -35,7 +39,20 @@ class PurePursuit:
                 if distance >= self.lookahead_distance:
                     return point
         elif self.lookahead_style == 'time':
+            current_time = Clock().now().to_msg()
+            # Convert lookahead_time (in seconds) to the appropriate ROS time duration
+            lookahead_duration = Duration(seconds=int(self.lookahead_time), 
+                                         nanoseconds=int((self.lookahead_time % 1) * 1e9))
+            target_time = current_time + lookahead_duration
+    
+            # Convert both times to seconds for proper subtraction
+            target_time_sec = target_time.sec + target_time.nanosec * 1e-9
+            traj_time_sec = traj_time.sec + traj_time.nanosec * 1e-9
 
+            index = int((target_time_sec - traj_time_sec) / self.mpc_ts)
+
+            if 0 <= index < len(trajectory):
+                return trajectory[index]
         return None
 
     def transform_to_vehicle_frame(self, current_position, current_heading, lookahead_point):

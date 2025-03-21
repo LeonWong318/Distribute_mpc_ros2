@@ -605,7 +605,7 @@ class RobotNode(Node):
             self.get_logger().info(f'Robot state changed: {old_state_desc} -> {new_state_desc}')
             self.current_status = new_status
 
-            # 立即发布状态变更
+            # publish status change
             self.publish_robot_status()
     
     def check_termination_condition(self):
