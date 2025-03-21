@@ -588,7 +588,7 @@ class RobotNode(Node):
         try:
             status_msg = RobotToRvizStatus()
             status_msg.state = self.current_status
-            status_msg.state_desc = self.state_descriptions[self.current_status]
+            status_msg.state_desc = self.status_descriptions[self.current_status]
             status_msg.stamp = self.get_clock().now().to_msg()
 
             self.status_pub.publish(status_msg)
@@ -600,12 +600,11 @@ class RobotNode(Node):
     
     def update_robot_status(self, new_status):
         if self.current_status != new_status:
-            old_state_desc = self.state_descriptions[self.current_state]
-            new_state_desc = self.state_descriptions[new_status]
+            old_state_desc = self.status_descriptions[self.current_status]
+            new_state_desc = self.status_descriptions[new_status]
             self.get_logger().info(f'Robot state changed: {old_state_desc} -> {new_state_desc}')
             self.current_status = new_status
 
-            # 立即发布状态变更
             self.publish_robot_status()
     
     def check_termination_condition(self):
