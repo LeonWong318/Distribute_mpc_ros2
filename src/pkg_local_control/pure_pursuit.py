@@ -1,7 +1,7 @@
 import numpy as np
 
 class PurePursuit:
-    def __init__(self, lookahead_distance, Ts, v_max, alpha):
+    def __init__(self, lookahead_distance, Ts, v_max, alpha, lookahead_style, lookahead_time):
         """
         Initialize the Pure Pursuit controller with state-space update parameters.
 
@@ -9,11 +9,15 @@ class PurePursuit:
         :param Ts: Sampling time.
         :param v_max: Maximum velocity.
         :param alpha: Tuning parameter for velocity reduction at high curvature.
+        :param lookahead_time: time.
+        :param lookahead_style: style
         """
         self.lookahead_distance = lookahead_distance
         self.Ts = Ts
         self.v_max = v_max
         self.alpha = alpha
+        self.lookahead_style = lookahead_style
+        self.lookahead_time = lookahead_time
 
     def find_lookahead_point(self, trajectory, current_position):
         """
@@ -23,11 +27,14 @@ class PurePursuit:
         :param current_position: Tuple (x, y) of the vehicle's current position.
         :return: The lookahead point (x, y, theta) or None if not found.
         """
-        for point in trajectory:
-            px, py, theta = point
-            distance = np.linalg.norm(np.array([px, py]) - np.array(current_position))
-            if distance >= self.lookahead_distance:
-                return point
+        if self.lookahead_style == 'dist':
+            for point in trajectory:
+                px, py, theta = point
+                distance = np.linalg.norm(np.array([px, py]) - np.array(current_position))
+                if distance >= self.lookahead_distance:
+                    return point
+        elif self.lookahead_style == 'time':
+            
         return None
 
     def transform_to_vehicle_frame(self, current_position, current_heading, lookahead_point):

@@ -453,7 +453,8 @@ class RobotNode(Node):
                 v, omega = self.pure_pursuit.compute_control_commands(
                     current_position,
                     current_heading,
-                    trajectory_list
+                    trajectory_list,
+                    current_trajectory.stamp
                 )
             elif self.controller_type == 'lqr':
                 v, omega = self.lqr_controller.compute_control_commands(
@@ -465,7 +466,8 @@ class RobotNode(Node):
                 v, omega = self.lqr_update_controller.compute_control_commands(
                     current_position,
                     current_heading,
-                    trajectory_list
+                    trajectory_list,
+                    current_trajectory.stamp
                 )
             elif self.controller_type == 'cbf':
                 # Future implementation for CBF controller
