@@ -15,13 +15,15 @@ from pkg_local_control.pure_pursuit import PurePursuit
 from pkg_local_control.lqr import LQRController
 from pkg_local_control.lqr_update import LQR_Update_Controller
 
-from msg_interfaces.msg import ClusterToRobotTrajectory, RobotToClusterState, ClusterBetweenRobotHeartBeat
+from msg_interfaces.msg import ClusterToRobotTrajectory, RobotToClusterState, RobotToRvizStatus,ClusterBetweenRobotHeartBeat
 from msg_interfaces.srv import RegisterRobot, ExecuteCommand
 
 class RobotNode(Node):
     async def initialize(self):
         try:
             self.get_logger().info('Starting initialization...')
+            
+            self.update_robot_status(self.STATUS_INITIALIZING)
             
             # Wait for register service
             while not self.register_client.wait_for_service(timeout_sec=1.0):
@@ -54,7 +56,8 @@ class RobotNode(Node):
             self.get_logger().info('Heartbeat mechanism started')
             
             self.idle = False
-            
+            self.update_robot_status(self.STATUS_IDLE)
+        
             return True
             
         except Exception as e:
@@ -139,6 +142,24 @@ class RobotNode(Node):
         self.config_robot = CircularRobotSpecification.from_yaml(self.robot_config_path)
         self.motion_model = UnicycleModel(sampling_time=self.config_robot.ts)
         
+        # Status Definition
+        self.STATUS_INITIALIZING = 0
+        self.STATUS_IDLE = 1
+        self.STATUS_RUNNING = 2
+        self.STATUS_EMERGENCY_STOP = 3
+        self.STATUS_TARGET_REACHED = 4
+        self.STATUS_SAFETY_STOP = 5
+        
+        self.current_status = self.STATUS_INITIALIZING
+        self.status_descriptions = {
+            self.STATUS_INITIALIZING: "Initializing",
+            self.STATUS_IDLE: "Idle",
+            self.STATUS_RUNNING: "Running",
+            self.STATUS_EMERGENCY_STOP: "Emergency Stop",
+            self.STATUS_TARGET_REACHED: "Target Reached",
+            self.STATUS_SAFETY_STOP: "Safety Stop"
+        }
+        
         # Initialize controllers
         self.setup_controllers()
 
@@ -193,6 +214,12 @@ class RobotNode(Node):
             ExecuteCommand,
             f'/robot_{self.robot_id}/command',
             callback_group=self.callback_group
+        )
+        
+        self.status_pub = self.create_publisher(
+            RobotToRvizStatus,
+            f'/robot_{self.robot_id}/status',
+            self.reliable_qos
         )
         
         # Create control timer
@@ -377,6 +404,7 @@ class RobotNode(Node):
         if not self.idle:
             self.get_logger().error(f'Cluster {self.robot_id} appears to be offline, entering safety stop state')
             self.idle = True
+            self.update_robot_status(self.STATUS_SAFETY_STOP)
             self.execute_stop()
 
     def execute_stop(self):
@@ -414,6 +442,7 @@ class RobotNode(Node):
                 self.get_logger().warn(f'Current position too far from trajectory (min distance: {min_distance:.2f}m). Stopping robot until next update.')
                 self.execute_stop()
                 self.current_trajectory = None
+                self.update_robot_status(self.STATUS_EMERGENCY_STOP)
             else:
                 # Store current trajectory if distance is acceptable
                 self.current_trajectory = msg
@@ -432,6 +461,11 @@ class RobotNode(Node):
             if self._state is None:
                 return
             
+            if (self.current_status != self.STATUS_TARGET_REACHED and
+                self.current_status != self.STATUS_EMERGENCY_STOP and
+                self.current_status != self.STATUS_SAFETY_STOP):
+                self.update_robot_status(self.STATUS_RUNNING)
+
             # Check if trajectory and state are available
             if self.current_trajectory is None:
                 # traj is None when first initialization or state/traj separate
@@ -458,7 +492,7 @@ class RobotNode(Node):
                     current_position,
                     current_heading,
                     trajectory_list,
-                    current_trajectory.stamp
+                    self.current_trajectory.stamp
                 )
             elif self.controller_type == 'lqr':
                 v, omega = self.lqr_controller.compute_control_commands(
@@ -471,7 +505,7 @@ class RobotNode(Node):
                     current_position,
                     current_heading,
                     trajectory_list,
-                    current_trajectory.stamp
+                    self.current_trajectory.stamp
                 )
             elif self.controller_type == 'cbf':
                 # Future implementation for CBF controller
@@ -550,6 +584,30 @@ class RobotNode(Node):
         except Exception as e:
             self.get_logger().error(f'Error publishing state: {str(e)}')
 
+    def publish_robot_status(self):
+        try:
+            status_msg = RobotToRvizStatus()
+            status_msg.state = self.current_status
+            status_msg.state_desc = self.state_descriptions[self.current_status]
+            status_msg.stamp = self.get_clock().now().to_msg()
+
+            self.status_pub.publish(status_msg)
+
+            self.get_logger().debug(f'Published robot status: {status_msg.state_desc}')
+        except Exception as e:
+            self.get_logger().error(f'Error publishing robot status: {str(e)}')
+
+    
+    def update_robot_status(self, new_status):
+        if self.current_status != new_status:
+            old_state_desc = self.state_descriptions[self.current_state]
+            new_state_desc = self.state_descriptions[new_status]
+            self.get_logger().info(f'Robot state changed: {old_state_desc} -> {new_state_desc}')
+            self.current_status = new_status
+
+            # 立即发布状态变更
+            self.publish_robot_status()
+    
     def check_termination_condition(self):
         current_position = self._state[:2]
         target_position = self.target_point
@@ -559,6 +617,7 @@ class RobotNode(Node):
         if distance < 0.3:
             self.idle = True
             self.execute_stop()
+            self.update_robot_status(self.STATUS_TARGET_REACHED)
             self.get_logger().info(f'Robot {self.robot_id} reached target. Distance: {distance:.3f}')
         else:
             self.idle = False

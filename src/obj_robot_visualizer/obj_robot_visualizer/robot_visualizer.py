@@ -1,7 +1,7 @@
 import rclpy
 from rclpy.node import Node
 from visualization_msgs.msg import MarkerArray, Marker
-from msg_interfaces.msg import ManagerToClusterStateSet, GazeboToManagerState
+from msg_interfaces.msg import ManagerToClusterStateSet, GazeboToManagerState, RobotToRvizStatus
 from geometry_msgs.msg import Point
 from tf2_ros import TransformBroadcaster
 from geometry_msgs.msg import TransformStamped
@@ -70,8 +70,30 @@ class RobotStateVisualizer(Node):
         
         # Store robot real state subscriptions
         self.real_state_subscriptions = {}
+        # Store robot status subscriptions
+        self.status_subscriptions = {}
         # Store robot real states
         self.robot_real_states = {}
+        # Store robot status information
+        self.robot_statuses = {}
+        
+        # Define status codes
+        self.STATUS_INITIALIZING = 0
+        self.STATUS_IDLE = 1
+        self.STATUS_RUNNING = 2
+        self.STATUS_EMERGENCY_STOP = 3
+        self.STATUS_TARGET_REACHED = 4
+        self.STATUS_SAFETY_STOP = 5
+        
+        # Define status color mapping
+        self.status_colors = {
+            self.STATUS_INITIALIZING: (0.5, 0.5, 0.5),  # Gray
+            self.STATUS_IDLE: (0.5, 0.5, 0.5),          # Gray
+            self.STATUS_RUNNING: (0.0, 0.7, 0.2),       # Green
+            self.STATUS_EMERGENCY_STOP: (1.0, 1.0, 0.0), # Yellow
+            self.STATUS_TARGET_REACHED: (0.0, 0.0, 1.0), # Blue
+            self.STATUS_SAFETY_STOP: (1.0, 0.0, 0.0)     # Red
+        }
         
         # Original subscription for planned trajectories
         self.trajectory_subscription = self.create_subscription(
@@ -99,11 +121,11 @@ class RobotStateVisualizer(Node):
         self.load_data()
         self.create_robot_subscriptions()
         
-        self.get_logger().info('Enhanced robot state visualizer initialized')
+        self.get_logger().info('Enhanced robot state visualizer initialized with status color support')
         self.get_logger().info(f'Path tracking enabled with min distance: {self.path_min_distance}m')
     
     def create_robot_subscriptions(self):
-        """Create individual subscriptions for each robot's real state"""
+        """Create individual subscriptions for each robot's real state and status"""
         if not self.robot_start_data:
             self.get_logger().warn('No robot start data available, cannot create real state subscriptions')
             return
@@ -111,15 +133,28 @@ class RobotStateVisualizer(Node):
         for robot_id_str in self.robot_start_data:
             try:
                 robot_id = int(robot_id_str)
-                # Create a subscription for this robot
-                subscription = self.create_subscription(
+                # Create a subscription for robot real state
+                real_state_sub = self.create_subscription(
                     GazeboToManagerState,
                     f'/robot_{robot_id}/real_state',
                     lambda msg, rid=robot_id: self.robot_real_state_callback(msg, rid),
                     10
                 )
-                self.real_state_subscriptions[robot_id] = subscription
-                self.get_logger().info(f'Created subscription for robot {robot_id} real state')
+                self.real_state_subscriptions[robot_id] = real_state_sub
+                
+                # Create a subscription for robot status
+                status_sub = self.create_subscription(
+                    RobotToRvizStatus,
+                    f'/robot_{robot_id}/status',
+                    lambda msg, rid=robot_id: self.robot_status_callback(msg, rid),
+                    10
+                )
+                self.status_subscriptions[robot_id] = status_sub
+                
+                # Initialize with default status (Initializing)
+                self.robot_statuses[robot_id] = self.STATUS_INITIALIZING
+                
+                self.get_logger().info(f'Created subscriptions for robot {robot_id} (real state and status)')
             except ValueError:
                 self.get_logger().error(f'Invalid robot ID in robot_start.json: {robot_id_str}')
     
@@ -140,6 +175,19 @@ class RobotStateVisualizer(Node):
         if self.should_add_to_path(robot_id, x, y):
             self.robot_paths[robot_id].append((x, y))
             self.get_logger().debug(f'Added new path point for robot {robot_id}: ({x}, {y})')
+    
+    def robot_status_callback(self, msg, robot_id):
+        """Callback for individual robot status messages"""
+        # Store the robot status
+        old_status = self.robot_statuses.get(robot_id, None)
+        self.robot_statuses[robot_id] = msg.state
+        
+        # Log status change if it's new
+        if old_status is not None and old_status != msg.state:
+            self.get_logger().info(f'Robot {robot_id} status changed from {old_status} to {msg.state}: {msg.state_desc}')
+        
+        # Debug log
+        self.get_logger().debug(f'Received status for robot {robot_id}: {msg.state} ({msg.state_desc})')
     
     def load_data(self):
         try:
@@ -212,6 +260,11 @@ class RobotStateVisualizer(Node):
         except Exception as e:
             self.get_logger().error(f'Unexpected error loading data: {str(e)}')
 
+    def get_robot_status_color(self, robot_id):
+        """Get the color for a robot based on its status"""
+        status = self.robot_statuses.get(robot_id, self.STATUS_INITIALIZING)
+        return self.status_colors.get(status, (0.5, 0.5, 0.5))  # Default to gray if status unknown
+    
     def publish_static_markers(self):
         marker_array = MarkerArray()
         
@@ -246,7 +299,7 @@ class RobotStateVisualizer(Node):
 
                 marker_array.markers.append(boundary_marker)
 
-        if "obstacle_list" in self.map_data:
+        if self.map_data and "obstacle_list" in self.map_data:
             for i, obstacle in enumerate(self.map_data["obstacle_list"]):
                 if len(obstacle) >= 3:
                     center_x = float(sum(float(p[0]) for p in obstacle) / len(obstacle))
@@ -456,6 +509,9 @@ class RobotStateVisualizer(Node):
         
         # Visualize robot real states
         for robot_id, state_msg in self.robot_real_states.items():
+            # Get status color for this robot
+            r, g, b = self.get_robot_status_color(robot_id)
+            
             # 1. Robot circle (representing size)
             robot_circle = Marker()
             robot_circle.header.frame_id = "map"
@@ -473,9 +529,10 @@ class RobotStateVisualizer(Node):
             robot_circle.scale.y = self.vehicle_width
             robot_circle.scale.z = 0.5
             
-            robot_circle.color.r = 0.0
-            robot_circle.color.g = 0.7
-            robot_circle.color.b = 0.2
+            # Set color based on robot status
+            robot_circle.color.r = r
+            robot_circle.color.g = g
+            robot_circle.color.b = b
             robot_circle.color.a = 0.9
             
             marker_array.markers.append(robot_circle)
@@ -503,14 +560,15 @@ class RobotStateVisualizer(Node):
             robot_marker.scale.y = 0.2 
             robot_marker.scale.z = 0.1 
             
+            # Set color based on robot status
+            robot_marker.color.r = r
+            robot_marker.color.g = g
+            robot_marker.color.b = b
             robot_marker.color.a = 1.0
-            robot_marker.color.r = 0.0
-            robot_marker.color.g = 1.0
-            robot_marker.color.b = 0.0
             
             marker_array.markers.append(robot_marker)
             
-            # 3. Robot label
+            # 3. Robot label with ID and status description
             text_marker = Marker()
             text_marker.header.frame_id = "map"
             text_marker.header.stamp = self.get_clock().now().to_msg()
@@ -521,7 +579,20 @@ class RobotStateVisualizer(Node):
             text_marker.pose.position.x = state_msg.x
             text_marker.pose.position.y = state_msg.y
             text_marker.pose.position.z = 0.3
-            text_marker.text = f"Robot {robot_id}"
+            
+            # Add status description to robot label if available
+            status = self.robot_statuses.get(robot_id, self.STATUS_INITIALIZING)
+            status_desc_map = {
+                self.STATUS_INITIALIZING: "Initializing",
+                self.STATUS_IDLE: "Idle",
+                self.STATUS_RUNNING: "Running",
+                self.STATUS_EMERGENCY_STOP: "Emergency Stop",
+                self.STATUS_TARGET_REACHED: "Target Reached",
+                self.STATUS_SAFETY_STOP: "Safety Stop"
+            }
+            status_desc = status_desc_map.get(status, "Unknown")
+            text_marker.text = f"Robot {robot_id} [{status_desc}]"
+            
             text_marker.scale.z = 0.2
             text_marker.color.a = 1.0
             text_marker.color.r = 1.0
