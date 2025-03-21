@@ -461,11 +461,13 @@ class RobotNode(Node):
             if self._state is None:
                 return
             
-            if (self.current_status != self.STATUS_TARGET_REACHED and
-                self.current_status != self.STATUS_EMERGENCY_STOP and
-                self.current_status != self.STATUS_SAFETY_STOP):
-                self.update_robot_status(self.STATUS_RUNNING)
+            # if (self.current_status != self.STATUS_TARGET_REACHED and
+            #     self.current_status != self.STATUS_EMERGENCY_STOP and
+            #     self.current_status != self.STATUS_SAFETY_STOP):
+            #     self.update_robot_status(self.STATUS_RUNNING)
 
+            self.update_robot_status(self.STATUS_RUNNING)
+            
             # Check if trajectory and state are available
             if self.current_trajectory is None:
                 # traj is None when first initialization or state/traj separate
@@ -624,9 +626,9 @@ class RobotNode(Node):
             self.execute_stop()
             self.update_robot_status(self.STATUS_TARGET_REACHED)
             self.get_logger().info(f'Robot {self.robot_id} reached target. Distance: {distance:.3f}')
+            return True
         else:
-            self.idle = False
-        return self.idle
+            return False
     
     def load_init_state_and_target(self):
         try:
