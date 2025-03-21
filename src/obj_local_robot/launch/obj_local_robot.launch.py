@@ -49,6 +49,7 @@ def generate_launch_description():
             
             # --- Controller Selection ---
             'controller_type': LaunchConfiguration('controller_type'),
+            'mpc_ts': .3,
             
             # --- Pure Pursuit Parameters ---
             'lookahead_distance': .8,

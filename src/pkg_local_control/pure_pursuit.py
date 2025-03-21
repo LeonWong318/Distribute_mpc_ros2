@@ -19,12 +19,13 @@ class PurePursuit:
         self.lookahead_style = lookahead_style
         self.lookahead_time = lookahead_time
 
-    def find_lookahead_point(self, trajectory, current_position):
+    def find_lookahead_point(self, trajectory, current_position, traj_time):
         """
         Find the lookahead point on the planned trajectory.
         
         :param trajectory: List of (x, y, theta) waypoints.
         :param current_position: Tuple (x, y) of the vehicle's current position.
+        :param traj_time: the time when trajectory generated.
         :return: The lookahead point (x, y, theta) or None if not found.
         """
         if self.lookahead_style == 'dist':
@@ -34,7 +35,7 @@ class PurePursuit:
                 if distance >= self.lookahead_distance:
                     return point
         elif self.lookahead_style == 'time':
-            
+
         return None
 
     def transform_to_vehicle_frame(self, current_position, current_heading, lookahead_point):
@@ -58,17 +59,18 @@ class PurePursuit:
         y_vehicle = dx * np.sin(-current_heading) + dy * np.cos(-current_heading)
         return x_vehicle, y_vehicle
 
-    def compute_control_commands(self, current_position, current_heading, trajectory):
+    def compute_control_commands(self, current_position, current_heading, trajectory, traj_time):
         """
         Compute the control commands (v, omega) based on Pure Pursuit.
         
         :param current_position: (x, y) of the vehicle.
         :param current_heading: Current heading (radians).
         :param trajectory: List of (x, y, theta) waypoints.
+        :param traj_time: the time when trajectory generated.
         :return: Control inputs: (v, omega).
         """
         # Find the lookahead point on the trajectory
-        lookahead_point = self.find_lookahead_point(trajectory, current_position)
+        lookahead_point = self.find_lookahead_point(trajectory, current_position, traj_time)
         if lookahead_point is None:
             # If no lookahead point is found, return zero control commands.
             return 0.0, 0.0

@@ -72,6 +72,7 @@ class RobotNode(Node):
                 ('max_velocity', 1.0),
                 ('max_angular_velocity', 1.0),
                 ('control_frequency', 10.0),
+                ('mpc_ts', 0.3),
                 ('lookahead_distance', 0.5),
                 ('lookahead_time', 0.2),
                 ('lookahead_style', 'dist'),
@@ -110,6 +111,7 @@ class RobotNode(Node):
         
         # Get type of controller
         self.controller_type = self.get_parameter('controller_type').value
+        self.mpc_ts = self.get_parameter('mpc_ts').value
         
         # Get purepursuit parameters
         self.lookahead_distance = self.get_parameter('lookahead_distance').value
@@ -216,7 +218,8 @@ class RobotNode(Node):
             self.max_velocity, 
             self.alpha,
             self.lookahead_style,
-            self.lookahead_time
+            self.lookahead_time,
+            self.mpc_ts
         )
         
         # Initialize LQR controller
@@ -232,7 +235,8 @@ class RobotNode(Node):
             self.max_velocity, 
             self.lqr_lookahead_dist,
             self.lqr_lookahead_style,
-            self.lqr_lookahead_time
+            self.lqr_lookahead_time,
+            self.mpc_ts
             )
         
         # TODO:Initialize CBF controller if needed in the future
