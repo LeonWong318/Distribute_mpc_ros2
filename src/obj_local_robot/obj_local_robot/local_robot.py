@@ -410,7 +410,7 @@ class RobotNode(Node):
     def execute_stop(self):
         try:
             self.send_command_to_gazebo(0, 0)
-            self.get_logger().warn(f'Robot {self.robot_id} stop executed')
+            self.get_logger().debug(f'Robot {self.robot_id} stop executed')
         except Exception as e:
             self.get_logger().error(f'Error during stop: {str(e)}')
 
@@ -625,9 +625,10 @@ class RobotNode(Node):
             self.idle = True
             self.execute_stop()
             self.update_robot_status(self.STATUS_TARGET_REACHED)
-            self.get_logger().info(f'Robot {self.robot_id} reached target. Distance: {distance:.3f}')
+            self.get_logger().debug(f'Robot {self.robot_id} reached target. Distance: {distance:.3f}')
             return True
         else:
+            self.get_logger().debug(f'Robot {self.robot_id} have not reached target. Distance: {distance:.3f}')
             return False
     
     def load_init_state_and_target(self):
