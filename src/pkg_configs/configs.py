@@ -120,7 +120,7 @@ class CircularRobotSpecification(_Configuration):
 
     def _load_config(self):
         config = self._config
-        self.ts = config.ts     # sampling time
+        # self.ts = config.ts     # sampling time
 
         self.vehicle_width = config.vehicle_width
         self.vehicle_margin = config.vehicle_margin
