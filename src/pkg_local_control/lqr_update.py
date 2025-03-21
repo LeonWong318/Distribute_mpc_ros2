@@ -1,5 +1,7 @@
 import numpy as np
 from scipy.linalg import solve_discrete_are
+from rclpy.clock import Clock
+from rclpy.time import Duration
 
 def dlqr(A, B, Q, R):
     """
@@ -25,7 +27,7 @@ def dlqr(A, B, Q, R):
     return K, P, eigVals
 
 class LQR_Update_Controller:
-    def __init__(self, Ts, Q, R, max_velocity=1.0, look_ahead_dist=0):
+    def __init__(self, Ts, Q, R, max_velocity, look_ahead_dist, lookahead_style, lookahead_time, mpc_ts):
         """
         Initialize the LQR controller.
         
@@ -35,12 +37,18 @@ class LQR_Update_Controller:
             R: Input weighting matrix.
             max_velocity: Maximum allowable velocity.
             look_ahead_dist: the lookahead distance.
+            lookahead_time: time.
+            lookahead_style: style
+            mpc_ts: mpc sampling time
         """
         self.Ts = Ts
         self.Q = Q
         self.R = R
         self.max_velocity = max_velocity
         self.look_ahead_dist = look_ahead_dist
+        self.lookahead_style = lookahead_style
+        self.lookahead_time = lookahead_time
+        self.mpc_ts = mpc_ts
     
     def linearize(self, x_ref, u_ref):
         """
@@ -106,7 +114,7 @@ class LQR_Update_Controller:
         
         return u, K, P, eigVals
     
-    def compute_control_commands(self, current_position, current_heading, trajectory_list):
+    def compute_control_commands(self, current_position, current_heading, trajectory_list, traj_time):
         """
         Compute LQR control commands with a Pure Pursuit inspired look-ahead mechanism.
 
@@ -126,17 +134,35 @@ class LQR_Update_Controller:
             closest_idx = 0
             look_ahead_idx = None
 
-            for i, point in enumerate(trajectory_list):
-                point_state = np.array([point[0], point[1]])
-                dist = np.linalg.norm(current_state[:2] - point_state)
+            if self.lookahead_style == 'dist':            
+                for i, point in enumerate(trajectory_list):
+                    point_state = np.array([point[0], point[1]])
+                    dist = np.linalg.norm(current_state[:2] - point_state)
 
-                if dist < min_dist:
-                    min_dist = dist
-                    closest_idx = i
+                    if dist < min_dist:
+                        min_dist = dist
+                        closest_idx = i
 
-                # Find the first point that is at least look_ahead_dist away
-                if dist >= self.look_ahead_dist and look_ahead_idx is None:
-                    look_ahead_idx = i
+                    # Find the first point that is at least look_ahead_dist away
+                    if dist >= self.look_ahead_dist and look_ahead_idx is None:
+                        look_ahead_idx = i
+            elif self.lookahead_style == 'time':
+                current_time = Clock().now().to_msg()
+                # Convert lookahead_time (in seconds) to the appropriate ROS time duration
+                lookahead_duration = Duration(seconds=int(self.lookahead_time), 
+                                             nanoseconds=int((self.lookahead_time % 1) * 1e9))
+                target_time = current_time + lookahead_duration
+
+                # Convert both times to seconds for proper subtraction
+                target_time_sec = target_time.sec + target_time.nanosec * 1e-9
+                traj_time_sec = traj_time.sec + traj_time.nanosec * 1e-9
+
+                look_ahead_idx = int((target_time_sec - traj_time_sec) / self.mpc_ts)
+                # Ensure the index is within bounds
+                if look_ahead_idx < 0:
+                    look_ahead_idx = 0
+                elif look_ahead_idx >= len(trajectory_list):
+                    look_ahead_idx = len(trajectory_list) - 1
 
             # Fallback to the last point if no look-ahead point is found
             if look_ahead_idx is None:
