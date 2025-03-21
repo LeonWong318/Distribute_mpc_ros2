@@ -1,6 +1,6 @@
 import numpy as np
 from scipy.linalg import solve_discrete_are
-from rclpy.clock import Clock
+import rclpy
 from rclpy.time import Duration
 
 def dlqr(A, B, Q, R):
@@ -114,7 +114,7 @@ class LQR_Update_Controller:
         
         return u, K, P, eigVals
     
-    def compute_control_commands(self, current_position, current_heading, trajectory_list, traj_time):
+    def compute_control_commands(self, current_position, current_heading, trajectory_list, traj_time, current_time):
         """
         Compute LQR control commands with a Pure Pursuit inspired look-ahead mechanism.
 
@@ -147,11 +147,10 @@ class LQR_Update_Controller:
                     if dist >= self.look_ahead_dist and look_ahead_idx is None:
                         look_ahead_idx = i
             elif self.lookahead_style == 'time':
-                current_time = Clock().now().to_msg()
+                
                 # Convert lookahead_time (in seconds) to the appropriate ROS time duration
-                lookahead_duration = Duration(seconds=int(self.lookahead_time), 
-                                             nanoseconds=int((self.lookahead_time % 1) * 1e9))
-                target_time = current_time + lookahead_duration
+                current_time_new = current_time.sec+current_time.nanosec*1e-9
+                target_time = current_time_new + self.lookahead_time
 
                 # Convert both times to seconds for proper subtraction
                 target_time_sec = target_time.sec + target_time.nanosec * 1e-9

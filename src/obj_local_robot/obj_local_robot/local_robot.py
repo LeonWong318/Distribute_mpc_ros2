@@ -492,7 +492,8 @@ class RobotNode(Node):
                     current_position,
                     current_heading,
                     trajectory_list,
-                    self.current_trajectory.stamp
+                    self.current_trajectory.stamp,
+                    self.get_clock().now().to_msg()
                 )
             elif self.controller_type == 'lqr':
                 v, omega = self.lqr_controller.compute_control_commands(
@@ -505,7 +506,8 @@ class RobotNode(Node):
                     current_position,
                     current_heading,
                     trajectory_list,
-                    self.current_trajectory.stamp
+                    self.current_trajectory.stamp,
+                    self.get_clock().now().to_msg()
                 )
             elif self.controller_type == 'cbf':
                 # Future implementation for CBF controller

@@ -23,7 +23,7 @@ class PurePursuit:
         self.lookahead_time = lookahead_time
         self.mpc_ts = mpc_ts
 
-    def find_lookahead_point(self, trajectory, current_position, traj_time):
+    def find_lookahead_point(self, trajectory, current_position, traj_time, current_time):
         """
         Find the lookahead point on the planned trajectory.
         
@@ -39,11 +39,10 @@ class PurePursuit:
                 if distance >= self.lookahead_distance:
                     return point
         elif self.lookahead_style == 'time':
-            current_time = Clock().now().to_msg()
+            
             # Convert lookahead_time (in seconds) to the appropriate ROS time duration
-            lookahead_duration = Duration(seconds=int(self.lookahead_time), 
-                                         nanoseconds=int((self.lookahead_time % 1) * 1e9))
-            target_time = current_time + lookahead_duration
+            current_time_new = current_time.sec+current_time.nanosec*1e-9
+            target_time = current_time_new + self.lookahead_time
     
             # Convert both times to seconds for proper subtraction
             target_time_sec = target_time.sec + target_time.nanosec * 1e-9
@@ -76,7 +75,7 @@ class PurePursuit:
         y_vehicle = dx * np.sin(-current_heading) + dy * np.cos(-current_heading)
         return x_vehicle, y_vehicle
 
-    def compute_control_commands(self, current_position, current_heading, trajectory, traj_time):
+    def compute_control_commands(self, current_position, current_heading, trajectory, traj_time, current_time):
         """
         Compute the control commands (v, omega) based on Pure Pursuit.
         
@@ -87,7 +86,7 @@ class PurePursuit:
         :return: Control inputs: (v, omega).
         """
         # Find the lookahead point on the trajectory
-        lookahead_point = self.find_lookahead_point(trajectory, current_position, traj_time)
+        lookahead_point = self.find_lookahead_point(trajectory, current_position, traj_time, current_time)
         if lookahead_point is None:
             # If no lookahead point is found, return zero control commands.
             return 0.0, 0.0
