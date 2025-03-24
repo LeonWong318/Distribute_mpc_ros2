@@ -16,14 +16,14 @@ def generate_launch_description():
     # Declare argument for map selection
     map_name_arg = DeclareLaunchArgument(
         'map_name',
-        default_value='test_data.world',
+        default_value='scene_1.world',
         description='Name of the map file to load'
     )
     
     # Declare argument for robot setup path
     robot_setup_arg = DeclareLaunchArgument(
         'robot_setup_path',
-        default_value='data/test_data/robot_start.json',
+        default_value='data/scene_1/robot_start.json',
         description='Path to the robot setup JSON file'
     )
     

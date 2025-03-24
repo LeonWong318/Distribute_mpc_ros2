@@ -6,10 +6,10 @@ def generate_launch_description():
     workspace_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../../../..'))
     
     data_paths = {
-        'map_path': os.path.join(workspace_root, 'data/test_data/map.json'),
-        'graph_path': os.path.join(workspace_root, 'data/test_data/graph.json'),
-        'schedule_path': os.path.join(workspace_root, 'data/test_data/schedule.csv'),
-        'robot_start_path': os.path.join(workspace_root, 'data/test_data/robot_start.json')
+        'map_path': os.path.join(workspace_root, 'data/scene_1/map.json'),
+        'graph_path': os.path.join(workspace_root, 'data/scene_1/graph.json'),
+        'schedule_path': os.path.join(workspace_root, 'data/scene_1/schedule.csv'),
+        'robot_start_path': os.path.join(workspace_root, 'data/scene_1/robot_start.json')
     }
     
     config_paths = {

@@ -1,7 +1,7 @@
 import pandas as pd
 
 # Path to the CSV file
-csv_path = "./data/test_data/schedule.csv"
+csv_path = "./data/scene_1/schedule.csv"
 
 # Read CSV file
 df = pd.read_csv(csv_path)

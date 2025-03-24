@@ -7,10 +7,10 @@ import os
 def generate_launch_description():
     declare_args = [
         DeclareLaunchArgument('robot_id', default_value='0', description='Robot ID'),
-        DeclareLaunchArgument('map_path', default_value='data/test_data/map.json'),
-        DeclareLaunchArgument('graph_path', default_value='data/test_data/graph.json'),
-        DeclareLaunchArgument('schedule_path', default_value='data/test_data/schedule.csv'),
-        DeclareLaunchArgument('robot_start_path', default_value='data/test_data/robot_start.json')
+        DeclareLaunchArgument('map_path', default_value='data/scene_1/map.json'),
+        DeclareLaunchArgument('graph_path', default_value='data/scene_1/graph.json'),
+        DeclareLaunchArgument('schedule_path', default_value='data/scene_1/schedule.csv'),
+        DeclareLaunchArgument('robot_start_path', default_value='data/scene_1/robot_start.json')
     ]
     
     # Python path setup

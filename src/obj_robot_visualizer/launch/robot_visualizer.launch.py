@@ -9,9 +9,9 @@ def generate_launch_description():
     pkg_share = get_package_share_directory('obj_robot_visualizer')
     rviz_config_path = os.path.join(pkg_share, 'config', 'default.rviz')
     
-    default_map_path = os.path.join('data', 'test_data', 'map.json')
-    default_graph_path = os.path.join('data', 'test_data', 'graph.json')
-    default_robot_start_path = os.path.join('data', 'test_data', 'robot_start.json')
+    default_map_path = os.path.join('data', 'scene_1', 'map.json')
+    default_graph_path = os.path.join('data', 'scene_1', 'graph.json')
+    default_robot_start_path = os.path.join('data', 'scene_1', 'robot_start.json')
     default_robot_spec_path = os.path.join('config','spec_robot.yaml')
     
     map_path_arg = DeclareLaunchArgument(
