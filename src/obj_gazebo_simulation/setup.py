@@ -4,15 +4,26 @@ from setuptools import setup, find_packages
 
 package_name = 'obj_gazebo_simulation'
 
-# Function to collect all files while keeping directory structure
 def package_files(source_dir, target_dir):
     paths = []
-    for root, _, files in os.walk(source_dir):
-        for file in files:
-            full_path = os.path.join(root, file)
-            relative_path = os.path.relpath(full_path, source_dir)
-            paths.append((os.path.join('share', package_name, target_dir, os.path.dirname(relative_path)), [full_path]))
+    if os.path.exists(source_dir):
+        for root, _, files in os.walk(source_dir):
+            for file in files:
+                full_path = os.path.join(root, file)
+                relative_path = os.path.relpath(full_path, source_dir)
+                paths.append((os.path.join('share', package_name, target_dir, os.path.dirname(relative_path)), [full_path]))
     return paths
+
+models_data_files = []
+models_dir = 'models'
+if os.path.exists(models_dir):
+    model_subdirs = [d for d in os.listdir(models_dir) 
+                    if os.path.isdir(os.path.join(models_dir, d))]
+    
+    for subdir in model_subdirs:
+        subdir_path = os.path.join(models_dir, subdir)
+        target_path = os.path.join(models_dir, subdir)
+        models_data_files.extend(package_files(subdir_path, target_path))
 
 setup(
     name=package_name,
@@ -25,9 +36,8 @@ setup(
         (os.path.join('share', package_name, 'launch'), glob('launch/*.launch.py')),
         # World files
         (os.path.join('share', package_name, 'worlds'), glob('worlds/*')),
-        # Models - Preserve structure
-    ] + package_files('models/mobile_robot', 'models/mobile_robot') 
-      + package_files('models/scene_1', 'models/scene_1'),
+        # Models
+    ] + models_data_files,
     install_requires=['setuptools'],
     zip_safe=True,
     maintainer='Yinsong Wang',
