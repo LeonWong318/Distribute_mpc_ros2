@@ -140,7 +140,7 @@ class RobotNode(Node):
         
         # Load robot configuration
         self.config_robot = CircularRobotSpecification.from_yaml(self.robot_config_path)
-        self.motion_model = UnicycleModel(sampling_time=self.config_robot.ts)
+        self.motion_model = UnicycleModel(sampling_time=self.ts)
         
         # Status Definition
         self.STATUS_INITIALIZING = 0
