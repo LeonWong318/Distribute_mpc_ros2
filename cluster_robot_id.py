@@ -1,10 +1,27 @@
 import pandas as pd
+import sys
+import yaml
+import os
 
-# Path to the CSV file
-csv_path = "./data/test_data/schedule.csv"
+sys_config_path = "./config/sys_config.yaml"
+
+if not os.path.exists(sys_config_path):
+    print(f"Error: Configuration file {sys_config_path} not found.", file=sys.stderr)
+    sys.exit(1)
+try:
+    with open(sys_config_path, 'r') as f:
+        config = yaml.safe_load(f)
+        if config is None:
+            print(f"Error: Configuration file {sys_config_path} is empty or invalid.", file=sys.stderr)
+            sys.exit(1)
+except Exception as e:
+    print(f"Error reading configuration file {sys_config_path}: {str(e)}", file=sys.stderr)
+    sys.exit(1)
+
+schedule_path = os.path.join('./', str(config.get('robot_spec_path','data/test_data/schedule.csv'))) 
 
 # Read CSV file
-df = pd.read_csv(csv_path)
+df = pd.read_csv(schedule_path)
 
 # Get unique robot IDs
 robot_ids = df["robot_id"].unique()

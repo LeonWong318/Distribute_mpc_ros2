@@ -359,7 +359,11 @@ class RobotNode(Node):
             if not self.cluster_connected:
                 self.cluster_connected = True
                 self.get_logger().info(f'Cluster node {self.robot_id} is now connected')
-
+                
+                if self.current_status == self.STATUS_SAFETY_STOP:
+                    self.idle = False 
+                    self.update_robot_status(self.STATUS_IDLE)
+                
             self.get_logger().debug(f'Received heartbeat from cluster {self.robot_id}')
         except Exception as e:
             self.get_logger().error(f'Error in heartbeat_callback: {str(e)}')

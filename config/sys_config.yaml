@@ -1,0 +1,65 @@
+# data path
+map_path: 'data/test_data/map.json'
+graph_path: 'data/test_data/graph.json'
+robot_start_path: 'data/test_data/robot_start.json'
+robot_spec_path: 'data/test_data/schedule.csv'
+
+# mpc path
+mpc_config_path: 'config/mpc_default.yaml'
+robot_config_path: 'config/spec_robot.yaml'
+
+# visualizer config
+path_min_distance: 0.1
+
+# manager config
+manager_publish_frequency: 10.0
+
+# cluster config
+cluster_control_frequency: 1.0
+
+# msg buffer config
+enable_gui: true
+mean_delay: 1.0
+
+# gazebo converter config
+command_timeout: 0.5
+converter_state_publish_frequency: 50.0
+min_cmd_interval: 0.01
+enable_noise: false
+gaussian_stddev: 0.05
+failure_probability: 0.05
+failure_max_deviation: 1.0
+
+# gazebo simulation config
+map_name: 'test_data.world'
+
+## local robot config
+max_velocity: 1.0
+max_angular_velocity: 1.0
+control_frequency: 30.0
+cluster_wait_timeout: 30.0
+
+# controller selection
+controller_type: 'pure_pursuit' # choose pure_pursuit/cbf/lqr/lqr_update
+mpc_ts: 0.3 # keep align with ts in mpc_configs
+
+# Pure Pursuit parameters
+lookahead_distance: 0.8
+lookahead_time: 0.5
+lookahead_style: 'time'
+alpha: 0.1
+
+# lqr parameters
+lqr_q_pos: 1000.0   # Position error weight
+lqr_q_theta: 100.0  # Heading error weight
+lqr_r_v: 0.001      # Linear velocity control weight
+lqr_r_omega: 0.01   # Angular velocity control weight
+
+# lqr update parameters:
+lqr_update_q_pos: 1000.0    # Position error weight
+lqr_update_q_theta: 100.0   # Heading error weight
+lqr_update_r_v: 0.001       # Linear velocity control weight
+lqr_update_r_omega: 0.01    # Angular velocity control weight
+lqr_lookahead_dist: 0.8     # Lookahead Distance
+lqr_lookahead_time:: 0.5
+lqr_lookahead_style: 'time' # time or dist
