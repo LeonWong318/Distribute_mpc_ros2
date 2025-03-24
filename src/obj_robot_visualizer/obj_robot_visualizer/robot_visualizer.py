@@ -480,7 +480,66 @@ class RobotStateVisualizer(Node):
                 p.z = 0.05  # Slightly above ground to avoid z-fighting
                 trajectory_marker.points.append(p)
             
+            # Add trajectory line marker to array
             marker_array.markers.append(trajectory_marker)
+            
+            for i, point in enumerate(trajectory_points):
+                
+                # Create point marker (sphere)
+                point_marker = Marker()
+                point_marker.header.frame_id = "map"
+                point_marker.header.stamp = self.get_clock().now().to_msg()
+                point_marker.ns = "trajectory_points"
+                # Unique ID for each point: robot_id * 1000 + point_index
+                point_marker.id = robot_id * 1000 + i
+                point_marker.type = Marker.SPHERE
+                point_marker.action = Marker.ADD
+                
+                point_marker.pose.position.x = point[0]
+                point_marker.pose.position.y = point[1]
+                point_marker.pose.position.z = 0.07  # Slightly above the line
+                
+                # Small sphere
+                point_marker.scale.x = 0.15
+                point_marker.scale.y = 0.15
+                point_marker.scale.z = 0.15
+                
+                # Color slightly different from trajectory line (more yellowish)
+                point_marker.color.r = 1.0
+                point_marker.color.g = 0.8
+                point_marker.color.b = 0.0
+                point_marker.color.a = 0.9
+                
+                marker_array.markers.append(point_marker)
+                
+                # Create sequence number text marker
+                text_marker = Marker()
+                text_marker.header.frame_id = "map"
+                text_marker.header.stamp = self.get_clock().now().to_msg()
+                text_marker.ns = "trajectory_numbers"
+                # Unique ID for each text: robot_id * 1000 + point_index
+                text_marker.id = robot_id * 1000 + i
+                text_marker.type = Marker.TEXT_VIEW_FACING
+                text_marker.action = Marker.ADD
+                
+                # Position text slightly offset from the point
+                text_marker.pose.position.x = point[0] + 0.15
+                text_marker.pose.position.y = point[1] + 0.15
+                text_marker.pose.position.z = 0.1  # Above the point
+                
+                # Set sequence number as text (starting from 1)
+                text_marker.text = str(i + 1)
+                
+                # Small text size to avoid overlaps
+                text_marker.scale.z = 0.15
+                
+                # White text with full opacity
+                text_marker.color.r = 1.0
+                text_marker.color.g = 1.0
+                text_marker.color.b = 1.0
+                text_marker.color.a = 1.0
+                
+                marker_array.markers.append(text_marker)
     
     def robot_trajectories_callback(self, msg):
         """Callback for robot planned trajectories"""
