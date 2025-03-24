@@ -27,7 +27,7 @@ setup(
         (os.path.join('share', package_name, 'worlds'), glob('worlds/*')),
         # Models - Preserve structure
     ] + package_files('models/mobile_robot', 'models/mobile_robot') 
-      + package_files('models/test_data', 'models/test_data'),
+      + package_files('models/scene_1', 'models/scene_1'),
     install_requires=['setuptools'],
     zip_safe=True,
     maintainer='Yinsong Wang',

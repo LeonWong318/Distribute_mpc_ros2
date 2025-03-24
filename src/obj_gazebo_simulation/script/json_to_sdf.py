@@ -163,7 +163,7 @@ if __name__ == '__main__':
     import os
     import pathlib
 
-    map_name = 'test_data' # the map name is the same as the json file name
+    map_name = 'scene_1' # the map name is the same as the json file name
 
     json_file_name = 'map.json'
     sdf_file_name = 'model.sdf'
