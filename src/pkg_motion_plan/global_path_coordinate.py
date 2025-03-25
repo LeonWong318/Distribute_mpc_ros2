@@ -178,6 +178,37 @@ class GlobalPathCoordinator:
             whole_path = False
         return path_nodes, path_times, whole_path
         
+    # def get_robot_schedule(self, robot_id: int, time_offset:float=0.0, position_key="position") -> Tuple[List[Tuple[float, float]], Optional[List[float]]]:
+    #     """
+    #     Args:
+    #         time_offset: The delayed time offset of the schedule.
+
+    #     Raises:
+    #         ValueError: If the graph is not loaded.
+            
+    #     Returns:
+    #         path_coords: list of coordinates of the path nodes
+    #         path_times: list of absolute time stamps, None if not provided.
+    #     """
+    #     if self._G is None:
+    #         raise ValueError("The graph is not loaded.")
+        
+    #     path_nodes, path_times, whole_path = self.get_schedule_with_node_index(robot_id)
+        
+    #     if whole_path:
+    #         path_coords:List[Tuple[float, float]] = [self._G.nodes[node_id][position_key] for node_id in path_nodes]
+    #     if not whole_path:
+    #         source = path_nodes[0]
+    #         target = path_nodes[1]
+    #         path_coords_with_index, section_length_list = self.get_shortest_path(self._G, source, target)
+    #         path_coords = [(x[0], x[1]) for x in path_coords_with_index]
+    #         if path_times is not None:
+    #             edt = path_times[1]
+    #             path_times = [x/sum(section_length_list)*edt for x in section_length_list]
+    #     if path_times is not None:
+    #         path_times = [time_offset + x for x in path_times]
+    #     return path_coords, path_times
+    
     def get_robot_schedule(self, robot_id: int, time_offset:float=0.0, position_key="position") -> Tuple[List[Tuple[float, float]], Optional[List[float]]]:
         """
         Args:
@@ -185,28 +216,28 @@ class GlobalPathCoordinator:
 
         Raises:
             ValueError: If the graph is not loaded.
-            
+
         Returns:
             path_coords: list of coordinates of the path nodes
             path_times: list of absolute time stamps, None if not provided.
         """
         if self._G is None:
             raise ValueError("The graph is not loaded.")
-        
+
         path_nodes, path_times, whole_path = self.get_schedule_with_node_index(robot_id)
-        
-        if whole_path:
-            path_coords:List[Tuple[float, float]] = [self._G.nodes[node_id][position_key] for node_id in path_nodes]
-        if not whole_path:
-            source = path_nodes[0]
-            target = path_nodes[1]
-            path_coords_with_index, section_length_list = self.get_shortest_path(self._G, source, target)
-            path_coords = [(x[0], x[1]) for x in path_coords_with_index]
-            if path_times is not None:
-                edt = path_times[1]
-                path_times = [x/sum(section_length_list)*edt for x in section_length_list]
+
+        source = path_nodes[0]
+        target = path_nodes[-1]
+
+        path_coords_with_index, section_length_list = self.get_shortest_path(self._G, source, target)
+        path_coords = [(x[0], x[1]) for x in path_coords_with_index]
+
         if path_times is not None:
-            path_times = [time_offset + x for x in path_times]
+            total_time = path_times[-1] - path_times[0]
+            path_times = [time_offset]
+            for length in section_length_list:
+                path_times.append(path_times[-1] + length / sum(section_length_list) * total_time)
+
         return path_coords, path_times
     
 
@@ -238,7 +269,8 @@ class GlobalPathCoordinator:
             shortest_path = paths[0]
         else:
             raise NotImplementedError(f"Algorithm {algorithm} is not implemented.")
-        section_lengths:List[float] = [graph.edges[shortest_path[i], shortest_path[i+1]]['weight'] for i in range(len(shortest_path)-1)]
+        section_lengths = [graph.edges[shortest_path[i][2], shortest_path[i+1][2]]['weight'] 
+                          for i in range(len(shortest_path)-1)]
         return shortest_path, section_lengths
     
 
