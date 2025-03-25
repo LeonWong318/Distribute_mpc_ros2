@@ -15,6 +15,7 @@ import json
 import os
 import yaml
 import colorsys
+from .evaluator_utils import PathEvaluator
 
 def quaternion_from_euler(ai, aj, ak):
     ai /= 2.0
@@ -127,6 +128,12 @@ class RobotStateVisualizer(Node):
         # Format: {robot_id: [(x1, y1), (x2, y2), ...]}
         self.robot_trajectories = {}
         
+        
+        # Init Path evaluator
+        self.path_evaluator = PathEvaluator(self.get_logger())
+        self.evaluation_timer = self.create_timer(1.0, self.check_and_evaluate)
+        self.evaluation_completed = False
+        
         self.load_data()
         self.create_robot_subscriptions()
         
@@ -198,6 +205,8 @@ class RobotStateVisualizer(Node):
         # Store the robot status
         old_status = self.robot_statuses.get(robot_id, None)
         self.robot_statuses[robot_id] = msg.state
+        
+        self.path_evaluator.update_robot_status(robot_id, msg.state)
         
         # Log status change if it's new
         if old_status is not None and old_status != msg.state:
@@ -400,40 +409,6 @@ class RobotStateVisualizer(Node):
                     text_marker.color.b = 1.0
                     text_marker.color.a = 1.0
                     marker_array.markers.append(text_marker)
-
-            # if "edge_list" in self.graph_data and "node_dict" in self.graph_data:
-            #     for i, edge in enumerate(self.graph_data["edge_list"]):
-            #         if len(edge) >= 2:
-            #             node1 = edge[0]
-            #             node2 = edge[1]
-
-            #             if node1 in self.graph_data["node_dict"] and node2 in self.graph_data["node_dict"]:
-            #                 edge_marker = Marker()
-            #                 edge_marker.header.frame_id = "map"
-            #                 edge_marker.header.stamp = self.get_clock().now().to_msg()
-            #                 edge_marker.ns = "graph_edges"
-            #                 edge_marker.id = i
-            #                 edge_marker.type = Marker.LINE_STRIP
-            #                 edge_marker.action = Marker.ADD
-            #                 edge_marker.scale.x = 0.05
-            #                 edge_marker.color.r = 0.0
-            #                 edge_marker.color.g = 0.5
-            #                 edge_marker.color.b = 0.5
-            #                 edge_marker.color.a = 1.0
-
-            #                 p1 = Point()
-            #                 p1.x = float(self.graph_data["node_dict"][node1][0])
-            #                 p1.y = float(self.graph_data["node_dict"][node1][1])
-            #                 p1.z = 0.05
-            #                 edge_marker.points.append(p1)
-
-            #                 p2 = Point()
-            #                 p2.x = float(self.graph_data["node_dict"][node2][0])
-            #                 p2.y = float(self.graph_data["node_dict"][node2][1])
-            #                 p2.z = 0.05
-            #                 edge_marker.points.append(p2)
-
-            #                 marker_array.markers.append(edge_marker)
 
         if marker_array.markers:
             self.marker_publisher.publish(marker_array)
@@ -776,6 +751,52 @@ class RobotStateVisualizer(Node):
         if marker_array.markers:
             self.marker_publisher.publish(marker_array)
 
+    def check_and_evaluate(self):
+        if self.evaluation_completed:
+            return
+
+        if not self.robot_statuses:
+            return
+
+        robot_ids = list(self.robot_statuses.keys())
+
+        if self.path_evaluator.all_robots_reached_target(robot_ids):
+            self.get_logger().info("All robots have reached their targets. Starting path evaluation...")
+
+            evaluation_results = self.path_evaluator.evaluate_robot_paths(
+                robot_ids,
+                self.robot_paths,
+                self.shortest_paths
+            )
+
+            self.get_logger().info("Path evaluation completed.")
+            for robot_id, results in evaluation_results.items():
+                normalized_dev = results['normalized_deviation']
+                exec_time = results['execution_time']
+                self.get_logger().info(f"Robot {robot_id}: Normalized deviation: {normalized_dev:.4f}, " + 
+                                      (f"Execution time: {exec_time:.2f} seconds" if exec_time else "Execution time: Not available"))
+
+            self.evaluation_completed = True
+
+            return evaluation_results
+
+    def get_path_evaluation_results(self):
+        if not self.evaluation_completed:
+            self.get_logger().warn("Path evaluation not completed yet.")
+            return None
+
+        robot_ids = list(self.robot_statuses.keys())
+        return self.path_evaluator.evaluate_robot_paths(
+            robot_ids,
+            self.robot_paths,
+            self.shortest_paths
+        )
+
+    def reset_path_evaluation(self):
+        self.evaluation_completed = False
+        self.path_evaluator = PathEvaluator(self.get_logger())
+        self.get_logger().info("Path evaluation has been reset for a new experiment.")
+    
 def main(args=None):
     rclpy.init(args=args)
     visualizer = RobotStateVisualizer()
