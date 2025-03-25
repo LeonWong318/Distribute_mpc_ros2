@@ -22,7 +22,8 @@ from msg_interfaces.msg import (
     ClusterToRobotTrajectory, 
     RobotToClusterState,
     ManagerToClusterStart,
-    ClusterBetweenRobotHeartBeat
+    ClusterBetweenRobotHeartBeat,
+    ClusterToRvizShortestPath
 )
 
 class ClusterNode(Node):
@@ -130,6 +131,12 @@ class ClusterNode(Node):
         self.to_robot_trajectory_pub = self.create_publisher(
             ClusterToRobotTrajectory,
             f'/cluster_{self.robot_id}/trajectory',
+            self.reliable_qos
+        )
+        
+        self.shortest_path_pub = self.create_publisher(
+            ClusterToRvizShortestPath,
+            f'/robot_{self.robot_id}/shortest_path',
             self.reliable_qos
         )
     
@@ -348,6 +355,8 @@ class ClusterNode(Node):
                 self.check_robot_ready
             )
             
+            self.publish_shortest_path()
+            
             self.get_logger().info('Initialization completed successfully')
 
         except Exception as e:
@@ -473,6 +482,20 @@ class ClusterNode(Node):
 
         except Exception as e:
             self.get_logger().error(f'Error publishing state to manager: {str(e)}')
+
+    def publish_shortest_path(self):
+        try:
+            path_msg = ClusterToRvizShortestPath()
+            path_msg.robot_id = self.robot_id
+
+            path_msg.x = [float(coord[0]) for coord in self.path_coords]
+            path_msg.y = [float(coord[1]) for coord in self.path_coords]
+
+            self.shortest_path_pub.publish(path_msg)
+            self.get_logger().info(f'Published shortest path for robot {self.robot_id} with {len(self.path_coords)} points')
+
+        except Exception as e:
+            self.get_logger().error(f'Error publishing shortest path: {str(e)}')
 
 def main(args=None):
     rclpy.init(args=args)

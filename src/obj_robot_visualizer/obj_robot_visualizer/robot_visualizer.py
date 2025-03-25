@@ -1,7 +1,12 @@
 import rclpy
 from rclpy.node import Node
 from visualization_msgs.msg import MarkerArray, Marker
-from msg_interfaces.msg import ManagerToClusterStateSet, GazeboToManagerState, RobotToRvizStatus
+from msg_interfaces.msg import (
+    ManagerToClusterStateSet, 
+    GazeboToManagerState, 
+    RobotToRvizStatus,
+    ClusterToRvizShortestPath
+)
 from geometry_msgs.msg import Point
 from tf2_ros import TransformBroadcaster
 from geometry_msgs.msg import TransformStamped
@@ -76,6 +81,10 @@ class RobotStateVisualizer(Node):
         self.robot_real_states = {}
         # Store robot status information
         self.robot_statuses = {}
+        # Store dijkstra shortest paths
+        self.shortest_paths = {} 
+        # Store shortest path subscriptions
+        self.shortest_path_subscriptions = {}
         
         # Define status codes
         self.STATUS_INITIALIZING = 0
@@ -151,6 +160,14 @@ class RobotStateVisualizer(Node):
                 )
                 self.status_subscriptions[robot_id] = status_sub
                 
+                shortest_path_sub = self.create_subscription(
+                    ClusterToRvizShortestPath,
+                    f'/robot_{robot_id}/shortest_path',
+                    lambda msg, rid=robot_id: self.shortest_path_callback(msg, rid),
+                    10
+                )
+                self.shortest_path_subscriptions[robot_id] = shortest_path_sub
+                
                 # Initialize with default status (Initializing)
                 self.robot_statuses[robot_id] = self.STATUS_INITIALIZING
                 
@@ -188,6 +205,19 @@ class RobotStateVisualizer(Node):
         
         # Debug log
         self.get_logger().debug(f'Received status for robot {robot_id}: {msg.state} ({msg.state_desc})')
+    
+    def shortest_path_callback(self, msg, robot_id):
+        """Callback for robot shortest path messages"""
+        try:
+            path_points = []
+            for i in range(len(msg.x)):
+                path_points.append((msg.x[i], msg.y[i]))
+            
+            self.shortest_paths[robot_id] = path_points
+            self.get_logger().info(f'Received shortest path for robot {robot_id} with {len(path_points)} points')
+        except Exception as e:
+            self.get_logger().error(f'Error processing shortest path for robot {robot_id}: {str(e)}')
+    
     
     def load_data(self):
         try:
@@ -371,42 +401,99 @@ class RobotStateVisualizer(Node):
                     text_marker.color.a = 1.0
                     marker_array.markers.append(text_marker)
 
-            if "edge_list" in self.graph_data and "node_dict" in self.graph_data:
-                for i, edge in enumerate(self.graph_data["edge_list"]):
-                    if len(edge) >= 2:
-                        node1 = edge[0]
-                        node2 = edge[1]
+            # if "edge_list" in self.graph_data and "node_dict" in self.graph_data:
+            #     for i, edge in enumerate(self.graph_data["edge_list"]):
+            #         if len(edge) >= 2:
+            #             node1 = edge[0]
+            #             node2 = edge[1]
 
-                        if node1 in self.graph_data["node_dict"] and node2 in self.graph_data["node_dict"]:
-                            edge_marker = Marker()
-                            edge_marker.header.frame_id = "map"
-                            edge_marker.header.stamp = self.get_clock().now().to_msg()
-                            edge_marker.ns = "graph_edges"
-                            edge_marker.id = i
-                            edge_marker.type = Marker.LINE_STRIP
-                            edge_marker.action = Marker.ADD
-                            edge_marker.scale.x = 0.05
-                            edge_marker.color.r = 0.0
-                            edge_marker.color.g = 0.5
-                            edge_marker.color.b = 0.5
-                            edge_marker.color.a = 1.0
+            #             if node1 in self.graph_data["node_dict"] and node2 in self.graph_data["node_dict"]:
+            #                 edge_marker = Marker()
+            #                 edge_marker.header.frame_id = "map"
+            #                 edge_marker.header.stamp = self.get_clock().now().to_msg()
+            #                 edge_marker.ns = "graph_edges"
+            #                 edge_marker.id = i
+            #                 edge_marker.type = Marker.LINE_STRIP
+            #                 edge_marker.action = Marker.ADD
+            #                 edge_marker.scale.x = 0.05
+            #                 edge_marker.color.r = 0.0
+            #                 edge_marker.color.g = 0.5
+            #                 edge_marker.color.b = 0.5
+            #                 edge_marker.color.a = 1.0
 
-                            p1 = Point()
-                            p1.x = float(self.graph_data["node_dict"][node1][0])
-                            p1.y = float(self.graph_data["node_dict"][node1][1])
-                            p1.z = 0.05
-                            edge_marker.points.append(p1)
+            #                 p1 = Point()
+            #                 p1.x = float(self.graph_data["node_dict"][node1][0])
+            #                 p1.y = float(self.graph_data["node_dict"][node1][1])
+            #                 p1.z = 0.05
+            #                 edge_marker.points.append(p1)
 
-                            p2 = Point()
-                            p2.x = float(self.graph_data["node_dict"][node2][0])
-                            p2.y = float(self.graph_data["node_dict"][node2][1])
-                            p2.z = 0.05
-                            edge_marker.points.append(p2)
+            #                 p2 = Point()
+            #                 p2.x = float(self.graph_data["node_dict"][node2][0])
+            #                 p2.y = float(self.graph_data["node_dict"][node2][1])
+            #                 p2.z = 0.05
+            #                 edge_marker.points.append(p2)
 
-                            marker_array.markers.append(edge_marker)
+            #                 marker_array.markers.append(edge_marker)
 
         if marker_array.markers:
             self.marker_publisher.publish(marker_array)
+    
+    def publish_shortest_path_markers(self, marker_array):
+        """Create and add shortest path markers to the marker array"""
+        for robot_id, path_points in self.shortest_paths.items():
+            if len(path_points) < 2:
+                continue
+                
+            path_marker = Marker()
+            path_marker.header.frame_id = "map"
+            path_marker.header.stamp = self.get_clock().now().to_msg()
+            path_marker.ns = "shortest_paths"
+            path_marker.id = robot_id
+            path_marker.type = Marker.LINE_STRIP
+            path_marker.action = Marker.ADD
+            
+            path_marker.scale.x = 0.07
+            
+            r, g, b = get_robot_color(robot_id, saturation=1.0, value=1.0)
+            path_marker.color.r = r
+            path_marker.color.g = g
+            path_marker.color.b = b
+            path_marker.color.a = 0.8
+            
+            for point in path_points:
+                p = Point()
+                p.x = point[0]
+                p.y = point[1]
+                p.z = 0.03
+                path_marker.points.append(p)
+            
+            marker_array.markers.append(path_marker)
+            
+            for i, point in enumerate(path_points):
+                if i == 0 or i == len(path_points)-1 or i % 5 == 0:
+                    point_marker = Marker()
+                    point_marker.header.frame_id = "map"
+                    point_marker.header.stamp = self.get_clock().now().to_msg()
+                    point_marker.ns = "shortest_path_points"
+                    point_marker.id = robot_id * 1000 + i
+                    point_marker.type = Marker.SPHERE
+                    point_marker.action = Marker.ADD
+                    
+                    point_marker.pose.position.x = point[0]
+                    point_marker.pose.position.y = point[1]
+                    point_marker.pose.position.z = 0.05
+                    
+                    point_marker.scale.x = 0.15
+                    point_marker.scale.y = 0.15
+                    point_marker.scale.z = 0.15
+                    
+                    point_marker.color.r = r
+                    point_marker.color.g = g
+                    point_marker.color.b = b
+                    point_marker.color.a = 0.9
+                    
+                    marker_array.markers.append(point_marker)
+    
     
     def should_add_to_path(self, robot_id, x, y):
         """Determine if a new position should be added to the path based on distance threshold"""
@@ -675,6 +762,9 @@ class RobotStateVisualizer(Node):
             transform.transform.rotation.w = q[3]
             
             self.tf_broadcaster.sendTransform(transform)
+        
+        # Add dijkstra path
+        self.publish_shortest_path_markers(marker_array)
         
         # Add path history markers
         self.publish_path_markers(marker_array)
