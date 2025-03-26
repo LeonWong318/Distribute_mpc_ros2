@@ -4,6 +4,7 @@ import sys
 from sensor_msgs.msg import LaserScan
 import opengen as og
 from pkg_configs.configs import CBFconfig
+from typing import List
 
 class Solver(): # this is not found in the .so file (in ternimal: nm -D  navi_test.so)
     import opengen as og # type: ignore
@@ -93,7 +94,7 @@ class CBF_LQR_Controller:
 
         try:
             # Find nearest obstacle
-            # x_o, y_o = obstacles[:, np.argmin(np.linalg.norm(obstacles - x[:2, None], axis=0)]
+            x_o, y_o = obstacles[0]
             alpha = self.config.alpha  # CBF parameter
 
             # Build parameter vector [x, y, theta, x_ref, y_ref, theta_ref, 
