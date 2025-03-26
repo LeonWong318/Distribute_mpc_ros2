@@ -94,6 +94,7 @@ class RobotStateVisualizer(Node):
         self.STATUS_EMERGENCY_STOP = 3
         self.STATUS_TARGET_REACHED = 4
         self.STATUS_SAFETY_STOP = 5
+        self.STATUS_COLLISION = 6
         
         # Define status color mapping
         self.status_colors = {
@@ -102,7 +103,8 @@ class RobotStateVisualizer(Node):
             self.STATUS_RUNNING: (0.0, 0.7, 0.2),       # Green
             self.STATUS_EMERGENCY_STOP: (1.0, 1.0, 0.0), # Yellow
             self.STATUS_TARGET_REACHED: (0.0, 0.0, 1.0), # Blue
-            self.STATUS_SAFETY_STOP: (1.0, 0.0, 0.0)     # Red
+            self.STATUS_SAFETY_STOP: (1.0, 0.0, 0.0),     # Red
+            self.STATUS_COLLISION: (1.0, 0.0, 1.0)      # Purple
         }
         
         # Original subscription for planned trajectories
@@ -709,7 +711,9 @@ class RobotStateVisualizer(Node):
                 self.STATUS_RUNNING: "Running",
                 self.STATUS_EMERGENCY_STOP: "Emergency Stop",
                 self.STATUS_TARGET_REACHED: "Target Reached",
-                self.STATUS_SAFETY_STOP: "Safety Stop"
+                self.STATUS_SAFETY_STOP: "Safety Stop",
+                self.STATUS_COLLISION: "Collision Detected"
+                
             }
             status_desc = status_desc_map.get(status, "Unknown")
             text_marker.text = f"Robot {robot_id} [{status_desc}]"
