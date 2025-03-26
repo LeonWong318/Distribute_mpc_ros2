@@ -4,15 +4,20 @@ from datetime import datetime
 from collections import defaultdict
 
 class PathEvaluator:
-    
     def __init__(self, logger):
         self.logger = logger
         self.robot_start_times = {}
         self.robot_end_times = {}
         self.previous_status = {}
+        self.robot_states = defaultdict(list)
         
+        self.STATUS_INITIALIZING = 0
+        self.STATUS_IDLE = 1
         self.STATUS_RUNNING = 2
+        self.STATUS_EMERGENCY_STOP = 3
         self.STATUS_TARGET_REACHED = 4
+        self.STATUS_SAFETY_STOP = 5
+        self.STATUS_COLLISION = 6
     
     def update_robot_status(self, robot_id, status):
         if robot_id not in self.previous_status:
@@ -21,6 +26,7 @@ class PathEvaluator:
             
         if status == self.STATUS_RUNNING and self.previous_status[robot_id] != self.STATUS_RUNNING:
             self.robot_start_times[robot_id] = datetime.now()
+            self.robot_states[robot_id] = []
             self.logger.info(f"Robot {robot_id} started running at {self.robot_start_times[robot_id]}")
             
         elif status == self.STATUS_TARGET_REACHED and self.previous_status[robot_id] == self.STATUS_RUNNING:
@@ -28,6 +34,16 @@ class PathEvaluator:
             self.logger.info(f"Robot {robot_id} reached target at {self.robot_end_times[robot_id]}")
         
         self.previous_status[robot_id] = status
+    
+    def update_robot_state(self, robot_id, state_msg):
+        if self.previous_status.get(robot_id) == self.STATUS_RUNNING:
+            state_time = datetime.now()
+            self.robot_states[robot_id].append({
+                'x': state_msg.x,
+                'y': state_msg.y,
+                'theta': state_msg.theta,
+                'time': state_time
+            })
     
     def _point_to_line_segment_distance(self, point, line_start, line_end):
         line_vec = (line_end[0] - line_start[0], line_end[1] - line_start[1])
@@ -87,6 +103,76 @@ class PathEvaluator:
             area += 0.5 * (d1 + d2) * segment_length
             
         return area
+    
+    def _calculate_smoothness(self, robot_id):
+        states = self.robot_states.get(robot_id, [])
+        if len(states) < 3:
+            self.logger.warn(f"Insufficient acceleration data to calculate smoothness for robot {robot_id}")
+            return {
+                'linear_smoothness': float('inf'),
+                'angular_smoothness': float('inf')
+            }
+        
+        velocities = []
+        angular_velocities = []
+        
+        for i in range(1, len(states)):
+            dx = states[i]['x'] - states[i-1]['x']
+            dy = states[i]['y'] - states[i-1]['y']
+            dtheta = states[i]['theta'] - states[i-1]['theta']
+            
+            dtheta = math.atan2(math.sin(dtheta), math.cos(dtheta))
+            
+            dt = (states[i]['time'] - states[i-1]['time']).total_seconds()
+            
+            if dt > 0:
+                v = math.sqrt(dx*dx + dy*dy) / dt
+                omega = dtheta / dt
+                
+                velocities.append(v)
+                angular_velocities.append(omega)
+            else:
+                self.logger.warn(f"Zero time difference detected for robot {robot_id}")
+        
+        if len(velocities) < 2:
+            self.logger.warn(f"Insufficient acceleration data to calculate smoothness for robot {robot_id}")
+            return {
+                'linear_smoothness': float('inf'),
+                'angular_smoothness': float('inf')
+            }
+        
+        linear_accelerations = []
+        angular_accelerations = []
+        
+        for i in range(1, len(velocities)):
+            dv = velocities[i] - velocities[i-1]
+            domega = angular_velocities[i] - angular_velocities[i-1]
+            
+            dt = (states[i+1]['time'] - states[i]['time']).total_seconds()
+            
+            if dt > 0:
+                a = dv / dt
+                alpha = domega / dt
+                
+                linear_accelerations.append(abs(a))
+                angular_accelerations.append(abs(alpha))
+            else:
+                self.logger.warn(f"Zero time difference detected for robot {robot_id}")
+        
+        if not linear_accelerations or not angular_accelerations:
+            self.logger.warn(f"Insufficient acceleration data to calculate smoothness for robot {robot_id}")
+            return {
+                'linear_smoothness': float('inf'),
+                'angular_smoothness': float('inf')
+            }
+        
+        linear_smoothness = sum(linear_accelerations) / len(linear_accelerations)
+        angular_smoothness = sum(angular_accelerations) / len(angular_accelerations)
+        
+        return {
+            'linear_smoothness': linear_smoothness,
+            'angular_smoothness': angular_smoothness
+        }
         
     def evaluate_robot_paths(self, robot_ids, robot_paths, shortest_paths):
         results = {}
@@ -106,6 +192,7 @@ class PathEvaluator:
             planned_length = self._calculate_path_length(planned_path)
             deviation_area = self._calculate_path_deviation_area(actual_path, planned_path)
             normalized_deviation = deviation_area / planned_length if planned_length > 0 else float('inf')
+            smoothness_metrics = self._calculate_smoothness(robot_id)
             
             execution_time = None
             if robot_id in self.robot_start_times and robot_id in self.robot_end_times:
@@ -116,13 +203,17 @@ class PathEvaluator:
                 'deviation_area': deviation_area,
                 'normalized_deviation': normalized_deviation,
                 'execution_time': execution_time,
-                'path_length': planned_length
+                'path_length': planned_length,
+                'linear_smoothness': smoothness_metrics['linear_smoothness'],
+                'angular_smoothness': smoothness_metrics['angular_smoothness']
             }
             
             self.logger.info(f"Evaluation for robot {robot_id}:")
             self.logger.info(f"  Path length: {planned_length:.2f} units")
             self.logger.info(f"  Deviation area: {deviation_area:.2f} square units")
             self.logger.info(f"  Normalized deviation: {normalized_deviation:.4f}")
+            self.logger.info(f"  Linear smoothness (avg |accel|): {smoothness_metrics['linear_smoothness']:.4f} m/s²")
+            self.logger.info(f"  Angular smoothness (avg |ang_accel|): {smoothness_metrics['angular_smoothness']:.4f} rad/s²")
             if execution_time is not None:
                 self.logger.info(f"  Execution time: {execution_time:.2f} seconds")
             else:

@@ -94,6 +94,7 @@ class RobotStateVisualizer(Node):
         self.STATUS_EMERGENCY_STOP = 3
         self.STATUS_TARGET_REACHED = 4
         self.STATUS_SAFETY_STOP = 5
+        self.STATUS_COLLISION = 6
         
         # Define status color mapping
         self.status_colors = {
@@ -102,7 +103,8 @@ class RobotStateVisualizer(Node):
             self.STATUS_RUNNING: (0.0, 0.7, 0.2),       # Green
             self.STATUS_EMERGENCY_STOP: (1.0, 1.0, 0.0), # Yellow
             self.STATUS_TARGET_REACHED: (0.0, 0.0, 1.0), # Blue
-            self.STATUS_SAFETY_STOP: (1.0, 0.0, 0.0)     # Red
+            self.STATUS_SAFETY_STOP: (1.0, 0.0, 0.0),     # Red
+            self.STATUS_COLLISION: (1.0, 0.0, 1.0)      # Purple
         }
         
         # Original subscription for planned trajectories
@@ -186,19 +188,21 @@ class RobotStateVisualizer(Node):
         """Callback for individual robot real state messages"""
         # Store the real state
         self.robot_real_states[robot_id] = msg
-        
+
         # Update path history for this robot
         x = msg.x
         y = msg.y
-        
+
         # Initialize path list if this is a new robot
         if robot_id not in self.robot_paths:
             self.robot_paths[robot_id] = []
-        
+
         # Add position to path if it's far enough from the last recorded point
         if self.should_add_to_path(robot_id, x, y):
             self.robot_paths[robot_id].append((x, y))
             self.get_logger().debug(f'Added new path point for robot {robot_id}: ({x}, {y})')
+
+        self.path_evaluator.update_robot_state(robot_id, msg)
     
     def robot_status_callback(self, msg, robot_id):
         """Callback for individual robot status messages"""
@@ -709,7 +713,9 @@ class RobotStateVisualizer(Node):
                 self.STATUS_RUNNING: "Running",
                 self.STATUS_EMERGENCY_STOP: "Emergency Stop",
                 self.STATUS_TARGET_REACHED: "Target Reached",
-                self.STATUS_SAFETY_STOP: "Safety Stop"
+                self.STATUS_SAFETY_STOP: "Safety Stop",
+                self.STATUS_COLLISION: "Collision Detected"
+                
             }
             status_desc = status_desc_map.get(status, "Unknown")
             text_marker.text = f"Robot {robot_id} [{status_desc}]"

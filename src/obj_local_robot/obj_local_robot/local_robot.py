@@ -17,6 +17,7 @@ from pkg_local_control.lqr_update import LQR_Update_Controller
 
 from msg_interfaces.msg import ClusterToRobotTrajectory, RobotToClusterState, RobotToRvizStatus,ClusterBetweenRobotHeartBeat
 from msg_interfaces.srv import RegisterRobot, ExecuteCommand
+from gazebo_msgs.msg import ContactsState
 
 class RobotNode(Node):
     async def initialize(self):
@@ -149,6 +150,7 @@ class RobotNode(Node):
         self.STATUS_EMERGENCY_STOP = 3
         self.STATUS_TARGET_REACHED = 4
         self.STATUS_SAFETY_STOP = 5
+        self.STATUS_COLLISION = 6 
         
         self.current_status = self.STATUS_INITIALIZING
         self.status_descriptions = {
@@ -157,7 +159,8 @@ class RobotNode(Node):
             self.STATUS_RUNNING: "Running",
             self.STATUS_EMERGENCY_STOP: "Emergency Stop",
             self.STATUS_TARGET_REACHED: "Target Reached",
-            self.STATUS_SAFETY_STOP: "Safety Stop"
+            self.STATUS_SAFETY_STOP: "Safety Stop",
+            self.STATUS_COLLISION: "Collision Detected"
         }
         
         # Initialize controllers
@@ -169,6 +172,7 @@ class RobotNode(Node):
         self.current_trajectory = None  # Current trajectory
         self.trajectory_received = False  # Flag for trajectory reception
         self.last_received_state_from_gazebo_time = self.get_clock().now().to_msg()
+        self.collision_detected = False
         
         # Create callback group
         self.callback_group = ReentrantCallbackGroup()
@@ -202,6 +206,16 @@ class RobotNode(Node):
             self.reliable_qos,
             callback_group=self.callback_group
         )
+        
+        # create subscription for collision
+        self.collision_sub = self.create_subscription(
+            ContactsState,
+            f'/robot_{self.robot_id}/robot_collision',
+            self.collision_callback,
+            self.best_effort_qos,
+            callback_group=self.callback_group
+        )
+    
         
         # Create publisher for robot state to cluster
         self.to_cluster_state_pub = self.create_publisher(
@@ -455,6 +469,60 @@ class RobotNode(Node):
             
         except Exception as e:
             self.get_logger().error(f'Error in trajectory_callback: {str(e)}')
+    
+    def collision_callback(self, msg: ContactsState):
+        try:
+            if not msg.states:
+                return
+
+            if self.collision_detected:
+                return
+
+            self.get_logger().error(f'Collision detected for robot {self.robot_id}!')
+
+            self.collision_detected = True
+            self.update_robot_status(self.STATUS_COLLISION)
+            self.execute_stop()
+            self.idle = True
+
+            collision_info = []
+            for state in msg.states:
+                collision_with = "environment"
+                other_robot_id = None
+
+                for name in [state.collision1_name, state.collision2_name]:
+                    if "robot_" in name and f"robot_{self.robot_id}" not in name:
+                        collision_with = "robot"
+                        parts = name.split('robot_')
+                        if len(parts) > 1:
+                            other_id = parts[1].split('/')[0]
+                            other_robot_id = other_id
+
+                collision_data = {
+                    "collision_with": collision_with,
+                    "other_robot_id": other_robot_id
+                }
+
+                if state.contact_positions:
+                    position = [
+                        state.contact_positions[0].x,
+                        state.contact_positions[0].y,
+                        state.contact_positions[0].z
+                    ]
+                    collision_data["position"] = position
+
+                collision_info.append(collision_data)
+
+                if collision_with == 'robot':
+                    self.get_logger().error(f'Collision with robot {other_robot_id}')
+                else:
+                    self.get_logger().error(f'Collision with environment')
+
+                
+        except Exception as e:
+            self.get_logger().error(f'Error in collision_callback: {str(e)}')
+            import traceback
+            self.get_logger().error(traceback.format_exc())
     
     def control_loop_callback(self):
         """Control loop: compute and apply control commands"""
