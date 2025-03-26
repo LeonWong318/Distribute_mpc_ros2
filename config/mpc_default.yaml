@@ -26,17 +26,17 @@ ang_acc_penalty: 2.0   # Cost angular acceleration
 qrpd: 10.0             # Cost for reference path deviation
 qpos: 5.0               # Cost for position deviation each time step to the reference
 qvel: 5.0              # Cost for speed    deviation each time step to the reference
-qtheta: 0.0             # Cost for heading  deviation each time step to the reference
+qtheta: 5.0             # Cost for heading  deviation each time step to the reference
 # Obstacle avoidance weights
 qstcobs: 100.0 # Cost for static obstacle avoidance (soft constraint)
 qdynobs: 500.0 # Cost for dynamic obstacle avoidance (soft constraint)
 # Fleet coordination
 qorobot: 5000.0 # Cost for other robot
-qpredrobot: 800.0 # Cost for other robot's predicted trjectory
+qpredrobot: 1000.0 # Cost for other robot's predicted trajectory
 
 # Terminal weights
-qpN: 0.0               # Terminal cost; error relative to final reference position         
-qthetaN: 0.0            # Terminal cost; error relative to final reference heading     
+qpN: 10.0               # Terminal cost; error relative to final reference position         
+qthetaN: 10.0            # Terminal cost; error relative to final reference heading     
 # Building options in the optimizer
 solver_type: 'PANOC'
 max_solver_time: 5000_000        # micros (0.5 sec)
