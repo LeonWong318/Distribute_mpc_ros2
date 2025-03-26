@@ -188,19 +188,21 @@ class RobotStateVisualizer(Node):
         """Callback for individual robot real state messages"""
         # Store the real state
         self.robot_real_states[robot_id] = msg
-        
+
         # Update path history for this robot
         x = msg.x
         y = msg.y
-        
+
         # Initialize path list if this is a new robot
         if robot_id not in self.robot_paths:
             self.robot_paths[robot_id] = []
-        
+
         # Add position to path if it's far enough from the last recorded point
         if self.should_add_to_path(robot_id, x, y):
             self.robot_paths[robot_id].append((x, y))
             self.get_logger().debug(f'Added new path point for robot {robot_id}: ({x}, {y})')
+
+        self.path_evaluator.update_robot_state(robot_id, msg)
     
     def robot_status_callback(self, msg, robot_id):
         """Callback for individual robot status messages"""
