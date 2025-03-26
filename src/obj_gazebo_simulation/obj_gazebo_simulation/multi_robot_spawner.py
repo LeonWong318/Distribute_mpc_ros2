@@ -23,7 +23,6 @@ class MultiRobotSpawner(Node):
             rclpy.shutdown()
             return
 
-
         # Create a client to interact with Gazebo's spawn service
         self.client = self.create_client(SpawnEntity, "/spawn_entity")
         self.get_logger().info("Waiting for `/spawn_entity` service...")
@@ -63,23 +62,24 @@ class MultiRobotSpawner(Node):
         """
         try:
             root = ET.fromstring(sdf_content)
-
+    
             model = root.find(".//model")
             if model is None:
                 self.get_logger().error("No model element found in SDF file!")
                 return sdf_content
-
+    
             model.set("name", robot_namespace)
-
+    
+            # Add differential drive plugin
             diff_drive = ET.SubElement(model, "plugin")
             diff_drive.set("name", "diff_drive")
             diff_drive.set("filename", "libgazebo_ros_diff_drive.so")
-
+    
             ros_elem = ET.SubElement(diff_drive, "ros")
             ET.SubElement(ros_elem, "namespace").text = f"/{robot_namespace}"
             ET.SubElement(ros_elem, "remapping").text = f"cmd_vel:=cmd_vel"
             ET.SubElement(ros_elem, "remapping").text = f"odom:=odom"
-
+    
             ET.SubElement(diff_drive, "left_joint").text = "left_wheel_hinge"
             ET.SubElement(diff_drive, "right_joint").text = "right_wheel_hinge"
             ET.SubElement(diff_drive, "wheel_separation").text = "0.26"
@@ -91,21 +91,45 @@ class MultiRobotSpawner(Node):
             ET.SubElement(diff_drive, "publish_wheel_tf").text = "true"
             ET.SubElement(diff_drive, "odometry_frame").text = "odom"
             ET.SubElement(diff_drive, "robot_base_frame").text = f"{robot_namespace}/chassis"
-
+    
+            # Add laser plugin
             laser_sensor = root.find(".//sensor[@name='laser']")
             if laser_sensor is not None:
                 laser_plugin = ET.SubElement(laser_sensor, "plugin")
                 laser_plugin.set("name", "laser")
                 laser_plugin.set("filename", "libgazebo_ros_ray_sensor.so")
-
+    
                 laser_ros = ET.SubElement(laser_plugin, "ros")
                 ET.SubElement(laser_ros, "namespace").text = f"/{robot_namespace}"
                 ET.SubElement(laser_ros, "argument").text = f"--ros-args --remap ~/out:={robot_namespace}/scan"
-
+    
                 ET.SubElement(laser_plugin, "output_type").text = "sensor_msgs/LaserScan"
+            
+            base_link = root.find(".//link[@name='base_footprint']")
+            if base_link is not None:
+                contact_sensor = ET.SubElement(base_link, "sensor")
+                contact_sensor.set("name", "bumper_sensor")
+                contact_sensor.set("type", "contact")
 
+                ET.SubElement(contact_sensor, "update_rate").text = "10.0"
+
+                contact_elem = ET.SubElement(contact_sensor, "contact")
+                ET.SubElement(contact_elem, "collision").text = "base_footprint_fixed_joint_lump__mirX/base_link_collision"
+
+                bumper_plugin = ET.SubElement(contact_sensor, "plugin")
+                bumper_plugin.set("name", "bumper_plugin")
+                bumper_plugin.set("filename", "libgazebo_ros_bumper.so")
+
+                plugin_ros = ET.SubElement(bumper_plugin, "ros")
+                ET.SubElement(plugin_ros, "namespace").text = f"/{robot_namespace}"
+                ET.SubElement(plugin_ros, "remapping").text = f"bumper_states:=robot_collision"
+
+                ET.SubElement(bumper_plugin, "robotNamespace").text = f"/{robot_namespace}"
+            else:
+                self.get_logger().error("base_footprint link not found in SDF! Cannot add bumper sensor.")
+    
             return ET.tostring(root, encoding='unicode')
-
+    
         except Exception as e:
             self.get_logger().error(f"Error modifying SDF: {str(e)}")
             import traceback
