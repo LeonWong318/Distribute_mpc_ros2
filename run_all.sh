@@ -1,8 +1,28 @@
 #!/bin/bash
-
 # Configuration flag for hiding terminals
 # Set to 'true' to run certain components in background, 'false' to show all terminals
 HIDE_TERMINALS=false
+
+# Array to store all PIDs
+declare -a PIDS=()
+
+# Function to handle Ctrl+C
+cleanup() {
+    echo "Shutting down all ROS2 terminals..."
+    for pid in "${PIDS[@]}"; do
+        if ps -p $pid > /dev/null; then
+            echo "Killing process $pid"
+            kill -TERM $pid
+        fi
+    done
+    # Also kill any remaining ros2 processes
+    pkill -f "ros2"
+    echo "All processes terminated."
+    exit 0
+}
+
+# Set up trap to catch Ctrl+C
+trap cleanup SIGINT SIGTERM
 
 # Function to launch either in terminal or background based on flag
 launch_component() {
@@ -13,9 +33,11 @@ launch_component() {
     if [ "$HIDE_TERMINALS" = true ] && [ "$always_visible" != "true" ]; then
         echo "Launching $component_name in background..."
         nohup bash -c "source install/setup.bash && $launch_command" > "${component_name}.log" 2>&1 &
+        PIDS+=($!)
     else
         echo "Launching $component_name in terminal..."
-        gnome-terminal --working-directory="$CURRENT_DIR" -- bash -c "echo $component_name; source install/setup.bash; $launch_command; exec bash"
+        gnome-terminal --working-directory="$CURRENT_DIR" -- bash -c "echo $component_name; source install/setup.bash; $launch_command; exec bash" &
+        PIDS+=($!)
     fi
 }
 
@@ -83,3 +105,9 @@ sleep 5
 # Launch local robot nodes (will register with manager)
 echo "Launching local robot nodes..."
 eval "$ROBOT_LAUNCH_COMMANDS"
+
+# Keep the script running to handle Ctrl+C
+echo "All components launched. Press Ctrl+C to shut down all terminals."
+while true; do
+    sleep 1
+done
