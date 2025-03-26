@@ -5,7 +5,9 @@ from msg_interfaces.msg import (
     ManagerToClusterStateSet, 
     GazeboToManagerState, 
     RobotToRvizStatus,
-    ClusterToRvizShortestPath
+    ClusterToRvizShortestPath,
+    PerformanceMetrics,
+    PerformanceMetricsArray
 )
 from geometry_msgs.msg import Point
 from tf2_ros import TransformBroadcaster
@@ -72,6 +74,12 @@ class RobotStateVisualizer(Node):
             10
         )
         
+        self.metrics_publisher = self.create_publisher(
+            PerformanceMetricsArray,
+            '/performance_metrics',
+            10
+        )
+        
         self.tf_broadcaster = TransformBroadcaster(self)
         
         # Store robot real state subscriptions
@@ -135,6 +143,7 @@ class RobotStateVisualizer(Node):
         self.path_evaluator = PathEvaluator(self.get_logger())
         self.evaluation_timer = self.create_timer(1.0, self.check_and_evaluate)
         self.evaluation_completed = False
+        self.metrics_published = False
         
         self.load_data()
         self.create_robot_subscriptions()
@@ -757,8 +766,13 @@ class RobotStateVisualizer(Node):
         if marker_array.markers:
             self.marker_publisher.publish(marker_array)
 
+    def reset_path_evaluation(self):
+        self.evaluation_completed = False
+        self.path_evaluator = PathEvaluator(self.get_logger())
+        self.get_logger().info("Path evaluation has been reset for a new experiment.")
+    
     def check_and_evaluate(self):
-        if self.evaluation_completed:
+        if self.evaluation_completed or self.metrics_published:
             return
 
         if not self.robot_statuses:
@@ -775,16 +789,46 @@ class RobotStateVisualizer(Node):
                 self.shortest_paths
             )
 
-            self.get_logger().info("Path evaluation completed.")
-            for robot_id, results in evaluation_results.items():
-                normalized_dev = results['normalized_deviation']
-                exec_time = results['execution_time']
-                self.get_logger().info(f"Robot {robot_id}: Normalized deviation: {normalized_dev:.4f}, " + 
-                                      (f"Execution time: {exec_time:.2f} seconds" if exec_time else "Execution time: Not available"))
-
+            self.get_logger().info("Path evaluation completed. Publishing metrics...")
+            
+            # Create and publish metrics message
+            self.publish_performance_metrics(evaluation_results)
+            
             self.evaluation_completed = True
-
             return evaluation_results
+
+    def publish_performance_metrics(self, evaluation_results):
+        """
+        Publish performance metrics for all robots
+        """
+        if not evaluation_results:
+            self.get_logger().warn("No evaluation results to publish")
+            return
+            
+        metrics_array_msg = PerformanceMetricsArray()
+        
+        for robot_id, results in evaluation_results.items():
+            metric_msg = PerformanceMetrics()
+            metric_msg.robot_id = robot_id
+            metric_msg.deviation_area = results['deviation_area']
+            metric_msg.normalized_deviation = results['normalized_deviation']
+            
+            # Handle possible None values for execution_time
+            if results['execution_time'] is not None:
+                metric_msg.execution_time = results['execution_time']
+            else:
+                metric_msg.execution_time = float('nan')  # Use NaN for missing values
+                
+            metric_msg.path_length = results['path_length']
+            metric_msg.linear_smoothness = results['linear_smoothness']
+            metric_msg.angular_smoothness = results['angular_smoothness']
+            
+            metrics_array_msg.metrics.append(metric_msg)
+        
+        # Publish the metrics
+        self.metrics_publisher.publish(metrics_array_msg)
+        self.get_logger().info(f"Published performance metrics for {len(metrics_array_msg.metrics)} robots")
+        self.metrics_published = True
 
     def get_path_evaluation_results(self):
         if not self.evaluation_completed:
@@ -799,7 +843,9 @@ class RobotStateVisualizer(Node):
         )
 
     def reset_path_evaluation(self):
+        """Reset the path evaluator for a new experiment"""
         self.evaluation_completed = False
+        self.metrics_published = False
         self.path_evaluator = PathEvaluator(self.get_logger())
         self.get_logger().info("Path evaluation has been reset for a new experiment.")
     

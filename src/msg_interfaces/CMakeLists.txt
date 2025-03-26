@@ -10,6 +10,8 @@ find_package(rosidl_default_generators REQUIRED)
 find_package(builtin_interfaces REQUIRED)
 
 rosidl_generate_interfaces(${PROJECT_NAME}
+  "msg/PerformanceMetrics.msg"
+  "msg/PerformanceMetricsArray.msg"
   "msg/ClusterBetweenRobotHeartBeat.msg"
   "msg/ClusterToManagerState.msg"
   "msg/ClusterToRobotTrajectory.msg"

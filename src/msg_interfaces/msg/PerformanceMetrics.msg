@@ -1,0 +1,7 @@
+uint32 robot_id
+float64 deviation_area
+float64 normalized_deviation
+float64 execution_time
+float64 path_length
+float64 linear_smoothness
+float64 angular_smoothness
