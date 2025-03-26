@@ -11,3 +11,5 @@ __pycache__/
 mpc_solver/
 
 *.out
+
+cbf_solver/

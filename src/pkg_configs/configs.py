@@ -154,7 +154,7 @@ class CBFconfig(_Configuration):
         self.max_angular_velocity = config.max_angular_velocity
         
         # CBF parameters
-        # self.alpha = config.alpha
+        self.alpha = config.alpha
         
         # Solver parameters
         self.solver_tolerance = config.tolerance

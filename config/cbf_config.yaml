@@ -18,6 +18,7 @@ max_inner_iterations: 500
 max_outer_iterations: 10
 initial_penalty: 1.0
 penalty_update_factor: 5.0
+alpha: 0.1
 
 # Output Directory
 output_dir: "cbf_solver"

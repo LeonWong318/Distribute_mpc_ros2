@@ -1,6 +1,7 @@
 import numpy as np
 from sensor_msgs.msg import LaserScan
 import opengen as og
+import  cbf_solver
 
 def process_laserscan(scan_msg):
     angles = np.linspace(scan_msg.angle_min, scan_msg.angle_max, len(scan_msg.ranges))
