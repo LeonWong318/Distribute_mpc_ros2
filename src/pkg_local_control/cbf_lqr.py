@@ -1,102 +1,157 @@
 import numpy as np
+import os
+import sys
 from sensor_msgs.msg import LaserScan
 import opengen as og
-import  cbf_solver
+from pkg_configs.configs import CBFconfig
+from typing import List
 
-def process_laserscan(scan_msg):
-    angles = np.linspace(scan_msg.angle_min, scan_msg.angle_max, len(scan_msg.ranges))
-    ranges = np.array(scan_msg.ranges)
+class Solver(): # this is not found in the .so file (in ternimal: nm -D  navi_test.so)
+    import opengen as og # type: ignore
+    def run(self, p: List, initial_guess=None, initial_lagrange_multipliers=None, initial_penalty=None) -> og.opengen.tcp.solver_status.SolverStatus: pass
 
-    # Convert to (x, y) coordinates (ignoring NaN or inf values)
-    valid_indices = ~np.isnan(ranges) & (ranges < scan_msg.range_max)
-    x_obstacles = ranges[valid_indices] * np.cos(angles[valid_indices])
-    y_obstacles = ranges[valid_indices] * np.sin(angles[valid_indices])
-
-    return np.vstack((x_obstacles, y_obstacles))  # Shape (2, N)
-
+class ObstacleProcessor:
+    def __init__(self, sensor: LaserScan, safety_margin: float = 0.2, max_obstacle_distance: float = 3.0):
+        """
+        Process LaserScan data to find closest obstacles
+        
+        :param sensor: LaserScan message from ROS
+        :param safety_margin: Additional safety margin around obstacles (meters)
+        :param max_obstacle_distance: Maximum distance to consider obstacles (meters)
+        """
+        # Convert polar coordinates to Cartesian
+        angles = np.linspace(sensor.angle_min, sensor.angle_max, len(sensor.ranges))
+        ranges = np.array(sensor.ranges)
+        
+        # Filter valid measurements
+        valid = (~np.isnan(ranges)) and (ranges >= sensor.range_min) and (ranges <= min(sensor.range_max, max_obstacle_distance))
+        
+        self.obstacles = np.vstack((
+            ranges[valid] * np.cos(angles[valid]),
+            ranges[valid] * np.sin(angles[valid])
+        )).T  # Shape: (N, 2)
+        
+        # Apply safety margin
+        self.safety_margin = safety_margin
+        self._filter_obstacles()
+    
+    def _filter_obstacles(self):
+        """Filter and sort obstacles by distance"""
+        if self.obstacles.size == 0:
+            self.closest_obstacles = np.empty((0, 2))
+            return
+            
+        # Calculate distances from origin (robot position)
+        distances = np.linalg.norm(self.obstacles, axis=1)
+        
+        # Apply safety margin adjustment
+        adjusted_distances = distances - self.safety_margin
+        
+        # Sort by adjusted distance
+        sorted_indices = np.argsort(adjusted_distances)
+        self.closest_obstacles = self.obstacles[sorted_indices]
+        self.distances = adjusted_distances[sorted_indices]
+    
+    def get_closest_obstacles(self, num_obstacles: int = 3):
+        """
+        Get closest N obstacles with safety margin considered
+        
+        :param num_obstacles: Number of closest obstacles to return
+        :return: Array of obstacle positions in robot frame (shape: (N, 2))
+        """
+        if self.closest_obstacles.shape[0] == 0:
+            return np.empty((0, 2))
+            
+        n = min(num_obstacles, self.closest_obstacles.shape[0])
+        return self.closest_obstacles[:n]
+    
+    def get_most_dangerous_obstacle(self):
+        """
+        Get the single most dangerous/closest obstacle
+        :return: (x, y) position or None if no obstacles
+        """
+        if self.closest_obstacles.shape[0] == 0:
+            return None
+        return self.closest_obstacles[0]
+    
 class CBF_LQR_Controller:
-    def __init__(self, Q, R, d_safe, max_velocity=1.0, Ts=0.1):
+    def __init__(self, Q, R, d_safe, config : CBFconfig, max_velocity=1.0, Ts=0.1):
         self.Q = Q
         self.R = R
         self.d_safe = d_safe
         self.max_velocity = max_velocity
-        self.Ts = Ts  # Added timestep parameter
+        self.Ts = Ts
+        self.config = config
+        # Initialize solver from Python bindings
+        self.solver_path = os.path.join(self.config.output_dir)
+        sys.path.append(self.solver_path)
+        self.cbf_solver_name = 'cbf_solver'
+        self.solver:Solver = self.cbf_solver_name.solver()
 
-        # Define the optimizer
-        self.optimizer = self.build_optimizer()
-
-    
     def compute_control(self, x, x_ref, u_ref, obstacles):
-        """
-        Solve the QP for the optimal control input.
-        """
         if obstacles.shape[1] == 0:
-            return u_ref  # No obstacles, use nominal control
+            return u_ref[0], u_ref[1]
 
-        x_o, y_o = obstacles[:, np.argmin(np.linalg.norm(obstacles - x[:2, None], axis=0))]
-
-        params = np.hstack([x, x_ref, u_ref, x_o, y_o, 0.5])  # Alpha = 0.5
-        solution = self.optimizer.solve(params)
-        return solution
-    
-    def compute_control_commands(self, current_position, current_heading, trajectory_list, obstacles):
         try:
-            # Convert inputs to numpy arrays
-            current_state = np.array([current_position[0], current_position[1], current_heading])
-            
-            # Find closest point on trajectory
-            min_dist = float('inf')
-            closest_idx = 0
-            
-            for i, point in enumerate(trajectory_list):
-                point_state = np.array([point[0], point[1], point[2]])
-                dist = np.linalg.norm(current_state[:2] - point_state[:2])
-                
-                if dist < min_dist:
-                    min_dist = dist
-                    closest_idx = i
-            
-            # Find next point for reference
-            next_idx = min(closest_idx + 1, len(trajectory_list) - 1)
-            
-            # Get reference state
-            x_ref = np.array([
-                trajectory_list[closest_idx][0],
-                trajectory_list[closest_idx][1],
-                trajectory_list[closest_idx][2]
+            # Find nearest obstacle
+            x_o, y_o = obstacles[0]
+            alpha = self.config.alpha  # CBF parameter
+
+            # Build parameter vector [x, y, theta, x_ref, y_ref, theta_ref, 
+            #                        v_ref, omega_ref, x_o, y_o, alpha]
+            params = np.concatenate([
+                x,                # current state (3)
+                x_ref,            # reference state (3)
+                u_ref,            # reference control (2)
+                [x_o, y_o, alpha] # obstacle + CBF param (3)
             ])
+
+            # Solve using Python bindings
+            solution = self.solver.solve(p=params)
             
-            # Compute reference control input
-            if closest_idx < len(trajectory_list) - 1:
-                next_point = np.array([
-                    trajectory_list[next_idx][0],
-                    trajectory_list[next_idx][1]
-                ])
-                current_point = np.array([
-                    trajectory_list[closest_idx][0],
-                    trajectory_list[closest_idx][1]
-                ])
-                
-                direction = next_point - current_point
-                direction_norm = np.linalg.norm(direction)
-                
-                if direction_norm > 1e-6:
-                    v_ref = (direction[0] * np.cos(x_ref[2]) + direction[1] * np.sin(x_ref[2])) / self.Ts
-                    theta_ref = (trajectory_list[next_idx][2] - x_ref[2]+ np.pi) % (2 * np.pi) - np.pi
-                    omega_ref = theta_ref / self.Ts  # Simplified handling
-                    
-                    u_ref = np.array([v_ref, omega_ref])
-                else:
-                    u_ref = np.array([0.0, 0.0])
-            else:
-                u_ref = np.array([0.0, 0.0])
+            # Extract solution - format depends on your problem setup
+            if solution['exit_status'] == 'Converged':
+                return solution['solution'][0], solution['solution'][1]
             
-            # Compute control with obstacles
-            u = self.compute_control(current_state, x_ref, u_ref, obstacles)
-            
-            # Return velocity commands
-            return u[0], u[1]
-            
+            return float(u_ref[0]), float(u_ref[1])
+
         except Exception as e:
-            print(f"Error in CBF-LQR compute_control_commands: {str(e)}")
+            print(f"Control computation failed: {str(e)}")
+            return 0.0, 0.0
+    
+    def compute_control_commands(self, current_position, current_heading, 
+                                trajectory_list, obstacles):
+        try:
+            current_state = np.array([
+                current_position[0], 
+                current_position[1], 
+                current_heading
+            ])
+
+            # Simplified reference tracking (same as before)
+            closest_idx = np.argmin([
+                np.linalg.norm(point[:2] - current_state[:2])
+                for point in trajectory_list
+            ])
+            x_ref = np.array(trajectory_list[closest_idx])
+
+            # Simplified reference control calculation
+            if closest_idx < len(trajectory_list) - 1:
+                next_point = trajectory_list[closest_idx + 1]
+                direction = next_point[:2] - x_ref[:2]
+                v_ref = np.linalg.norm(direction) / self.Ts
+                omega_ref = (next_point[2] - x_ref[2]) / self.Ts
+            else:
+                v_ref, omega_ref = 0.0, 0.0
+
+            # Compute safe control
+            return self.compute_control(
+                current_state,
+                x_ref,
+                np.array([v_ref, omega_ref]),
+                obstacles
+            )
+
+        except Exception as e:
+            print(f"Control pipeline error: {str(e)}")
             return 0.0, 0.0
