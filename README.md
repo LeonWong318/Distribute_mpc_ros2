@@ -45,7 +45,3 @@ colcon build
 source install/setup.bash
 ros2 launch pkg_gazebo_simulation gazebo_world.launch.py
 ```
-
-## To be discussed 
- removed the motion model from cluster and local robot.
- Cluster robot update based on motion model or not? 
