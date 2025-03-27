@@ -13,3 +13,6 @@ mpc_solver/
 *.out
 
 cbf_solver/
+
+auto_test_logs*/
+auto_test_logs*/**
