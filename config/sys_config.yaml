@@ -4,9 +4,10 @@ graph_path: 'data/test_data/graph.json'
 robot_start_path: 'data/test_data/robot_start.json'
 robot_spec_path: 'data/test_data/schedule.csv'
 
-# mpc path
+# config path
 mpc_config_path: 'config/mpc_default.yaml'
 robot_config_path: 'config/spec_robot.yaml'
+cbf_config_path: 'config/cbf_config.yaml'
 
 # visualizer config
 path_min_distance: 0.1
@@ -36,11 +37,11 @@ map_name: 'test_data.world'
 ## local robot config
 max_velocity: 1.0
 max_angular_velocity: 1.0
-control_frequency: 30.0
+control_frequency: 10.0
 cluster_wait_timeout: 30.0
 
 # controller selection
-controller_type: 'lqr_update' # choose pure_pursuit/cbf/lqr/lqr_update
+controller_type: 'cbf' # choose pure_pursuit/cbf/lqr/lqr_update
 mpc_ts: 0.3 # keep align with ts in mpc_configs
 
 # Pure Pursuit parameters
@@ -63,3 +64,7 @@ lqr_update_r_omega: 0.01    # Angular velocity control weight
 lqr_lookahead_dist: 0.8     # Lookahead Distance
 lqr_lookahead_time:: 0.5
 lqr_lookahead_style: 'time' # time or dist
+
+# cbf laser processer parameters:
+safety_margin: 0.2
+max_obstacle_distance: 3.0

@@ -138,7 +138,7 @@ class CBFconfig(_Configuration):
     
     def __init__(self, config: Configurator):
         super().__init__(config)
-        self._load_config()
+        
     
     def _load_config(self):
         """Load configuration from the configurator"""
@@ -165,3 +165,4 @@ class CBFconfig(_Configuration):
         
         # Output directory
         self.output_dir = config.output_dir
+        self.solver_name = config.solver_name

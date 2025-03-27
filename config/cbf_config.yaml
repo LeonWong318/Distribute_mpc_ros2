@@ -21,7 +21,8 @@ penalty_update_factor: 5.0
 alpha: 0.1
 
 # Output Directory
-output_dir: "cbf_solver"
+output_dir: 'cbf_solver'
+solver_name: 'cbf_solver'
 
 # Robot Parameters
 wheelbase: 0.3  # Distance between front and rear wheels (meters)

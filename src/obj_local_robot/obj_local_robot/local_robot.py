@@ -6,7 +6,7 @@ from rclpy.node import Node
 from rclpy.callback_groups import ReentrantCallbackGroup
 from rclpy.qos import QoSProfile, QoSReliabilityPolicy, QoSHistoryPolicy, QoSDurabilityPolicy
 from basic_motion_model.motion_model import UnicycleModel
-from pkg_configs.configs import CircularRobotSpecification
+from pkg_configs.configs import CircularRobotSpecification, CBFconfig
 
 import numpy as np
 import time
@@ -14,10 +14,12 @@ import asyncio
 from pkg_local_control.pure_pursuit import PurePursuit
 from pkg_local_control.lqr import LQRController
 from pkg_local_control.lqr_update import LQR_Update_Controller
+from pkg_local_control.cbf_lqr import CBF_LQR_Controller, ObstacleProcessor
 
 from msg_interfaces.msg import ClusterToRobotTrajectory, RobotToClusterState, RobotToRvizStatus,ClusterBetweenRobotHeartBeat
 from msg_interfaces.srv import RegisterRobot, ExecuteCommand
 from gazebo_msgs.msg import ContactsState
+from sensor_msgs.msg import LaserScan
 
 class RobotNode(Node):
     async def initialize(self):
@@ -99,6 +101,9 @@ class RobotNode(Node):
                 ('lqr_lookahead_dist',1),
                 ('lqr_lookahead_time', .2),
                 ('lqr_lookahead_style', 'time'),
+                ('cbf_config_path',''),
+                ('safety_margin', 0.2),
+                ('max_obstacle_distance', 3.0),
             ]
         )
         
@@ -139,6 +144,12 @@ class RobotNode(Node):
         self.lqr_lookahead_time = self.get_parameter('lqr_lookahead_time').value
         self.lqr_lookahead_style = self.get_parameter('lqr_lookahead_style').value
         
+        # Get CBF config
+        self.cbf_config_path = self.get_parameter('cbf_config_path').value
+        self.cbf_config = CBFconfig.from_yaml(self.cbf_config_path)
+        self.safety_margin = self.get_parameter('safety_margin').value
+        self.max_obstacle_distance = self.get_parameter('max_obstacle_distance').value
+
         # Load robot configuration
         self.config_robot = CircularRobotSpecification.from_yaml(self.robot_config_path)
         self.motion_model = UnicycleModel(sampling_time=self.ts)
@@ -173,6 +184,7 @@ class RobotNode(Node):
         self.trajectory_received = False  # Flag for trajectory reception
         self.last_received_state_from_gazebo_time = self.get_clock().now().to_msg()
         self.collision_detected = False
+        self.obstacles = None
         
         # Create callback group
         self.callback_group = ReentrantCallbackGroup()
@@ -203,6 +215,15 @@ class RobotNode(Node):
             ClusterToRobotTrajectory,
             f'/cluster_{self.robot_id}/trajectory_delayed',
             self.trajectory_callback,
+            self.reliable_qos,
+            callback_group=self.callback_group
+        )
+
+        # Create subscriber for laser scan info from gazebo
+        self.front_laser = self.create_subscription(
+            LaserScan,
+            f'/robot_{self.robot_id}/f_scan',
+            self.laserscan_callback,
             self.reliable_qos,
             callback_group=self.callback_group
         )
@@ -280,8 +301,8 @@ class RobotNode(Node):
             self.mpc_ts
             )
         
-        # TODO:Initialize CBF controller if needed in the future
-        # self.cbf_controller = ...
+        # Initialize CBF controller
+        self.cbf_controller = CBF_LQR_Controller(self.cbf_config, self.max_velocity, self.ts)
         
         self.get_logger().info(f'Controllers initialized: {self.controller_type}')
 
@@ -470,6 +491,21 @@ class RobotNode(Node):
         except Exception as e:
             self.get_logger().error(f'Error in trajectory_callback: {str(e)}')
     
+    def laserscan_callback(self, msg: LaserScan):
+        """
+        Callback function to process incoming LaserScan messages
+
+        :param msg: LaserScan message from ROS
+        """
+        # Use the imported class to process the scan data
+        self.laser_processor = ObstacleProcessor(msg, self._state, self.safety_margin, self.max_obstacle_distance)
+        closest_obstacles = self.laser_processor.get_closest_obstacles()
+        most_dangerous = self.laser_processor.get_most_dangerous_obstacle()
+        self.obstacles = closest_obstacles
+
+        self.get_logger().info(f'Closest obstacles: {closest_obstacles}')
+        self.get_logger().debug(f'Most Dangerous obstacle: {most_dangerous}')
+
     def collision_callback(self, msg: ContactsState):
         try:
             if not msg.states:
@@ -539,7 +575,8 @@ class RobotNode(Node):
                 self.send_command_to_gazebo(0, 0) 
                 self.update_robot_status(self.STATUS_EMERGENCY_STOP)
                 return
-            
+            if self.obstacles is None:
+                self.obstacles = None
             self.update_robot_status(self.STATUS_RUNNING)
             
             # Get current position and heading
@@ -583,13 +620,22 @@ class RobotNode(Node):
                     current_time
                 )
             elif self.controller_type == 'cbf':
-                # Future implementation for CBF controller
-                v, omega = self.pure_pursuit.compute_control_commands(
-                    current_position,
-                    current_heading,
-                    trajectory_list
-                )
-                self.get_logger().warn_once('CBF controller not yet implemented, using Pure Pursuit instead')
+
+                if self.obstacles is None:
+                    v, omega = self.lqr_update_controller.compute_control_commands(
+                        current_position,
+                        current_heading,
+                        trajectory_list,
+                        traj_time,
+                        current_time
+                    )
+                else:
+                    v, omega = self.cbf_controller.compute_control_commands(
+                        current_position,
+                        current_heading,
+                        trajectory_list,
+                        self.obstacles
+                    )
             else:
                 self.get_logger().warn_once(f'Unknown controller type: {self.controller_type}')
                 return

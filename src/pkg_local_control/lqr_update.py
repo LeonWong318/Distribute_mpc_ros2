@@ -1,7 +1,5 @@
 import numpy as np
 from scipy.linalg import solve_discrete_are
-import rclpy
-from rclpy.time import Duration
 
 def dlqr(A, B, Q, R):
     """
