@@ -1,5 +1,6 @@
 # Request
 int32 robot_id      # ID of the robot requesting registration
+float lookahead_time    # lookahead time
 ---
 # Response
 bool success        # Whether registration was successful

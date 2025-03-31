@@ -17,6 +17,7 @@ manager_publish_frequency: 10.0
 
 # cluster config
 cluster_control_frequency: 1.0
+close_to_target_rate: 0.5
 
 # msg buffer config
 enable_gui: true
@@ -41,7 +42,7 @@ control_frequency: 10.0
 cluster_wait_timeout: 30.0
 
 # controller selection
-controller_type: 'cbf' # choose pure_pursuit/cbf/lqr/lqr_update
+controller_type: 'lqr_update' # choose pure_pursuit/cbf/lqr/lqr_update
 mpc_ts: 0.3 # keep align with ts in mpc_configs
 
 # Pure Pursuit parameters

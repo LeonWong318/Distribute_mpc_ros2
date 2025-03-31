@@ -312,6 +312,12 @@ class RobotNode(Node):
             # Create request
             request = RegisterRobot.Request()
             request.robot_id = self.robot_id
+            if self.controller_type is 'pure_pursuit' and self.lookahead_style is 'time':
+                request.lookahead_time = self.lookahead_time
+            elif self.controller_type is 'lqr_update' and self.lqr_lookahead_style is 'time':
+                request.lookahead_time = self.lqr_lookahead_time
+            else:
+                request.lookahead_time = None
             
             # Send request
             future = self.register_client.call_async(request)
