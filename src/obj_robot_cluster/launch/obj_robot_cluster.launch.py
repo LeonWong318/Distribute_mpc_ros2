@@ -24,8 +24,13 @@ def generate_launch_description():
         print(f"Error reading configuration file {sys_config_path}: {str(e)}", file=sys.stderr)
         sys.exit(1)
 
+    if config.get('controller_type', 'lqr') == 'lqr_update' and config.get('lqr_lookahead_style','dist') == 'time':
+        default_lookahead_time = config.get('lqr_lookahead_time',0.5)
+    elif config.get('controller_type', 'lqr') == 'pure_pursuit' and config.get('lookahead_style','dist') == 'time':
+        default_lookahead_time = config.get('lookahead_time',0.5)
+    else:
+        default_lookahead_time = 0.0
     default_robot_id = '0' 
-    default_lookahead_time = 0.5
     default_close_to_target_rate = config.get('close_to_target_rate', 0.5)
     default_map_path = config.get('map_path', 'data/test_data/map.json')
     default_graph_path = config.get('graph_path', 'data/test_data/graph.json')
@@ -37,8 +42,8 @@ def generate_launch_description():
 
     declare_args = [
         DeclareLaunchArgument('robot_id', default_value=default_robot_id, description='Robot ID'),
-        DeclareLaunchArgument('lookahead_time', default_value = default_lookahead_time, description='Lookahead Time'),
-        DeclareLaunchArgument('close_to_target_rate', default_value = default_close_to_target_rate, description = 'close_to_target_rate'),
+        DeclareLaunchArgument('lookahead_time', default_value = str(default_lookahead_time), description='Lookahead Time'),
+        DeclareLaunchArgument('close_to_target_rate', default_value = str(default_close_to_target_rate), description = 'close_to_target_rate'),
         DeclareLaunchArgument('map_path', default_value=default_map_path, description='Path to the map JSON file'),
         DeclareLaunchArgument('graph_path', default_value=default_graph_path, description='Path to the graph JSON file'),
         DeclareLaunchArgument('schedule_path', default_value=default_schedule_path, description='Path to the schedule CSV file'),

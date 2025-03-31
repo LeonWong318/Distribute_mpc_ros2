@@ -171,7 +171,7 @@ class RobotManager(Node):
     
     def handle_register_robot(self, request, response):
         robot_id = request.robot_id
-        lookahead_time = request.lookahead_time
+        
         
         try:
             self.get_logger().info(f'Received registration request from robot {robot_id}')
@@ -192,7 +192,7 @@ class RobotManager(Node):
             
             # create cluster node
             # success = self.create_cluster_node(robot_id)
-            success = self.create_cluster_node_with_terminal(robot_id, lookahead_time)
+            success = self.create_cluster_node_with_terminal(robot_id)
             if not success:
                 response.success = False
                 response.message = f"Failed to create cluster node for robot {robot_id}"
@@ -388,14 +388,13 @@ class RobotManager(Node):
             self.get_logger().error(traceback.format_exc())
             return False
         
-    def create_cluster_node_with_terminal(self, robot_id, lookahead_time):
+    def create_cluster_node_with_terminal(self, robot_id):
         try:
             cmd = [
                 'ros2', 'launch',
                 self.cluster_package,
                 'obj_robot_cluster.launch.py',
-                f'robot_id:={robot_id}',
-                f'lookahead_time:={lookahead_time}'
+                f'robot_id:={robot_id}'
             ]
 
             env = os.environ.copy()

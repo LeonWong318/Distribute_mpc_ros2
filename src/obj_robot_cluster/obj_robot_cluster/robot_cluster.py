@@ -13,7 +13,7 @@ from basic_motion_model.motion_model import UnicycleModel
 from pkg_motion_plan.local_traj_plan import LocalTrajPlanner
 from pkg_tracker_mpc.trajectory_tracker import TrajectoryTracker
 from pkg_motion_plan.global_path_coordinate import GlobalPathCoordinator
-from . import NewState
+from .new_state import NewState
 
 import threading
 
@@ -49,7 +49,7 @@ class ClusterNode(Node):
         
         self.robot_id = self.get_parameter('robot_id').value
         self.lookahead_time = self.get_parameter('lookahead_time').value
-        self.close_to_target_rate = self.get_parameter('self.close_to_target_rate').value
+        self.close_to_target_rate = self.get_parameter('close_to_target_rate').value
         self.control_frequency = self.get_parameter('control_frequency').value
         self.mpc_config_path = self.get_parameter('mpc_config_path').value
         self.robot_config_path = self.get_parameter('robot_config_path').value
@@ -78,7 +78,7 @@ class ClusterNode(Node):
         
         self.robot_state = None
         self.other_robot_states = {}
-        self.old_traj = {}
+        self.old_traj = None
         self.predicted_trajectory = None
         self.pred_states = None
         self.idle = True
@@ -265,13 +265,12 @@ class ClusterNode(Node):
     def from_manager_states_callback(self, msg: ManagerToClusterStateSet):
         try:
             self.other_robot_states.clear()
-            self.old_traj.clear()
             for state in msg.robot_states:
                 if state.robot_id != self.robot_id:
                     self.other_robot_states[state.robot_id] = state
                 else:
                     self.old_traj = state
-                    if self.update_robot_state(state.x, state.y, state.theta, msg.stamp, "manager"):
+                    if self.update_robot_state(state.x, state.y, state.theta, state.stamp, "manager"):
                         self.get_logger().debug(f'Updated state from manager: x={state.x}, y={state.y}, theta={state.theta}')
         except Exception as e:
             self.get_logger().error(f'Error processing robot states: {str(e)}')
@@ -383,11 +382,12 @@ class ClusterNode(Node):
             # Get current time
             current_time = self.get_clock().now().seconds_nanoseconds()
             current_time = current_time[0] + current_time[1] * 1e-9
-
+            traj_time = self.old_traj.stamp
+            traj_time = traj_time.sec + traj_time.nanosec * 1e-9
 
             # Get local ref and set ref states
             current_pos = (self._state[0], self._state[1])
-            current_pos = self.current_state_update.get_new_current_state(self.old_traj, current_time, current_pos)
+            current_pos = self.current_state_update.get_new_current_state(self.old_traj.pred_states, current_time, current_pos, traj_time)
             ref_states, ref_speed, done = self.planner.get_local_ref(
                 current_time=current_time,
                 current_pos=current_pos,
