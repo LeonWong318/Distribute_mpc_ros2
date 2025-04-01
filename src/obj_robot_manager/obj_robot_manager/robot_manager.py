@@ -172,6 +172,7 @@ class RobotManager(Node):
     def handle_register_robot(self, request, response):
         robot_id = request.robot_id
         
+        
         try:
             self.get_logger().info(f'Received registration request from robot {robot_id}')
             

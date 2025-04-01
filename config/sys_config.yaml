@@ -1,8 +1,8 @@
 # data path
-map_path: 'data/test_data/map.json'
-graph_path: 'data/test_data/graph.json'
-robot_start_path: 'data/test_data/robot_start.json'
-robot_spec_path: 'data/test_data/schedule.csv'
+map_path: 'data/test_data_new/map.json'
+graph_path: 'data/test_data_new/graph.json'
+robot_start_path: 'data/test_data_new/robot_start.json'
+robot_spec_path: 'data/test_data_new/schedule.csv'
 
 # config path
 mpc_config_path: 'config/mpc_default.yaml'
@@ -17,6 +17,8 @@ manager_publish_frequency: 10.0
 
 # cluster config
 cluster_control_frequency: 1.0
+close_to_target_rate: 0.5
+mpc_method: 'state_fusion' #choose from state_fusion and state_origin
 
 # msg buffer config
 enable_gui: true
@@ -32,7 +34,7 @@ failure_probability: 0.00
 failure_max_deviation: 0.0
 
 # gazebo simulation config
-map_name: 'test_data.world'
+map_name: 'test_data_new.world'
 
 ## local robot config
 max_velocity: 1.0
@@ -41,7 +43,7 @@ control_frequency: 10.0
 cluster_wait_timeout: 30.0
 
 # controller selection
-controller_type: 'cbf' # choose pure_pursuit/cbf/lqr/lqr_update
+controller_type: 'lqr_update' # choose pure_pursuit/cbf/lqr/lqr_update
 mpc_ts: 0.3 # keep align with ts in mpc_configs
 
 # Pure Pursuit parameters
