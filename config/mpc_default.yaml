@@ -35,8 +35,8 @@ qorobot: 5000.0 # Cost for other robot
 qpredrobot: 1000.0 # Cost for other robot's predicted trajectory
 
 # Terminal weights
-qpN: 10.0               # Terminal cost; error relative to final reference position         
-qthetaN: 10.0            # Terminal cost; error relative to final reference heading     
+qpN: 0.0               # Terminal cost; error relative to final reference position         
+qthetaN: 0.0            # Terminal cost; error relative to final reference heading     
 # Building options in the optimizer
 solver_type: 'PANOC'
 max_solver_time: 5000_000        # micros (0.5 sec)
