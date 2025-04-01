@@ -28,6 +28,7 @@ class AutoTest(Node):
         self.iteration_success = False
         self.current_latency = 0.0
         self.workspace_root = os.getcwd()
+        self.failure_type = None
         
         self.initialize_log_files()
         
@@ -94,20 +95,20 @@ class AutoTest(Node):
     def initialize_log_files(self):
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
         self.log_dir = os.path.join(self.workspace_root, f'{self.log_dir_base}_{timestamp}')
-        
+
         os.makedirs(self.log_dir, exist_ok=True)
-        
+
         self.summary_log_path = os.path.join(self.log_dir, 'summary_results.csv')
         with open(self.summary_log_path, 'w', newline='') as f:
             writer = csv.writer(f)
             writer.writerow([
-                'Latency', 'Success Rate', 'Avg Execution Time', 
-                'Avg Deviation', 'Avg Path Length', 
+                'Latency', 'Success Rate', 'Timeout Rate', 'Collision Rate',
+                'Avg Execution Time', 'Avg Deviation', 'Avg Path Length', 
                 'Avg Linear Smoothness', 'Avg Angular Smoothness'
             ])
-        
+
         self.get_logger().info(f'Log files initialized in {self.log_dir}')
-    
+
     def start_simulation(self):
         try:
             # Ensure event state is reset
@@ -245,19 +246,21 @@ class AutoTest(Node):
     def robot_status_callback(self, msg, robot_id):
         old_status = self.robot_statuses.get(robot_id, -1)
         self.robot_statuses[robot_id] = msg.state
-        
+
         STATUS_RUNNING = 2
         STATUS_TARGET_REACHED = 4
         STATUS_COLLISION = 6
-        
+
         if msg.state == STATUS_COLLISION and self.iteration_success is None:
             self.get_logger().info(f'Robot {robot_id} collision detected, marking iteration as failed')
             self.iteration_success = False
+            self.failure_type = 'collision'
             self.test_completed.set()
-        
+
         if all(status == STATUS_TARGET_REACHED for status in self.robot_statuses.values()) and self.iteration_success is None:
             self.get_logger().info('All robots reached target, marking iteration as successful')
             self.iteration_success = True
+            self.failure_type = None
             self.test_completed.set()
     
     def metrics_callback(self, msg):
@@ -270,6 +273,7 @@ class AutoTest(Node):
             self.test_completed.clear()
             self.current_metrics = None
             self.iteration_success = None
+            self.failure_type = None 
             self.robot_statuses = {}
             self.received_status_updates = False 
 
@@ -309,54 +313,58 @@ class AutoTest(Node):
     def wait_for_completion(self, timeout=None):
         if timeout is None:
             timeout = self.timeout_seconds
-        
+
         self.get_logger().info(f'Waiting for simulation to complete (timeout: {timeout}s)')
         completed = self.test_completed.wait(timeout=timeout)
-        
+
         if not completed:
             self.get_logger().warn('Simulation timed out')
             self.iteration_success = False
+            self.failure_type = 'timeout'
             return False
-        
+
         time.sleep(2)
         return self.iteration_success
     
     def log_iteration_results(self, latency, iteration, success, metrics=None):
-        log_path = os.path.join(self.log_dir, f'latency_{latency}_iteration_{iteration}.csv')
-        
-        with open(log_path, 'w', newline='') as f:
-            writer = csv.writer(f)
-            
-            writer.writerow(['Latency', latency])
-            writer.writerow(['Iteration', iteration])
-            writer.writerow(['Success', success])
-            writer.writerow([])
-            
-            if metrics and metrics.metrics:
-                writer.writerow([
-                    'Robot ID', 'Deviation Area', 'Normalized Deviation',
-                    'Execution Time', 'Path Length', 'Linear Smoothness', 'Angular Smoothness'
-                ])
-                
-                for metric in metrics.metrics:
-                    writer.writerow([
-                        metric.robot_id,
-                        metric.deviation_area,
-                        metric.normalized_deviation,
-                        metric.execution_time,
-                        metric.path_length,
-                        metric.linear_smoothness,
-                        metric.angular_smoothness
-                    ])
-        
-        self.get_logger().info(f'Iteration results logged to {log_path}')
-    
-    def log_latency_summary(self, latency, success_rate, avg_metrics):
+       log_path = os.path.join(self.log_dir, f'latency_{latency}_iteration_{iteration}.csv')
+       
+       with open(log_path, 'w', newline='') as f:
+           writer = csv.writer(f)
+           
+           writer.writerow(['Latency', latency])
+           writer.writerow(['Iteration', iteration])
+           writer.writerow(['Success', success])
+           writer.writerow(['Failure Type', self.failure_type if not success else 'None'])
+           writer.writerow([])
+           
+           if metrics and metrics.metrics:
+               writer.writerow([
+                   'Robot ID', 'Deviation Area', 'Normalized Deviation',
+                   'Execution Time', 'Path Length', 'Linear Smoothness', 'Angular Smoothness'
+               ])
+               
+               for metric in metrics.metrics:
+                   writer.writerow([
+                       metric.robot_id,
+                       metric.deviation_area,
+                       metric.normalized_deviation,
+                       metric.execution_time,
+                       metric.path_length,
+                       metric.linear_smoothness,
+                       metric.angular_smoothness
+                   ])
+       
+       self.get_logger().info(f'Iteration results logged to {log_path}')
+
+    def log_latency_summary(self, latency, success_rate, timeout_rate, collision_rate, avg_metrics):
         with open(self.summary_log_path, 'a', newline='') as f:
             writer = csv.writer(f)
             writer.writerow([
                 latency,
                 success_rate,
+                timeout_rate,
+                collision_rate,
                 avg_metrics.get('execution_time', 'N/A'),
                 avg_metrics.get('normalized_deviation', 'N/A'),
                 avg_metrics.get('path_length', 'N/A'),
@@ -365,10 +373,10 @@ class AutoTest(Node):
             ])
     
     def calculate_average_metrics(self, metrics_list):
-        """Calculate average metrics from multiple iterations"""
+        """Calculate average metrics from multiple iterations (success only)"""
         if not metrics_list:
             return {}
-        
+
         all_metrics = {
             'execution_time': [],
             'normalized_deviation': [],
@@ -376,75 +384,93 @@ class AutoTest(Node):
             'linear_smoothness': [],
             'angular_smoothness': []
         }
-        
+
         for metrics in metrics_list:
             if not metrics or not metrics.metrics:
                 continue
-                
+
             for metric in metrics.metrics:
                 if not math.isnan(metric.execution_time):
                     all_metrics['execution_time'].append(metric.execution_time)
-                all_metrics['normalized_deviation'].append(metric.normalized_deviation)
-                all_metrics['path_length'].append(metric.path_length)
-                all_metrics['linear_smoothness'].append(metric.linear_smoothness)
-                all_metrics['angular_smoothness'].append(metric.angular_smoothness)
-        
+                if not math.isnan(metric.normalized_deviation):
+                    all_metrics['normalized_deviation'].append(metric.normalized_deviation)
+                if not math.isnan(metric.path_length):
+                    all_metrics['path_length'].append(metric.path_length)
+                if not math.isnan(metric.linear_smoothness):
+                    all_metrics['linear_smoothness'].append(metric.linear_smoothness)
+                if not math.isnan(metric.angular_smoothness):
+                    all_metrics['angular_smoothness'].append(metric.angular_smoothness)
+
         avg_metrics = {}
         for key, values in all_metrics.items():
             if values:
                 avg_metrics[key] = sum(values) / len(values)
             else:
                 avg_metrics[key] = 'N/A'
-        
+
         return avg_metrics
+
     
     def run_tests(self):
         self.get_logger().info(f'Starting automated tests with {len(self.latency_values)} latency values')
         self.get_logger().info(f'Each latency will be tested {self.iterations_per_latency} times')
-        
+
         for latency in self.latency_values:
             self.current_latency = latency
             self.get_logger().info(f'=== Testing latency: {latency} ===')
-            
+
             success_count = 0
+            timeout_count = 0
+            collision_count = 0
             metrics_list = []
-            
+
             for iteration in range(self.iterations_per_latency):
                 self.get_logger().info(f'Starting iteration {iteration+1}/{self.iterations_per_latency}')
-                
+
                 if not self.start_simulation():
                     self.get_logger().error('Failed to start simulation, retrying...')
                     self.cleanup_processes()
                     continue
                 
                 success = self.wait_for_completion()
-                
+
                 if success:
                     success_count += 1
                     self.get_logger().info(f'Iteration {iteration+1} completed successfully')
                 else:
-                    self.get_logger().info(f'Iteration {iteration+1} failed or timed out')
-                
+                    if self.failure_type == 'timeout':
+                        timeout_count += 1
+                        self.get_logger().info(f'Iteration {iteration+1} failed due to timeout')
+                    elif self.failure_type == 'collision':
+                        collision_count += 1
+                        self.get_logger().info(f'Iteration {iteration+1} failed due to collision')
+                    else:
+                        self.get_logger().info(f'Iteration {iteration+1} failed with unknown reason')
+
                 self.log_iteration_results(latency, iteration, success, self.current_metrics)
-                
-                if self.current_metrics:
+
+                if success and self.current_metrics:  
                     metrics_list.append(self.current_metrics)
-                
+
                 if iteration < self.iterations_per_latency - 1:
                     self.cleanup_processes()
                     time.sleep(2)
-            
+
             success_rate = success_count / self.iterations_per_latency
+            timeout_rate = timeout_count / self.iterations_per_latency
+            collision_rate = collision_count / self.iterations_per_latency
             avg_metrics = self.calculate_average_metrics(metrics_list)
-            
-            self.log_latency_summary(latency, success_rate, avg_metrics)
-            
+
+            self.log_latency_summary(latency, success_rate, timeout_rate, collision_rate, avg_metrics)
+
             self.get_logger().info(f'Completed testing for latency {latency}')
             self.get_logger().info(f'Success rate: {success_rate * 100:.2f}%')
-            
+            self.get_logger().info(f'Timeout rate: {timeout_rate * 100:.2f}%')
+            self.get_logger().info(f'Collision rate: {collision_rate * 100:.2f}%')
+
             self.cleanup_processes()
             time.sleep(5)
-        
+
         self.get_logger().info('All tests completed')
         self.get_logger().info(f'Results saved to {self.log_dir}')
 
