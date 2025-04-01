@@ -1,8 +1,8 @@
 # data path
-map_path: 'data/test_data/map.json'
-graph_path: 'data/test_data/graph.json'
-robot_start_path: 'data/test_data/robot_start.json'
-robot_spec_path: 'data/test_data/schedule.csv'
+map_path: 'data/test_data_new/map.json'
+graph_path: 'data/test_data_new/graph.json'
+robot_start_path: 'data/test_data_new/robot_start.json'
+robot_spec_path: 'data/test_data_new/schedule.csv'
 
 # config path
 mpc_config_path: 'config/mpc_default.yaml'
@@ -33,7 +33,7 @@ failure_probability: 0.00
 failure_max_deviation: 0.0
 
 # gazebo simulation config
-map_name: 'test_data.world'
+map_name: 'test_data_new.world'
 
 ## local robot config
 max_velocity: 1.0
