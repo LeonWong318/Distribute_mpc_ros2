@@ -39,6 +39,7 @@ def generate_launch_description():
     default_control_frequency = config.get('cluster_control_frequency', 1.0)
     default_mpc_config_path = config.get('mpc_config_path', 'config/mpc_default.yaml')
     default_robot_config_path = config.get('robot_config_path', 'config/spec_robot.yaml')
+    default_mpc_method = config.get('mpc_method', 'state_fusion')
 
     declare_args = [
         DeclareLaunchArgument('robot_id', default_value=default_robot_id, description='Robot ID'),
@@ -50,7 +51,8 @@ def generate_launch_description():
         DeclareLaunchArgument('robot_start_path', default_value=default_robot_start_path, description='Path to the robot start JSON file'),
         DeclareLaunchArgument('control_frequency', default_value=str(default_control_frequency), description='Control frequency in Hz'),
         DeclareLaunchArgument('mpc_config_path', default_value=default_mpc_config_path, description='Path to the MPC configuration file'),
-        DeclareLaunchArgument('robot_config_path', default_value=default_robot_config_path, description='Path to the robot specification file')
+        DeclareLaunchArgument('robot_config_path', default_value=default_robot_config_path, description='Path to the robot specification file'),
+        DeclareLaunchArgument('mpc_method', default_value=default_mpc_method, description='mpc method')
     ]
 
     pythonpath_cmd = SetEnvironmentVariable(
@@ -73,7 +75,8 @@ def generate_launch_description():
             'map_path': LaunchConfiguration('map_path'),
             'graph_path': LaunchConfiguration('graph_path'),
             'schedule_path': LaunchConfiguration('schedule_path'),
-            'robot_start_path': LaunchConfiguration('robot_start_path')
+            'robot_start_path': LaunchConfiguration('robot_start_path'),
+            'mpc_method': LaunchConfiguration('mpc_method')
         }],
         output='screen'
     )

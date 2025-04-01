@@ -43,7 +43,8 @@ class ClusterNode(Node):
                 ('map_path', ''),
                 ('graph_path', ''),
                 ('schedule_path', ''),
-                ('robot_start_path', '')
+                ('robot_start_path', ''),
+                ('mpc_method','')
             ]
         )
         
@@ -57,6 +58,7 @@ class ClusterNode(Node):
         self.graph_path = self.get_parameter('graph_path').value
         self.schedule_path = self.get_parameter('schedule_path').value
         self.robot_start_path = self.get_parameter('robot_start_path').value
+        self.mpc_method = self.get_parameter('mpc_method').value
         
         self.get_logger().info(f'Initializing cluster node for robot {self.robot_id}')
         
@@ -373,7 +375,17 @@ class ClusterNode(Node):
             import traceback
             self.get_logger().error(f'Traceback: {traceback.format_exc()}')
             return False
-    
+        
+    def get_current_state(self,current_time, current_pos, traj_time):
+        if self.mpc_method == 'state_fusion':
+            print('state_fusion')
+            return self.current_state_update.get_new_current_state(self.old_traj.pred_states, current_time, current_pos, traj_time)
+        elif self.mpc_method == 'state_origin':
+            print('state_origin')
+            return current_pos
+        else:
+            return current_pos
+        
     def control_loop(self):
         try:
             if self.idle:
@@ -387,7 +399,7 @@ class ClusterNode(Node):
 
             # Get local ref and set ref states
             current_pos = (self._state[0], self._state[1])
-            current_pos = self.current_state_update.get_new_current_state(self.old_traj.pred_states, current_time, current_pos, traj_time)
+            current_pos = self.get_current_state(current_time, current_pos, traj_time)
             ref_states, ref_speed, done = self.planner.get_local_ref(
                 current_time=current_time,
                 current_pos=current_pos,

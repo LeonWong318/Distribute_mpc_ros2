@@ -159,6 +159,12 @@ class LQR_Update_Controller:
             if look_ahead_idx is None:
                 look_ahead_idx = len(trajectory_list) - 1
 
+            # if the last point in trajectory is close enough then update to the last point
+            last_point = np.array([trajectory_list[len(trajectory_list)-1][0], trajectory_list[len(trajectory_list)-1][1]])
+            if np.linalg.norm(last_point - np.array([current_position[0], current_position[1]])) < 0.5:
+                print(f'the distance:{np.linalg.norm(last_point - current_position)}')
+                look_ahead_idx = len(trajectory_list)-1
+
             # Get reference state (using look-ahead index)
             x_ref = np.array([
                 trajectory_list[look_ahead_idx][0],

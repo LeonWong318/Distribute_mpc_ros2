@@ -18,6 +18,7 @@ manager_publish_frequency: 10.0
 # cluster config
 cluster_control_frequency: 1.0
 close_to_target_rate: 0.5
+mpc_method: 'state_fusion' #choose from state_fusion and state_origin
 
 # msg buffer config
 enable_gui: true
