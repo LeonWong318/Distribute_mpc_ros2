@@ -281,43 +281,51 @@ class RobotManager(Node):
             with self._state_lock, self._converter_lock:
                 msg = ManagerToClusterStateSet()
                 msg.stamp = self.get_clock().now().to_msg()
-
                 for robot_id in self.registered_robots:
                     cluster_state = self.robot_states.get(robot_id)
                     converter_state = self.converter_states.get(robot_id)
 
                     if cluster_state is not None and converter_state is not None:
+                        self.get_logger().debug(f'Robot {robot_id}: Both cluster and converter states available')
+
                         # get the latest state
                         cluster_stamp = cluster_state.stamp
                         converter_stamp = converter_state.stamp
-
                         merged_state = ClusterToManagerState()
                         merged_state.robot_id = robot_id
 
-                        if (converter_stamp.sec > cluster_stamp.sec or 
-                           (converter_stamp.sec == cluster_stamp.sec and converter_stamp.nanosec > cluster_stamp.nanosec)):
+                        # Log timestamp information for debugging
+                        self.get_logger().debug(f'Robot {robot_id}: Cluster stamp: {cluster_stamp.sec}.{cluster_stamp.nanosec}, Converter stamp: {converter_stamp.sec}.{converter_stamp.nanosec}')
+
+                        if (converter_stamp.sec > cluster_stamp.sec or
+                            (converter_stamp.sec == cluster_stamp.sec and converter_stamp.nanosec > cluster_stamp.nanosec)):
                             # using state from converter
+                            self.get_logger().debug(f'Robot {robot_id}: Using CONVERTER state (newer timestamp)')
                             merged_state.x = converter_state.x
                             merged_state.y = converter_state.y
                             merged_state.theta = converter_state.theta
                             merged_state.stamp = converter_stamp
                         else:
                             # using state from cluster
+                            self.get_logger().debug(f'Robot {robot_id}: Using CLUSTER state (newer or equal timestamp)')
                             merged_state.x = cluster_state.x
                             merged_state.y = cluster_state.y
                             merged_state.theta = cluster_state.theta
                             merged_state.stamp = cluster_stamp
 
-                        # update predict trajectory
                         merged_state.pred_states = cluster_state.pred_states
                         merged_state.idle = cluster_state.idle
 
                         msg.robot_states.append(merged_state)
 
                     elif cluster_state is not None:
+                        # Only cluster state is available
+                        self.get_logger().debug(f'Robot {robot_id}: Only CLUSTER state available, using it directly')
                         msg.robot_states.append(cluster_state)
 
                     elif converter_state is not None:
+                        # Only converter state is available
+                        self.get_logger().debug(f'Robot {robot_id}: Only CONVERTER state available, creating new state from it')
                         new_state = ClusterToManagerState()
                         new_state.robot_id = robot_id
                         new_state.x = converter_state.x
@@ -325,15 +333,24 @@ class RobotManager(Node):
                         new_state.theta = converter_state.theta
                         new_state.stamp = converter_state.stamp
                         new_state.pred_states = []
-                        new_state.idle = False 
-
+                        new_state.idle = False
                         msg.robot_states.append(new_state)
 
-                self.states_publisher.publish(msg)
-                self.get_logger().debug(f'Published merged states for {len(msg.robot_states)} robots')
+                    else:
+                        # Neither state is available
+                        self.get_logger().warn(f'Robot {robot_id}: Neither cluster nor converter state available')
+
+                # Publish the merged states
+                if msg.robot_states:
+                    self.states_publisher.publish(msg)
+                    self.get_logger().debug(f'Published merged states for {len(msg.robot_states)} robots')
+                else:
+                    self.get_logger().warn('No robot states to publish')
 
         except Exception as e:
             self.get_logger().error(f'Error publishing robot states: {str(e)}')
+            import traceback
+            self.get_logger().error(traceback.format_exc())
     
     def create_cluster_node(self, robot_id):
         try:

@@ -1,128 +1,141 @@
 import re
-import matplotlib.pyplot as plt
 import numpy as np
-from pathlib import Path
+import pandas as pd
+import matplotlib.pyplot as plt
+from scipy.interpolate import interp1d
 
-
-def parse_robot_log(file_path):
-    """
-    Parse robot state log file
-    Returns lists of timestamps, x positions, and y positions
-    """
-    with open(file_path, 'r') as f:
-        content = f.read()
+def parse_ros_log(filename):
+    """Parse ROS2 topic echo log file"""
+    data = []
+    current_entry = {}
     
-    # Split records using "---" delimiter
-    entries = content.split("---")
-    
-    timestamps = []
-    x_positions = []
-    y_positions = []
-    
-    for entry in entries:
-        if not entry.strip():
-            continue
-        
-        # Extract positions
-        x_match = re.search(r'x: ([-\d\.]+)', entry)
-        y_match = re.search(r'y: ([-\d\.]+)', entry)
-        
-        # Extract timestamp
-        sec_match = re.search(r'sec: (\d+)', entry)
-        nanosec_match = re.search(r'nanosec: (\d+)', entry)
-        
-        if x_match and y_match and sec_match and nanosec_match:
-            x = float(x_match.group(1))
-            y = float(y_match.group(1))
-            sec = int(sec_match.group(1))
-            nanosec = int(nanosec_match.group(1))
+    with open(filename, 'r') as file:
+        for line in file:
+            line = line.strip()
             
-            # Calculate complete timestamp (seconds)
-            timestamp = sec + nanosec / 1e9
-            
-            timestamps.append(timestamp)
-            x_positions.append(x)
-            y_positions.append(y)
+            # Detect message separator
+            if line == '---':
+                if current_entry:
+                    data.append(current_entry)
+                    current_entry = {}
+                continue
+                
+            # Parse fields
+            if ':' in line:
+                key, value = [part.strip() for part in line.split(':', 1)]
+                
+                # Handle timestamp
+                if key == 'sec':
+                    current_entry['sec'] = int(value)
+                elif key == 'nanosec':
+                    current_entry['nanosec'] = int(value)
+                elif key in ['x', 'y', 'theta']:
+                    current_entry[key] = float(value)
+                elif key == 'robot_id':
+                    current_entry[key] = int(value)
     
-    return timestamps, x_positions, y_positions
+    # Add the last entry
+    if current_entry:
+        data.append(current_entry)
+    
+    # Convert to DataFrame and calculate unified timestamp
+    df = pd.DataFrame(data)
+    if 'sec' in df.columns and 'nanosec' in df.columns:
+        df['timestamp'] = df['sec'] + df['nanosec'] * 1e-9
+    
+    return df
 
+def interpolate_states(df, time_points):
+    """Interpolate states based on time points"""
+    # Ensure data is sorted by time
+    df = df.sort_values('timestamp')
+    
+    # Create interpolation functions for x and y
+    x_interp = interp1d(df['timestamp'], df['x'], kind='linear', bounds_error=False, fill_value='extrapolate')
+    y_interp = interp1d(df['timestamp'], df['y'], kind='linear', bounds_error=False, fill_value='extrapolate')
+    
+    # Interpolate for each time point
+    interp_df = pd.DataFrame({
+        'timestamp': time_points,
+        'x': x_interp(time_points),
+        'y': y_interp(time_points)
+    })
+    
+    return interp_df
 
-def calculate_euclidean_velocities(timestamps, x_positions, y_positions):
-    """
-    Calculate euclidean velocities based on timestamps and positions
-    """
-    euclidean_velocities = []
-    
-    # Need at least two points to calculate velocity
-    if len(timestamps) < 2:
-        return [], []
-    
-    # Calculate velocity between adjacent points
-    for i in range(1, len(timestamps)):
-        dt = timestamps[i] - timestamps[i-1]
-        dx = x_positions[i] - x_positions[i-1]
-        dy = y_positions[i] - y_positions[i-1]
-        
-        # Avoid division by zero
-        if dt > 0:
-            # Euclidean velocity (linear speed)
-            euclidean_distance = np.sqrt(dx**2 + dy**2)
-            euclidean_velocity = euclidean_distance / dt
-            euclidean_velocities.append(euclidean_velocity)
-        else:
-            euclidean_velocities.append(0)
-    
-    # Velocity sequence has one less element than the original sequence
-    vel_timestamps = timestamps[1:]
-    
-    return vel_timestamps, euclidean_velocities
-
+def calculate_euclidean_distance(df1, df2):
+    """Calculate the Euclidean distance between two datasets"""
+    return np.sqrt((df1['x'] - df2['x'])**2 + (df1['y'] - df2['y'])**2)
 
 def main():
-    robot_files = ["robot_0_state.log", "robot_1_state.log"]
-    colors = ["blue", "red"]
-    labels = ["Robot 0", "Robot 1"]
+    # 1. Read the three log files
+    print("Parsing log files...")
+    before_df = parse_ros_log('robot_0_before_fusion.log')
+    after_df = parse_ros_log('robot_0_after_fusion.log')
+    real_df = parse_ros_log('robot_0_real_state.log')
     
-    # Create figure
-    plt.figure(figsize=(10, 6))
+    print(f"Parsing complete. Records: before={len(before_df)}, after={len(after_df)}, real={len(real_df)}")
     
-    for i, file_name in enumerate(robot_files):
-        try:
-            # Check if file exists
-            if not Path(file_name).exists():
-                print(f"Warning: File {file_name} does not exist, skipped")
-                continue
-            
-            # Parse log file
-            timestamps, x_positions, y_positions = parse_robot_log(file_name)
-            
-            # Calculate velocities
-            vel_timestamps, euclidean_velocities = calculate_euclidean_velocities(
-                timestamps, x_positions, y_positions
-            )
-            
-            # Normalize timestamps to make the first timestamp 0
-            if vel_timestamps:
-                start_time = vel_timestamps[0]
-                normalized_timestamps = [t - start_time for t in vel_timestamps]
-                
-                # Plot euclidean velocity
-                plt.plot(normalized_timestamps, euclidean_velocities, 
-                         color=colors[i], label=f"{labels[i]}")
-        
-        except Exception as e:
-            print(f"Error processing file {file_name}: {e}")
+    # 2. Determine time range
+    start_time = max(before_df['timestamp'].min(), after_df['timestamp'].min(), real_df['timestamp'].min())
+    end_time = min(before_df['timestamp'].max(), after_df['timestamp'].max(), real_df['timestamp'].max())
     
-    # Configure plot
-    plt.title('Euclidean (Linear) Velocity over Time')
+    print(f"Common time range: {start_time} to {end_time}")
+    
+    # 3. Create common time points (100ms interval)
+    time_points = np.arange(start_time, end_time, 0.1)
+    
+    # 4. Interpolate each dataset
+    print("Performing time interpolation...")
+    before_interp = interpolate_states(before_df, time_points)
+    after_interp = interpolate_states(after_df, time_points)
+    real_interp = interpolate_states(real_df, time_points)
+    
+    # 5. Calculate errors (Euclidean distance)
+    print("Calculating Euclidean distances...")
+    before_errors = calculate_euclidean_distance(before_interp, real_interp)
+    after_errors = calculate_euclidean_distance(after_interp, real_interp)
+    
+    # 6. Calculate average errors
+    avg_before_error = before_errors.mean()
+    avg_after_error = after_errors.mean()
+    
+    print(f"Before fusion average error: {avg_before_error:.6f} meters")
+    print(f"After fusion average error: {avg_after_error:.6f} meters")
+    print(f"Error improvement: {100 * (avg_before_error - avg_after_error) / avg_before_error:.2f}%")
+    
+    # 7. Visualize results
+    plt.figure(figsize=(12, 8))
+    
+    # Error over time curve
+    plt.subplot(2, 1, 1)
+    plt.plot(time_points - time_points[0], before_errors, label='Before Fusion Error')
+    plt.plot(time_points - time_points[0], after_errors, label='After Fusion Error')
     plt.xlabel('Time (seconds)')
-    plt.ylabel('Euclidean Velocity (units/second)')
-    plt.grid(True)
+    plt.ylabel('Euclidean Distance (meters)')
+    plt.title('Position Error Before and After State Fusion')
     plt.legend()
+    plt.grid(True)
     
-    # Display chart
+    # Error boxplot
+    plt.subplot(2, 1, 2)
+    plt.boxplot([before_errors, after_errors], labels=['Before Fusion', 'After Fusion'])
+    plt.ylabel('Euclidean Distance (meters)')
+    plt.title('Error Distribution Comparison')
+    plt.grid(True)
+    
+    plt.tight_layout()
+    plt.savefig('fusion_error_analysis.png', dpi=300)
     plt.show()
-
+    
+    # 8. Save results to CSV
+    result_df = pd.DataFrame({
+        'timestamp': time_points,
+        'before_fusion_error': before_errors,
+        'after_fusion_error': after_errors
+    })
+    result_df.to_csv('fusion_error_results.csv', index=False)
+    print("Analysis results saved to fusion_error_results.csv and fusion_error_analysis.png")
 
 if __name__ == "__main__":
     main()

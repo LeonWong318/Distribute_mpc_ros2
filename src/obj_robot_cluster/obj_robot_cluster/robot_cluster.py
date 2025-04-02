@@ -91,6 +91,45 @@ class ClusterNode(Node):
         self.current_state_update = NewState(self.lookahead_time, self.config_mpc.ts, self.close_to_target_rate)
         
         self.create_pub_and_sub()
+        self.create_pub_temp()
+    
+    def create_pub_temp(self):
+        self.state_before_fusion_pub = self.create_publisher(
+            RobotToClusterState,
+            f'/robot_{self.robot_id}/state_before_fusion',
+            self.best_effort_qos
+        )
+
+        self.state_after_fusion_pub = self.create_publisher(
+            RobotToClusterState,
+            f'/robot_{self.robot_id}/state_after_fusion',
+            self.best_effort_qos
+        )
+
+    def publish_state_for_logging(self, pos, fusion_stage):
+        try:
+            self.get_logger().info(f"Attempting to publish {fusion_stage} state: {pos}")
+            state_msg = RobotToClusterState()
+
+            state_msg.x = pos[0]
+            state_msg.y = pos[1]
+            state_msg.theta = self._state[2]
+
+            state_msg.stamp = self.get_clock().now().to_msg()
+            state_msg.idle = self.idle
+
+            if fusion_stage == "before_fusion":
+                self.state_before_fusion_pub.publish(state_msg)
+                self.get_logger().debug(f"Published before_fusion state: x={pos[0]}, y={pos[1]}")
+            elif fusion_stage == "after_fusion":
+                self.state_after_fusion_pub.publish(state_msg)
+                self.get_logger().debug(f"Published after_fusion state: x={pos[0]}, y={pos[1]}")
+
+        except Exception as e:
+            import traceback
+            self.get_logger().error(f'Error publishing {fusion_stage} state for logging: {str(e)}')
+            self.get_logger().error(traceback.format_exc())
+    
     
     def create_pub_and_sub(self):
         self.callback_group = ReentrantCallbackGroup()
@@ -112,7 +151,7 @@ class ClusterNode(Node):
             RobotToClusterState,
             f'/robot_{self.robot_id}/state_delayed',
             self.from_robot_state_callback,
-            self.reliable_qos,
+            self.reliable_qos, 
             callback_group=self.callback_group
         )
         
@@ -273,7 +312,7 @@ class ClusterNode(Node):
                 else:
                     self.old_traj = state
                     if self.update_robot_state(state.x, state.y, state.theta, state.stamp, "manager"):
-                        self.get_logger().debug(f'Updated state from manager: x={state.x}, y={state.y}, theta={state.theta}')
+                        self.get_logger().info(f'Updated state from manager: x={state.x}, y={state.y}, theta={state.theta}')
         except Exception as e:
             self.get_logger().error(f'Error processing robot states: {str(e)}')
     
@@ -288,7 +327,7 @@ class ClusterNode(Node):
             self.robot_state = msg
             self.idle = msg.idle
             if self.update_robot_state(msg.x, msg.y, msg.theta, msg.stamp, "local robot"):
-                self.get_logger().debug(f'Updated robot state: x={msg.x}, y={msg.y}, theta={msg.theta}')
+                self.get_logger().info(f'Updated robot state from local: x={msg.x}, y={msg.y}, theta={msg.theta}')
             self.publish_state_to_manager(msg.stamp)
 
         except Exception as e:
@@ -378,10 +417,13 @@ class ClusterNode(Node):
         
     def get_current_state(self,current_time, current_pos, traj_time):
         if self.mpc_method == 'state_fusion':
-            print('state_fusion')
-            return self.current_state_update.get_new_current_state(self.old_traj.pred_states, current_time, current_pos, traj_time)
+            self.get_logger().debug('state_fusion')
+            fused_state = self.current_state_update.get_new_current_state(self.old_traj.pred_states, current_time, current_pos, traj_time)
+            self.publish_state_for_logging(current_pos, "before_fusion")
+            self.publish_state_for_logging(fused_state, "after_fusion")
+            return fused_state
         elif self.mpc_method == 'state_origin':
-            print('state_origin')
+            self.get_logger().debug('state_origin')
             return current_pos
         else:
             return current_pos

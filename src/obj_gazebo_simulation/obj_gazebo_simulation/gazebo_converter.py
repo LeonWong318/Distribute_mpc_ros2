@@ -219,8 +219,6 @@ class RobotControlConverter(Node):
         Publish the current robot state at the specified frequency.
         """
         try:
-            # Use try/finally pattern with explicit lock acquire/release
-            # This is more efficient than 'with' statement for high-frequency operations
             if self.state_lock.acquire(timeout=0.005):  # Short timeout to avoid blocking
                 try:
                     # Create state message

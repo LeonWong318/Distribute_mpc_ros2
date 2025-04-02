@@ -106,6 +106,21 @@ sleep 5
 echo "Launching local robot nodes..."
 eval "$ROBOT_LAUNCH_COMMANDS"
 
+
+Wait for robots to register and clusters to be created
+echo "Waiting for robots to register and cluster nodes to initialize (2 seconds)..."
+sleep 5
+echo "Launching listening and logging..."
+
+nohup bash -c "source install/setup.bash && ros2 topic echo /robot_0/state_before_fusion > robot_0_before_fusion.log 2>&1" &
+echo "Started monitoring /robot_0/state_before_fusion"
+
+nohup bash -c "source install/setup.bash && ros2 topic echo /robot_0/state_after_fusion > robot_0_after_fusion.log 2>&1" &
+echo "Started monitoring /robot_0/state_after_fusion"
+
+nohup bash -c "source install/setup.bash && ros2 topic echo /robot_0/real_state > robot_0_real_state.log 2>&1" &
+echo "Started monitoring /robot_0/real_state"
+
 # Keep the script running to handle Ctrl+C
 echo "All components launched. Press Ctrl+C to shut down all terminals."
 while true; do

@@ -19,6 +19,7 @@ from msg_interfaces.msg import (
     ClusterToRobotTrajectory,
     RobotToClusterState,
     ClusterBetweenRobotHeartBeat,
+    GazeboToManagerState
 )
 
 class TopicConfig:
@@ -88,6 +89,13 @@ class MultiTopicMessageBuffer(Node, QWidget):
         self.best_effort_qos = QoSProfile(
             reliability=QoSReliabilityPolicy.BEST_EFFORT,
             history=QoSHistoryPolicy.KEEP_LAST,
+            depth=10
+        )
+        
+        self.volatile_qos = QoSProfile(
+            reliability=QoSReliabilityPolicy.RELIABLE,
+            history=QoSHistoryPolicy.KEEP_LAST,
+            durability=QoSDurabilityPolicy.VOLATILE,
             depth=10
         )
         
@@ -183,7 +191,7 @@ class MultiTopicMessageBuffer(Node, QWidget):
             
             # Gazebo to Manager topics
             self._topic_configs[f"robot_{robot_id}_sim_state"] = TopicConfig(
-                ClusterBetweenRobotHeartBeat,
+                GazeboToManagerState,
                 f"/robot_{robot_id}/sim_state",
                 f"/robot_{robot_id}/sim_state_delayed",
                 True,
@@ -196,30 +204,40 @@ class MultiTopicMessageBuffer(Node, QWidget):
         for topic_id, config in self._topic_configs.items():
             if not config.enabled:
                 continue
-                
+
             # Initialize buffer for this topic
             self._buffers[topic_id] = []
-            
-            # Determine appropriate QoS profile
-            qos = self.reliable_qos if "heartbeat" not in topic_id else self.best_effort_qos
-            
-            # Create subscriber with appropriate callback
+
+
+
+            if "state" in topic_id:
+                sub_qos = self.volatile_qos
+                pub_qos = self.reliable_qos
+                self.get_logger().info(f"Using VOLATILE QoS for state topic: {topic_id}")
+            elif "heartbeat" in topic_id:
+                sub_qos = self.best_effort_qos
+                pub_qos = self.best_effort_qos
+            else:
+                sub_qos = self.reliable_qos
+                pub_qos = self.reliable_qos
+
+            # 创建订阅者
             self._subscribers[topic_id] = self.create_subscription(
                 config.msg_type,
                 config.topic_in,
                 lambda msg, tid=topic_id: self.message_callback(msg, tid),
-                qos,
+                sub_qos,
                 callback_group=self.callback_group
             )
-            
-            # Create publisher
+
+            # 创建发布者
             self._publishers[topic_id] = self.create_publisher(
                 config.msg_type,
                 config.topic_out,
-                qos
+                pub_qos
             )
-            
-            self.get_logger().info(f"Set up buffer for {topic_id}: {config.topic_in} -> {config.topic_out}")
+
+            self.get_logger().info(f"Set up buffer for {topic_id}: {config.topic_in} -> {config.topic_out} with appropriate QoS")
     
     def message_callback(self, msg, topic_id):
         """Handles incoming messages and buffers them with a Poisson delay."""
