@@ -22,12 +22,13 @@ from msg_interfaces.msg import (
 )
 
 class TopicConfig:
-    def __init__(self, msg_type, topic_in, topic_out, enabled=True, mean_delay=0.2):
+    def __init__(self, msg_type, topic_in, topic_out, enabled=True, mean_delay=0.2, stddev = 0.1):
         self.msg_type = msg_type
         self.topic_in = topic_in
         self.topic_out = topic_out
         self.enabled = enabled
         self.mean_delay = mean_delay
+        self.stddev = stddev
 
 class MultiTopicMessageBuffer(Node, QWidget):
     def __init__(self):
@@ -40,7 +41,8 @@ class MultiTopicMessageBuffer(Node, QWidget):
             parameters=[
                 ('robot_start_path', ''),  # Path to the robot_start.json file
                 ('enable_gui', True),
-                ('mean_delay', 0.2)
+                ('mean_delay', 0.2),
+                ('stddev_delay', 0.1)
             ]
         )
         
@@ -55,6 +57,7 @@ class MultiTopicMessageBuffer(Node, QWidget):
         
         self.enable_gui = self.get_parameter('enable_gui').value
         self.mean_delay = self.get_parameter('mean_delay').value
+        self.stddev = self.get_parameter('stddev_delay').value
 
         # Initialize Qt only if GUI is enabled
         if self.enable_gui:
@@ -146,7 +149,8 @@ class MultiTopicMessageBuffer(Node, QWidget):
                 f"/cluster_{robot_id}/trajectory",
                 f"/cluster_{robot_id}/trajectory_delayed",
                 True,
-                self.mean_delay
+                self.mean_delay,
+                self.stddev
             )
             
             self._topic_configs[f"cluster_{robot_id}_heartbeat"] = TopicConfig(
@@ -154,7 +158,8 @@ class MultiTopicMessageBuffer(Node, QWidget):
                 f"/cluster_{robot_id}/heartbeat",
                 f"/cluster_{robot_id}/heartbeat_delayed",
                 True,
-                self.mean_delay
+                self.mean_delay,
+                self.stddev
             )
             
             # Robot to Cluster topics
@@ -163,7 +168,8 @@ class MultiTopicMessageBuffer(Node, QWidget):
                 f"/robot_{robot_id}/state",
                 f"/robot_{robot_id}/state_delayed",
                 True,
-                self.mean_delay
+                self.mean_delay,
+                self.stddev
             )
             
             self._topic_configs[f"robot_{robot_id}_heartbeat"] = TopicConfig(
@@ -171,7 +177,8 @@ class MultiTopicMessageBuffer(Node, QWidget):
                 f"/robot_{robot_id}/heartbeat",
                 f"/robot_{robot_id}/heartbeat_delayed",
                 True,
-                self.mean_delay
+                self.mean_delay,
+                self.stddev
             )
             
             # Gazebo to Manager topics
@@ -180,7 +187,8 @@ class MultiTopicMessageBuffer(Node, QWidget):
                 f"/robot_{robot_id}/sim_state",
                 f"/robot_{robot_id}/sim_state_delayed",
                 True,
-                self.mean_delay
+                self.mean_delay,
+                self.stddev
             )
     
     def setup_pub_sub(self):
@@ -223,7 +231,7 @@ class MultiTopicMessageBuffer(Node, QWidget):
             return
         
         # Generate delay from Poisson distribution
-        delay = np.random.exponential(scale=config.mean_delay)
+        delay = np.random.normal(loc=config.mean_delay, scale=config.stddev)
         release_time = time() + delay
         
         # Add to buffer with release time

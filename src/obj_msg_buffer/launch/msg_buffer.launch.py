@@ -35,6 +35,7 @@ def generate_launch_description():
     default_robot_start_path = config.get('robot_start_path', 'data/test_data/robot_start.json')
     default_enable_gui = str(config.get('enable_gui', 'true')).lower()
     default_mean_delay = str(config.get('mean_delay', '1.0'))
+    default_stddev_delay = str(config.get('stddev_delay', '0.1'))
     
     # === Launch Arguments ===
     robot_start_path_arg = DeclareLaunchArgument(
@@ -54,6 +55,13 @@ def generate_launch_description():
         default_value=default_mean_delay,
         description='Mean delay for the Poisson process'
     )
+
+    stddev_delay_arg = DeclareLaunchArgument(
+        'stddev_delay',
+        default_value=default_stddev_delay,
+        description='stddev'
+
+    )
     
     # === Node Configuration ===
     msg_buffer = Node(
@@ -63,7 +71,8 @@ def generate_launch_description():
         parameters=[{
             'robot_start_path': LaunchConfiguration('robot_start_path'),
             'enable_gui': LaunchConfiguration('enable_gui'),
-            'mean_delay': LaunchConfiguration('mean_delay')
+            'mean_delay': LaunchConfiguration('mean_delay'),
+            'stddev_delay': LaunchConfiguration('stddev_delay')
         }],
         output='screen'
     )
@@ -73,5 +82,6 @@ def generate_launch_description():
         robot_start_path_arg,
         enable_gui_arg,
         mean_delay_arg,
+        stddev_delay_arg,
         msg_buffer
     ])

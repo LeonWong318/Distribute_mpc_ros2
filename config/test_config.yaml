@@ -1,3 +1,3 @@
 latency_values: [0.0, 1.0]
-iterations_per_latency: 20
-timeout_seconds: 300.0
+iterations_per_latency: 50
+timeout_seconds: 200.0

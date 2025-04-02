@@ -18,11 +18,12 @@ manager_publish_frequency: 10.0
 # cluster config
 cluster_control_frequency: 1.0
 close_to_target_rate: 0.5
-mpc_method: 'state_fusion' #choose from state_fusion and state_origin
+mpc_method: 'state_origin' #choose from state_fusion and state_origin
 
 # msg buffer config
 enable_gui: true
 mean_delay: 1.0
+stddev_delay: 0.1
 
 # gazebo converter config
 command_timeout: 0.5
