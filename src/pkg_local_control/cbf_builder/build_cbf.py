@@ -59,11 +59,11 @@ class CBF_builder:
             .with_aug_lagrangian_constraints(cbf_constraint, set_c)  # Now enforces dh_dt + alpha*h >= 0
         
         solver_config = og.config.SolverConfiguration() \
-            .with_tolerance(1e-4) \
-            .with_max_inner_iterations(500) \
-            .with_max_outer_iterations(10) \
-            .with_initial_penalty(1.0) \
-            .with_penalty_weight_update_factor(5.0)
+            .with_tolerance(self._cfg.tolerance) \
+            .with_max_inner_iterations(self._cfg.max_inner_iterations) \
+            .with_max_outer_iterations(self._cfg.max_outer_iterations) \
+            .with_initial_penalty(self._cfg.initial_penalty) \
+            .with_penalty_weight_update_factor(self._cfg.penalty_update_factor)
         
         meta = og.config.OptimizerMeta() \
             .with_optimizer_name('cbf_solver') \

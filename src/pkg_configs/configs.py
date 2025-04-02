@@ -157,7 +157,7 @@ class CBFconfig(_Configuration):
         self.alpha = config.alpha
         
         # Solver parameters
-        self.solver_tolerance = config.tolerance
+        self.tolerance = config.tolerance
         self.max_inner_iterations = config.max_inner_iterations
         self.max_outer_iterations = config.max_outer_iterations
         self.initial_penalty = config.initial_penalty

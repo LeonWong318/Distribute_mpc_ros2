@@ -149,6 +149,7 @@ class RobotNode(Node):
         self.cbf_config = CBFconfig.from_yaml(self.cbf_config_path)
         self.safety_margin = self.get_parameter('safety_margin').value
         self.max_obstacle_distance = self.get_parameter('max_obstacle_distance').value
+        self.laser_processor = ObstacleProcessor(self.safety_margin, self.max_obstacle_distance)
 
         # Load robot configuration
         self.config_robot = CircularRobotSpecification.from_yaml(self.robot_config_path)
@@ -224,7 +225,7 @@ class RobotNode(Node):
             LaserScan,
             f'/robot_{self.robot_id}/f_scan',
             self.laserscan_callback,
-            self.reliable_qos,
+            self.best_effort_qos,
             callback_group=self.callback_group
         )
         
@@ -498,12 +499,14 @@ class RobotNode(Node):
         :param msg: LaserScan message from ROS
         """
         # Use the imported class to process the scan data
-        self.laser_processor = ObstacleProcessor(msg, self._state, self.safety_margin, self.max_obstacle_distance)
-        closest_obstacles = self.laser_processor.get_closest_obstacles()
+        if self._state is None:
+            return
+        
+        closest_obstacles = self.laser_processor.get_closest_obstacles(msg, self._state)
         most_dangerous = self.laser_processor.get_most_dangerous_obstacle()
         self.obstacles = closest_obstacles
 
-        self.get_logger().info(f'Closest obstacles: {closest_obstacles}')
+        self.get_logger().debug(f'Closest obstacles: {closest_obstacles}')
         self.get_logger().debug(f'Most Dangerous obstacle: {most_dangerous}')
 
     def collision_callback(self, msg: ContactsState):
@@ -629,6 +632,7 @@ class RobotNode(Node):
                         traj_time,
                         current_time
                     )
+                    self.get_logger().info('LQR')
                 else:
                     v, omega = self.cbf_controller.compute_control_commands(
                         current_position,
@@ -636,15 +640,15 @@ class RobotNode(Node):
                         trajectory_list,
                         self.obstacles
                     )
-            else:
-                self.get_logger().warn_once(f'Unknown controller type: {self.controller_type}')
+                    self.get_logger().debug('CBF')
+                # self.get_logger().warn_once(f'Unknown controller type: {self.controller_type}')
                 return
             
             # Limit control commands
             v = np.clip(v, -self.max_velocity, self.max_velocity)
             omega = np.clip(omega, -self.max_angular_velocity, self.max_angular_velocity)
             
-            self.get_logger().debug(f'Sending Control commands ({self.controller_type}): v={v:.2f}, omega={omega:.2f}')
+            self.get_logger().info(f'Sending Control commands ({self.controller_type}): v={v:.2f}, omega={omega:.2f}')
             
             # Send command and wait for state update
             self.send_command_to_gazebo(v, omega)

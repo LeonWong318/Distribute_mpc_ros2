@@ -44,7 +44,7 @@ control_frequency: 10.0
 cluster_wait_timeout: 30.0
 
 # controller selection
-controller_type: 'pure_pursuit' # choose pure_pursuit/cbf/lqr/lqr_update
+controller_type: 'cbf' # choose pure_pursuit/cbf/lqr/lqr_update
 mpc_ts: 0.3 # keep align with ts in mpc_configs
 
 # Pure Pursuit parameters
@@ -70,4 +70,4 @@ lqr_lookahead_style: 'time' # time or dist
 
 # cbf laser processer parameters:
 safety_margin: 0.2
-max_obstacle_distance: 3.0
+max_obstacle_distance: 10.0
