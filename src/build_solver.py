@@ -40,7 +40,7 @@ if __name__ == "__main__":
     mpc_module.load_motion_model(motion_model.unicycle_model)
     mpc_module.build(test=False)
 
-    cbf_fname = "cbf_config.yaml"
-    config_cbf = load_cbf_config(cbf_fname)
-    cbf_solver = build_cbf.CBF_builder(config_cbf)
-    cbf_solver.build()
+    # cbf_fname = "cbf_config.yaml"
+    # config_cbf = load_cbf_config(cbf_fname)
+    # cbf_solver = build_cbf.CBF_builder(config_cbf)
+    # cbf_solver.build()
