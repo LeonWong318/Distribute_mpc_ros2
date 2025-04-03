@@ -358,7 +358,11 @@ class RobotManager(Node):
                 'ros2', 'launch',
                 self.cluster_package,
                 'obj_robot_cluster.launch.py',
-                f'robot_id:={robot_id}'
+                f'robot_id:={robot_id}',
+                f'map_path:={self.map_path}',
+                f'graph_path:={self.graph_path}',
+                f'schedule_path:={self.schedule_path}',
+                f'robot_start_path:={self.robot_start_path}',
             ]
 
             env = os.environ.copy()
@@ -411,7 +415,11 @@ class RobotManager(Node):
                 'ros2', 'launch',
                 self.cluster_package,
                 'obj_robot_cluster.launch.py',
-                f'robot_id:={robot_id}'
+                f'robot_id:={robot_id}',
+                f'map_path:={self.map_path}',
+                f'graph_path:={self.graph_path}',
+                f'schedule_path:={self.schedule_path}',
+                f'robot_start_path:={self.robot_start_path}',
             ]
 
             env = os.environ.copy()

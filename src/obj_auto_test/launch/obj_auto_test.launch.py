@@ -31,7 +31,8 @@ def generate_launch_description():
     test_config = {
         'latency_values': [0.0, 0.1, 0.3, 0.5, 1.0],
         'iterations_per_latency': 20,
-        'timeout_seconds': 300.0
+        'timeout_seconds': 300.0,
+        'workspace_root': workspace_root
     }
     
     if os.path.exists(test_config_path):
@@ -39,7 +40,11 @@ def generate_launch_description():
             with open(test_config_path, 'r') as f:
                 loaded_config = yaml.safe_load(f)
                 if loaded_config:
-                    test_config.update(loaded_config)
+                    # Update top-level keys
+                    for key in ['latency_values', 'iterations_per_latency', 'timeout_seconds']:
+                        if key in loaded_config:
+                            test_config[key] = loaded_config[key]
+                    
         except Exception as e:
             print(f"Warning: Error reading test configuration file {test_config_path}: {str(e)}", file=sys.stderr)
             print("Using default test configuration.", file=sys.stderr)
@@ -83,10 +88,12 @@ def generate_launch_description():
             'robot_start_path': LaunchConfiguration('robot_start_path'),
             'log_dir': LaunchConfiguration('log_dir'),
             
-            # System paths 
+            # System paths
             'map_path': os.path.join(workspace_root, sys_config.get('map_path', 'data/test_data/map.json')),
             'graph_path': os.path.join(workspace_root, sys_config.get('graph_path', 'data/test_data/graph.json')),
+            'robot_spec_path': os.path.join(workspace_root, sys_config.get('robot_spec_path', 'data/test_data_new/schedule.csv')),
             'robot_config_path': os.path.join(workspace_root, sys_config.get('robot_config_path', 'config/spec_robot.yaml')),
+            'map_name': sys_config.get('map_name', 'test_data_new.world'),
             
             # Test parameters
             'latency_values': test_config['latency_values'],

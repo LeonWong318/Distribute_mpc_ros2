@@ -29,9 +29,7 @@ class AutoTest(Node):
         self.current_latency = 0.0
         self.workspace_root = os.getcwd()
         self.failure_type = None
-        
-        self.initialize_log_files()
-        
+                
         self.metrics_subscription = self.create_subscription(
             PerformanceMetricsArray,
             '/performance_metrics',
@@ -40,81 +38,124 @@ class AutoTest(Node):
         )
         
         self.get_logger().info('AutoTest node initialized successfully')
-    
+
     def load_test_config(self):
         """Load test configuration file"""
         # First try to get the configuration file path from parameters
         self.declare_parameter('test_config_path', 'config/test_config.yaml')
-        self.declare_parameter('robot_start_path', 'data/test_data/robot_start.json')
         self.declare_parameter('log_dir', 'auto_test_logs')
         self.declare_parameter('workspace_root', os.getcwd())
         self.declare_parameter('show_terminals', True)
-        
+
         # Read from parameters
         config_path = self.get_parameter('test_config_path').value
-        self.robot_start_path = self.get_parameter('robot_start_path').value
         self.log_dir_base = self.get_parameter('log_dir').value
         self.workspace_root = self.get_parameter('workspace_root').value
         self.show_terminals = self.get_parameter('show_terminals').value
-        
+
         # Get the latency value list from parameters (if specified)
         self.declare_parameter('latency_values', [0.0, 0.1, 0.3, 0.5, 1.0])
         self.declare_parameter('iterations_per_latency', 20)
         self.declare_parameter('timeout_seconds', 300.0)
-        
-        latency_param = self.get_parameter('latency_values')
-        iterations_param = self.get_parameter('iterations_per_latency')
-        timeout_param = self.get_parameter('timeout_seconds')
-        
+        self.declare_parameter('map_path', '')
+        self.declare_parameter('graph_path', '')
+        self.declare_parameter('robot_start_path', '')
+        self.declare_parameter('robot_spec_path', '')
+        self.declare_parameter('map_name', '')
+
         # Default configuration
-        self.latency_values = latency_param.value
-        self.iterations_per_latency = iterations_param.value
-        self.timeout_seconds = timeout_param.value
-        
-        if os.path.exists(config_path):
-            try:
-                with open(config_path, 'r') as f:
-                    config = yaml.safe_load(f)
-                
-                if config:
-                    self.latency_values = config.get('latency_values', self.latency_values)
-                    self.iterations_per_latency = config.get('iterations_per_latency', self.iterations_per_latency)
-                    self.timeout_seconds = config.get('timeout_seconds', self.timeout_seconds)
-                    self.robot_start_path = config.get('robot_start_path', self.robot_start_path)
-                
-                self.get_logger().info(f'Test configuration loaded from {config_path}')
-            except Exception as e:
-                self.get_logger().error(f'Error loading configuration: {str(e)}')
-        else:
-            self.get_logger().info(f'Configuration file not found: {config_path}, using default values')
-        
-        self.get_logger().info(f'Using latency values: {self.latency_values}')
-        self.get_logger().info(f'Using iterations per latency: {self.iterations_per_latency}')
-        self.get_logger().info(f'Using timeout: {self.timeout_seconds} seconds')
-    
-    def initialize_log_files(self):
-        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        self.log_dir = os.path.join(self.workspace_root, f'{self.log_dir_base}_{timestamp}')
+        self.default_latency_values = self.get_parameter('latency_values').value
+        self.default_iterations_per_latency = self.get_parameter('iterations_per_latency').value
+        self.default_timeout_seconds = self.get_parameter('timeout_seconds').value
 
-        os.makedirs(self.log_dir, exist_ok=True)
+        # Default scenario configuration
+        self.default_map_path = self.get_parameter('map_path').value
+        self.default_graph_path = self.get_parameter('graph_path').value
+        self.default_robot_start_path = self.get_parameter('robot_start_path').value
+        self.default_robot_spec_path = self.get_parameter('robot_spec_path').value
+        self.default_map_name = self.get_parameter('map_name').value
 
-        self.summary_log_path = os.path.join(self.log_dir, 'summary_results.csv')
-        with open(self.summary_log_path, 'w', newline='') as f:
-            writer = csv.writer(f)
-            writer.writerow([
-                'Latency', 'Success Rate', 'Timeout Rate', 'Collision Rate',
-                'Avg Execution Time', 'Avg Deviation', 'Avg Path Length', 
-                'Avg Linear Smoothness', 'Avg Angular Smoothness'
-            ])
+        # Initialize test scenarios list
+        self.test_scenarios = []
 
-        self.get_logger().info(f'Log files initialized in {self.log_dir}')
+        if not os.path.exists(config_path):
+            self.get_logger().error(f'Configuration file not found: {config_path}')
+            raise FileNotFoundError(f'Configuration file not found: {config_path}')
 
-    def start_simulation(self):
+        try:
+            with open(config_path, 'r') as f:
+                config = yaml.safe_load(f)
+
+            if not config:
+                self.get_logger().error(f'Empty configuration file: {config_path}')
+                raise ValueError(f'Empty configuration file: {config_path}')
+
+            self.default_latency_values = config.get('latency_values', self.default_latency_values)
+            self.default_iterations_per_latency = config.get('iterations_per_latency', self.default_iterations_per_latency)
+            self.default_timeout_seconds = config.get('timeout_seconds', self.default_timeout_seconds)
+
+            # Load test scenarios if they exist in the config
+            if 'test_scenarios' not in config or not isinstance(config['test_scenarios'], list) or not config['test_scenarios']:
+                self.get_logger().error('No valid test scenarios found in configuration file')
+                raise ValueError('No valid test scenarios found in configuration file')
+
+            self.test_scenarios = config['test_scenarios']
+            self.get_logger().info(f'Loaded {len(self.test_scenarios)} test scenarios')
+
+            for i, scenario in enumerate(self.test_scenarios):
+                if not isinstance(scenario, dict):
+                    self.get_logger().error(f'Invalid scenario format at index {i}')
+                    continue
+
+                # Print scenario info
+                scenario_name = scenario.get('name', f'unnamed_scenario_{i}')
+                self.get_logger().info(f"Scenario {i+1}: {scenario_name}")
+
+                # Print path info
+                if 'map_path' in scenario:
+                    self.get_logger().info(f"  Map path: {scenario['map_path']}")
+                if 'graph_path' in scenario:
+                    self.get_logger().info(f"  Graph path: {scenario['graph_path']}")
+                if 'robot_start_path' in scenario:
+                    self.get_logger().info(f"  Robot start path: {scenario['robot_start_path']}")
+                if 'robot_spec_path' in scenario:
+                    self.get_logger().info(f"  Robot spec path: {scenario['robot_spec_path']}")
+                if 'world_file' in scenario:
+                    self.get_logger().info(f"  World file: {scenario['world_file']}")
+
+                # Print test parameters
+                if 'latency_values' in scenario:
+                    self.get_logger().info(f"  Latency values: {scenario['latency_values']}")
+                else:
+                    self.get_logger().info(f"  Latency values: {self.default_latency_values} (default)")
+
+                if 'iterations_per_latency' in scenario:
+                    self.get_logger().info(f"  Iterations per latency: {scenario['iterations_per_latency']}")
+                else:
+                    self.get_logger().info(f"  Iterations per latency: {self.default_iterations_per_latency} (default)")
+
+                if 'timeout_seconds' in scenario:
+                    self.get_logger().info(f"  Timeout: {scenario['timeout_seconds']} seconds")
+                else:
+                    self.get_logger().info(f"  Timeout: {self.default_timeout_seconds} seconds (default)")
+
+            self.get_logger().info(f'Test configuration loaded from {config_path}')
+        except Exception as e:
+            self.get_logger().error(f'Error loading configuration: {str(e)}')
+            raise 
+
+    def start_simulation(self, scenario):
         try:
             # Ensure event state is reset
             self.test_completed.clear()
             self.iteration_success = None
             self.robot_statuses = {}
+
+            self.map_path = scenario.get('map_path', self.default_map_path)
+            self.graph_path = scenario.get('graph_path', self.default_graph_path)
+            self.robot_start_path = scenario.get('robot_start_path', self.default_robot_start_path)
+            self.robot_spec_path = scenario.get('robot_spec_path',self.default_robot_spec_path)
+            self.map_name = scenario.get('world_file', self.default_map_name)
 
             # Save a list of subscription objects (to prevent garbage collection)
             self._status_subscriptions = []
@@ -122,7 +163,9 @@ class AutoTest(Node):
             # Start the visualization node
             self.processes['visualizer'] = self.start_process_with_terminal(
                 'Robot Visualizer',
-                ['ros2', 'launch', 'obj_robot_visualizer', 'robot_visualizer.launch.py']
+                ['ros2', 'launch', 'obj_robot_visualizer', 'robot_visualizer.launch.py', 
+                 f'map_path:={self.map_path}', f'graph_path:={self.graph_path}', 
+                 f'robot_start_path:={self.robot_start_path}', f'robot_spec_path:={self.robot_spec_path}']
             )
             self.get_logger().info('Started visualizer node')
             time.sleep(2)
@@ -130,7 +173,8 @@ class AutoTest(Node):
             # Start the message buffer node (set delay)
             self.processes['msg_buffer'] = self.start_process_with_terminal(
                 'Message Buffer',
-                ['ros2', 'launch', 'obj_msg_buffer', 'msg_buffer.launch.py', f'mean_delay:={self.current_latency}']
+                ['ros2', 'launch', 'obj_msg_buffer', 'msg_buffer.launch.py', 
+                 f'robot_start_path:={self.robot_start_path}',f'mean_delay:={self.current_latency}']
             )
             self.get_logger().info(f'Started message buffer node with latency {self.current_latency}')
             time.sleep(2)
@@ -138,7 +182,9 @@ class AutoTest(Node):
             # Start the robot manager
             self.processes['manager'] = self.start_process_with_terminal(
                 'Robot Manager',
-                ['ros2', 'launch', 'obj_robot_manager', 'obj_robot_manager.launch.py']
+                ['ros2', 'launch', 'obj_robot_manager', 'obj_robot_manager.launch.py', 
+                 f'map_path:={self.map_path}', f'graph_path:={self.graph_path}', 
+                 f'robot_start_path:={self.robot_start_path}', f'schedule_path:={self.robot_spec_path}']
             )
             self.get_logger().info('Started robot manager node')
             time.sleep(2)
@@ -146,7 +192,8 @@ class AutoTest(Node):
             # Start Gazebo simulation
             self.processes['gazebo'] = self.start_process_with_terminal(
                 'Gazebo Simulation',
-                ['ros2', 'launch', 'obj_gazebo_simulation', 'gazebo_simulation.launch.py']
+                ['ros2', 'launch', 'obj_gazebo_simulation', 'gazebo_simulation.launch.py', 
+                 f'map_name:={self.map_name}',f'robot_setup_path:={self.robot_start_path}']
             )
             self.get_logger().info('Started Gazebo simulation')
 
@@ -164,7 +211,9 @@ class AutoTest(Node):
             for robot_id in self.robot_ids:
                 self.processes[f'robot_{robot_id}'] = self.start_process_with_terminal(
                     f'Robot {robot_id}',
-                    ['ros2', 'launch', 'obj_local_robot', 'obj_local_robot.launch.py', f'robot_id:={robot_id}']
+                    ['ros2', 'launch', 'obj_local_robot', 'obj_local_robot.launch.py', 
+                     f'robot_graph_path:={self.graph_path}', f'robot_id:={robot_id}',
+                     f'robot_start_path:={self.robot_start_path}', f'robot_schedule_path:={self.robot_spec_path}']
                 )
                 time.sleep(1)  # Increase waiting time
 
@@ -357,10 +406,11 @@ class AutoTest(Node):
        
        self.get_logger().info(f'Iteration results logged to {log_path}')
 
-    def log_latency_summary(self, latency, success_rate, timeout_rate, collision_rate, avg_metrics):
+    def log_latency_summary(self, scenario_name, latency, success_rate, timeout_rate, collision_rate, avg_metrics):
         with open(self.summary_log_path, 'a', newline='') as f:
             writer = csv.writer(f)
             writer.writerow([
+                scenario_name,
                 latency,
                 success_rate,
                 timeout_rate,
@@ -412,67 +462,130 @@ class AutoTest(Node):
 
     
     def run_tests(self):
-        self.get_logger().info(f'Starting automated tests with {len(self.latency_values)} latency values')
-        self.get_logger().info(f'Each latency will be tested {self.iterations_per_latency} times')
+        self.get_logger().info(f'Starting automated tests with {len(self.test_scenarios)} scenarios')
+        
+        successful_scenarios = 0
+        failed_scenarios = 0
 
-        for latency in self.latency_values:
-            self.current_latency = latency
-            self.get_logger().info(f'=== Testing latency: {latency} ===')
+        # Test each scenario
+        for scenario_idx, scenario in enumerate(self.test_scenarios):
+            try:
+                # check if vaild path
+                required_fields = ['name', 'map_path', 'graph_path', 'robot_start_path', 'robot_spec_path', 'world_file']
+                for field in required_fields:
+                    if field not in scenario:
+                        raise ValueError(f"Missing required field '{field}' in scenario configuration")
 
-            success_count = 0
-            timeout_count = 0
-            collision_count = 0
-            metrics_list = []
+                scenario_name = scenario['name']
+                if not scenario_name:
+                    raise ValueError("Scenario name cannot be empty")
 
-            for iteration in range(self.iterations_per_latency):
-                self.get_logger().info(f'Starting iteration {iteration+1}/{self.iterations_per_latency}')
+                for path_field in ['map_path', 'graph_path', 'robot_start_path', 'robot_spec_path']:
+                    path = os.path.join(self.workspace_root, scenario[path_field])
+                    if not os.path.exists(path):
+                        raise FileNotFoundError(f"File not found: {path}")
 
-                if not self.start_simulation():
-                    self.get_logger().error('Failed to start simulation, retrying...')
+                latency_values = scenario.get('latency_values', self.default_latency_values)
+                iterations_per_latency = scenario.get('iterations_per_latency', self.default_iterations_per_latency)
+                timeout_seconds = scenario.get('timeout_seconds', self.default_timeout_seconds)
+
+                if not isinstance(latency_values, list) or not latency_values:
+                    raise ValueError(f"Invalid latency_values: {latency_values}")
+                if not isinstance(iterations_per_latency, int) or iterations_per_latency <= 0:
+                    raise ValueError(f"Invalid iterations_per_latency: {iterations_per_latency}")
+                if not isinstance(timeout_seconds, (int, float)) or timeout_seconds <= 0:
+                    raise ValueError(f"Invalid timeout_seconds: {timeout_seconds}")
+
+                self.get_logger().info(f'=== Starting tests for scenario: {scenario_name} ({scenario_idx+1}/{len(self.test_scenarios)}) ===')
+                self.get_logger().info(f'Using latency values: {latency_values}')
+                self.get_logger().info(f'Using iterations per latency: {iterations_per_latency}')
+                self.get_logger().info(f'Using timeout: {timeout_seconds} seconds')
+
+                timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+                self.log_dir = os.path.join(self.workspace_root, f'{self.log_dir_base}_{scenario_name}_{timestamp}')
+                os.makedirs(self.log_dir, exist_ok=True)
+
+                self.summary_log_path = os.path.join(self.log_dir, 'summary_results.csv')
+                with open(self.summary_log_path, 'w', newline='') as f:
+                    writer = csv.writer(f)
+                    writer.writerow([
+                        'Scenario', 'Latency', 'Success Rate', 'Timeout Rate', 'Collision Rate',
+                        'Avg Execution Time', 'Avg Deviation', 'Avg Path Length', 
+                        'Avg Linear Smoothness', 'Avg Angular Smoothness'
+                    ])
+
+                self.get_logger().info(f'Log files initialized in {self.log_dir}')
+
+                # Test each latency value for this scenario
+                for latency in latency_values:
+                    self.current_latency = latency
+                    self.get_logger().info(f'=== Testing latency: {latency} for scenario: {scenario_name} ===')
+
+                    success_count = 0
+                    timeout_count = 0
+                    collision_count = 0
+                    metrics_list = []
+
+                    for iteration in range(iterations_per_latency):
+                        self.get_logger().info(f'Starting iteration {iteration+1}/{iterations_per_latency}')
+
+                        if not self.start_simulation(scenario):
+                            self.get_logger().error('Failed to start simulation, retrying...')
+                            self.cleanup_processes()
+                            continue
+                        
+                        success = self.wait_for_completion(timeout_seconds)
+
+                        if success:
+                            success_count += 1
+                            self.get_logger().info(f'Iteration {iteration+1} completed successfully')
+                        else:
+                            if self.failure_type == 'timeout':
+                                timeout_count += 1
+                                self.get_logger().info(f'Iteration {iteration+1} failed due to timeout')
+                            elif self.failure_type == 'collision':
+                                collision_count += 1
+                                self.get_logger().info(f'Iteration {iteration+1} failed due to collision')
+                            else:
+                                self.get_logger().info(f'Iteration {iteration+1} failed with unknown reason')
+
+                        self.log_iteration_results(latency, iteration, success, self.current_metrics)
+
+                        if success and self.current_metrics:  
+                            metrics_list.append(self.current_metrics)
+
+                        if iteration < iterations_per_latency - 1:
+                            self.cleanup_processes()
+                            time.sleep(2)
+
+                    success_rate = success_count / iterations_per_latency
+                    timeout_rate = timeout_count / iterations_per_latency
+                    collision_rate = collision_count / iterations_per_latency
+                    avg_metrics = self.calculate_average_metrics(metrics_list)
+
+                    self.log_latency_summary(scenario_name, latency, success_rate, timeout_rate, collision_rate, avg_metrics)
+
+                    self.get_logger().info(f'Completed testing for scenario {scenario_name}, latency {latency}')
+                    self.get_logger().info(f'Success rate: {success_rate * 100:.2f}%')
+                    self.get_logger().info(f'Timeout rate: {timeout_rate * 100:.2f}%')
+                    self.get_logger().info(f'Collision rate: {collision_rate * 100:.2f}%')
+
                     self.cleanup_processes()
-                    continue
-                
-                success = self.wait_for_completion()
+                    time.sleep(5)
 
-                if success:
-                    success_count += 1
-                    self.get_logger().info(f'Iteration {iteration+1} completed successfully')
-                else:
-                    if self.failure_type == 'timeout':
-                        timeout_count += 1
-                        self.get_logger().info(f'Iteration {iteration+1} failed due to timeout')
-                    elif self.failure_type == 'collision':
-                        collision_count += 1
-                        self.get_logger().info(f'Iteration {iteration+1} failed due to collision')
-                    else:
-                        self.get_logger().info(f'Iteration {iteration+1} failed with unknown reason')
+                self.get_logger().info(f'Completed all tests for scenario: {scenario_name}')
+                self.get_logger().info(f'Results saved to {self.log_dir}')
+                successful_scenarios += 1
 
-                self.log_iteration_results(latency, iteration, success, self.current_metrics)
+            except Exception as e:
+                self.get_logger().error(f'Error in scenario {scenario_idx+1}: {str(e)}')
+                self.get_logger().error(f'Skipping scenario {scenario_idx+1} and moving to the next one')
+                failed_scenarios += 1
+                self.cleanup_processes()
+                continue
 
-                if success and self.current_metrics:  
-                    metrics_list.append(self.current_metrics)
+        self.get_logger().info(f'All tests completed. Successful scenarios: {successful_scenarios}, Failed scenarios: {failed_scenarios}')
 
-                if iteration < self.iterations_per_latency - 1:
-                    self.cleanup_processes()
-                    time.sleep(2)
-
-            success_rate = success_count / self.iterations_per_latency
-            timeout_rate = timeout_count / self.iterations_per_latency
-            collision_rate = collision_count / self.iterations_per_latency
-            avg_metrics = self.calculate_average_metrics(metrics_list)
-
-            self.log_latency_summary(latency, success_rate, timeout_rate, collision_rate, avg_metrics)
-
-            self.get_logger().info(f'Completed testing for latency {latency}')
-            self.get_logger().info(f'Success rate: {success_rate * 100:.2f}%')
-            self.get_logger().info(f'Timeout rate: {timeout_rate * 100:.2f}%')
-            self.get_logger().info(f'Collision rate: {collision_rate * 100:.2f}%')
-
-            self.cleanup_processes()
-            time.sleep(5)
-
-        self.get_logger().info('All tests completed')
-        self.get_logger().info(f'Results saved to {self.log_dir}')
 
 def main():
     rclpy.init()

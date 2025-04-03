@@ -32,10 +32,10 @@ def generate_launch_description():
         default_lookahead_time = 0.0
     default_robot_id = '0' 
     default_close_to_target_rate = config.get('close_to_target_rate', 0.5)
-    default_map_path = config.get('map_path', 'data/test_data/map.json')
-    default_graph_path = config.get('graph_path', 'data/test_data/graph.json')
-    default_schedule_path = config.get('robot_spec_path', 'data/test_data/schedule.csv')
-    default_robot_start_path = config.get('robot_start_path', 'data/test_data/robot_start.json')
+    default_map_path = config.get('map_path', '')
+    default_graph_path = config.get('graph_path', '')
+    default_schedule_path = config.get('robot_spec_path', '')
+    default_robot_start_path = config.get('robot_start_path', '')
     default_control_frequency = config.get('cluster_control_frequency', 1.0)
     default_mpc_config_path = config.get('mpc_config_path', 'config/mpc_default.yaml')
     default_robot_config_path = config.get('robot_config_path', 'config/spec_robot.yaml')

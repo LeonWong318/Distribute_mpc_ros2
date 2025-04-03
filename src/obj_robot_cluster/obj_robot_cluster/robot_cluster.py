@@ -61,7 +61,7 @@ class ClusterNode(Node):
         self.mpc_method = self.get_parameter('mpc_method').value
         
         self.get_logger().info(f'Initializing cluster node for robot {self.robot_id}')
-        
+                
         self.load_config_files()
         
         self.motion_model = UnicycleModel(sampling_time=self.config_mpc.ts)
@@ -239,17 +239,14 @@ class ClusterNode(Node):
             
             with open(self.map_path, 'r') as f:
                 self.map_json = f.read()
-            
             with open(self.graph_path, 'r') as f:
                 self.graph_json = f.read()
-            
             with open(self.schedule_path, 'r') as f:
                 self.schedule_json = f.read()
-            
             with open(self.robot_start_path, 'r') as f:
                 robot_start_data = f.read()
                 self.robot_start = json.loads(robot_start_data)
-            
+
             self.get_logger().info('Config files loaded successfully')
             
         except Exception as e:
@@ -312,7 +309,7 @@ class ClusterNode(Node):
                 else:
                     self.old_traj = state
                     if self.update_robot_state(state.x, state.y, state.theta, state.stamp, "manager"):
-                        self.get_logger().info(f'Updated state from manager: x={state.x}, y={state.y}, theta={state.theta}')
+                        self.get_logger().debug(f'Updated state from manager: x={state.x}, y={state.y}, theta={state.theta}')
         except Exception as e:
             self.get_logger().error(f'Error processing robot states: {str(e)}')
     
@@ -327,7 +324,7 @@ class ClusterNode(Node):
             self.robot_state = msg
             self.idle = msg.idle
             if self.update_robot_state(msg.x, msg.y, msg.theta, msg.stamp, "local robot"):
-                self.get_logger().info(f'Updated robot state from local: x={msg.x}, y={msg.y}, theta={msg.theta}')
+                self.get_logger().debug(f'Updated robot state from local: x={msg.x}, y={msg.y}, theta={msg.theta}')
             self.publish_state_to_manager(msg.stamp)
 
         except Exception as e:
@@ -373,7 +370,9 @@ class ClusterNode(Node):
         try:
             # Initialize GPC
             self.gpc = GlobalPathCoordinator.from_csv_string(self.schedule_json)
+
             self.gpc.load_graph_from_json_string(self.graph_json)
+
             self.gpc.load_map_from_json_string(
                 self.map_json,
                 inflation_margin=self.config_robot.vehicle_width+0.2

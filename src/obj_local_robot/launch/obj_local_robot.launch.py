@@ -24,6 +24,11 @@ def generate_launch_description():
         print(f"Error reading configuration file {sys_config_path}: {str(e)}", file=sys.stderr)
         sys.exit(1)
 
+    default_robot_config_path = os.path.join(workspace_root, config.get('robot_config_path', 'config/spec_robot.yaml'))
+    default_robot_start_path = os.path.join(workspace_root, config.get('robot_start_path', 'data/test_data/robot_start.json'))
+    default_robot_graph_path = os.path.join(workspace_root, config.get('graph_path', 'data/test_data/graph.json'))
+    default_robot_schedule_path = os.path.join(workspace_root, config.get('robot_spec_path', 'data/test_data/schedule.csv'))
+
     # Setup Python path
     pythonpath_cmd = SetEnvironmentVariable(
         name='PYTHONPATH',
@@ -31,6 +36,31 @@ def generate_launch_description():
     )
 
     # === Launch Arguments ===
+    robot_config_path_arg = DeclareLaunchArgument(
+        'robot_config_path',
+        default_value=default_robot_config_path,
+        description='Path to robot configuration file'
+    )
+    
+    robot_start_path_arg = DeclareLaunchArgument(
+        'robot_start_path',
+        default_value=default_robot_start_path,
+        description='Path to robot start file'
+    )
+    
+    robot_graph_path_arg = DeclareLaunchArgument(
+        'robot_graph_path',
+        default_value=default_robot_graph_path,
+        description='Path to robot graph file'
+    )
+    
+    robot_schedule_path_arg = DeclareLaunchArgument(
+        'robot_schedule_path',
+        default_value=default_robot_schedule_path,
+        description='Path to robot schedule file'
+    )
+    
+
     # Robot ID argument
     robot_id_arg = DeclareLaunchArgument(
         'robot_id',
@@ -60,10 +90,10 @@ def generate_launch_description():
             'control_frequency': config.get('control_frequency', 30.0),
 
             # --- File Paths ---
-            'robot_config_path': os.path.join(workspace_root, config.get('robot_config_path', 'config/spec_robot.yaml')),
-            'robot_start_path': os.path.join(workspace_root, config.get('robot_start_path', 'data/test_data/robot_start.json')),
-            'robot_graph_path': os.path.join(workspace_root, config.get('graph_path', 'data/test_data/graph.json')),
-            'robot_schedule_path': os.path.join(workspace_root, config.get('robot_spec_path', 'data/test_data/schedule.csv')),
+            'robot_config_path': LaunchConfiguration('robot_config_path'),
+            'robot_start_path': LaunchConfiguration('robot_start_path'),
+            'robot_graph_path': LaunchConfiguration('robot_graph_path'),
+            'robot_schedule_path': LaunchConfiguration('robot_schedule_path'),
 
             # --- Communication ---
             'cluster_wait_timeout': config.get('cluster_wait_timeout', 30.0),
@@ -103,6 +133,10 @@ def generate_launch_description():
 
     return LaunchDescription([
         pythonpath_cmd,
+        robot_config_path_arg,
+        robot_start_path_arg,
+        robot_graph_path_arg,
+        robot_schedule_path_arg,
         robot_id_arg,
         controller_type_arg,
         local_robot
