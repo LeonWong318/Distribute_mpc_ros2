@@ -101,9 +101,9 @@ class RobotStateVisualizer(Node):
         self.STATUS_RUNNING = 2
         self.STATUS_EMERGENCY_STOP = 3
         self.STATUS_TARGET_REACHED = 4
-        self.STATUS_SAFETY_STOP = 5
+        self.STATUS_DISCONNECT_STOP = 5
         self.STATUS_COLLISION = 6
-        
+        self.STATUS_SAFETY_STOP = 7
         # Define status color mapping
         self.status_colors = {
             self.STATUS_INITIALIZING: (0.5, 0.5, 0.5),  # Gray
@@ -111,8 +111,9 @@ class RobotStateVisualizer(Node):
             self.STATUS_RUNNING: (0.0, 0.7, 0.2),       # Green
             self.STATUS_EMERGENCY_STOP: (1.0, 1.0, 0.0), # Yellow
             self.STATUS_TARGET_REACHED: (0.0, 0.0, 1.0), # Blue
-            self.STATUS_SAFETY_STOP: (1.0, 0.0, 0.0),     # Red
-            self.STATUS_COLLISION: (1.0, 0.0, 1.0)      # Purple
+            self.STATUS_DISCONNECT_STOP: (1.0, 0.0, 0.0),     # Red
+            self.STATUS_COLLISION: (1.0, 0.0, 1.0),      # Purple
+            self.STATUS_SAFETY_STOP: (1.0, 0.5, 0.0)
         }
         
         # Original subscription for planned trajectories

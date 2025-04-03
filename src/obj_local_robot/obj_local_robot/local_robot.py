@@ -14,7 +14,8 @@ import asyncio
 from pkg_local_control.pure_pursuit import PurePursuit
 from pkg_local_control.lqr import LQRController
 from pkg_local_control.lqr_update import LQR_Update_Controller
-from pkg_local_control.cbf_lqr import CBF_LQR_Controller, ObstacleProcessor
+from pkg_local_control.cbf_lqr import CBF_LQR_Controller
+from pkg_local_control.obt_processer import ObstacleProcessor
 
 from msg_interfaces.msg import ClusterToRobotTrajectory, RobotToClusterState, RobotToRvizStatus,ClusterBetweenRobotHeartBeat
 from msg_interfaces.srv import RegisterRobot, ExecuteCommand
@@ -161,8 +162,9 @@ class RobotNode(Node):
         self.STATUS_RUNNING = 2
         self.STATUS_EMERGENCY_STOP = 3
         self.STATUS_TARGET_REACHED = 4
-        self.STATUS_SAFETY_STOP = 5
+        self.STATUS_DISCONNECT_STOP = 5
         self.STATUS_COLLISION = 6 
+        self.STATUS_SAFETY_STOP = 7
         
         self.current_status = self.STATUS_INITIALIZING
         self.status_descriptions = {
@@ -171,8 +173,9 @@ class RobotNode(Node):
             self.STATUS_RUNNING: "Running",
             self.STATUS_EMERGENCY_STOP: "Emergency Stop",
             self.STATUS_TARGET_REACHED: "Target Reached",
-            self.STATUS_SAFETY_STOP: "Safety Stop",
-            self.STATUS_COLLISION: "Collision Detected"
+            self.STATUS_DISCONNECT_STOP: "DISCONNECT Stop",
+            self.STATUS_COLLISION: "Collision Detected",
+            self.STATUS_SAFETY_STOP: "Safety stop for collision avoidance"
         }
         
         # Initialize controllers
@@ -185,7 +188,9 @@ class RobotNode(Node):
         self.trajectory_received = False  # Flag for trajectory reception
         self.last_received_state_from_gazebo_time = self.get_clock().now().to_msg()
         self.collision_detected = False
-        self.obstacles = None
+        self.front_obstacles = None
+        self.back_obstacles = None
+        self.back_distances = None
         
         # Create callback group
         self.callback_group = ReentrantCallbackGroup()
@@ -224,7 +229,15 @@ class RobotNode(Node):
         self.front_laser = self.create_subscription(
             LaserScan,
             f'/robot_{self.robot_id}/f_scan',
-            self.laserscan_callback,
+            self.front_laserscan_callback,
+            self.best_effort_qos,
+            callback_group=self.callback_group
+        )
+
+        self.back_laser = self.create_subscription(
+            LaserScan,
+            f'/robot_{self.robot_id}/b_scan',
+            self.back_laserscan_callback,
             self.best_effort_qos,
             callback_group=self.callback_group
         )
@@ -396,7 +409,7 @@ class RobotNode(Node):
                 self.cluster_connected = True
                 self.get_logger().info(f'Cluster node {self.robot_id} is now connected')
                 
-                if self.current_status == self.STATUS_SAFETY_STOP:
+                if self.current_status == self.STATUS_DISCONNECT_STOP:
                     self.idle = False 
                     self.update_robot_status(self.STATUS_IDLE)
                 
@@ -442,9 +455,9 @@ class RobotNode(Node):
     
     def handle_cluster_offline(self):
         if not self.idle:
-            self.get_logger().error(f'Cluster {self.robot_id} appears to be offline, entering safety stop state')
+            self.get_logger().error(f'Cluster {self.robot_id} appears to be offline, entering DISCONNECT stop state')
             self.idle = True
-            self.update_robot_status(self.STATUS_SAFETY_STOP)
+            self.update_robot_status(self.STATUS_DISCONNECT_STOP)
             self.execute_stop()
 
     def execute_stop(self):
@@ -492,7 +505,7 @@ class RobotNode(Node):
         except Exception as e:
             self.get_logger().error(f'Error in trajectory_callback: {str(e)}')
     
-    def laserscan_callback(self, msg: LaserScan):
+    def front_laserscan_callback(self, msg: LaserScan):
         """
         Callback function to process incoming LaserScan messages
 
@@ -502,12 +515,42 @@ class RobotNode(Node):
         if self._state is None:
             return
         
-        closest_obstacles = self.laser_processor.get_closest_obstacles(msg, self._state)
-        most_dangerous = self.laser_processor.get_most_dangerous_obstacle()
-        self.obstacles = closest_obstacles
+        closest_obstacles, _ = self.laser_processor.get_closest_front_obstacles(msg, self._state)
+        
+        self.front_obstacles = closest_obstacles
 
-        self.get_logger().debug(f'Closest obstacles: {closest_obstacles}')
-        self.get_logger().debug(f'Most Dangerous obstacle: {most_dangerous}')
+        self.get_logger().debug(f'Closest front obstacles: {closest_obstacles}')
+        if closest_obstacles.shape[0] != 0:
+            self.safety_stop_handling()
+            self.get_logger().info('SAFETY STOP')
+        elif closest_obstacles.shape[0] == 0 and self.current_status == self.STATUS_SAFETY_STOP:
+            self.get_logger().info('return to running')
+            self.send_command_to_gazebo(0,0)
+            self.update_robot_status(self.STATUS_RUNNING)
+        
+
+    def back_laserscan_callback(self, msg: LaserScan):
+        """
+        Callback function to process incoming LaserScan messages
+
+        :param msg: LaserScan message from ROS
+        """
+        # Use the imported class to process the scan data
+        if self._state is None:
+            return
+        
+        closest_obstacles, distances = self.laser_processor.get_closest_back_obstacles(msg, self._state)
+        
+        self.back_obstacles = closest_obstacles
+        self.back_distances = distances
+
+        self.get_logger().debug(f'Closest back obstacles: {closest_obstacles}')
+
+    def safety_stop_handling(self):
+        self.send_command_to_gazebo(0, 0)
+        self.update_robot_status(self.STATUS_SAFETY_STOP)
+        if self.laser_processor.is_back_clear(self.back_obstacles, self.back_distances, 1.5):
+            self.send_command_to_gazebo(-0.25, 0)
 
     def collision_callback(self, msg: ContactsState):
         try:
@@ -578,8 +621,13 @@ class RobotNode(Node):
                 self.send_command_to_gazebo(0, 0) 
                 self.update_robot_status(self.STATUS_EMERGENCY_STOP)
                 return
-            if self.obstacles is None:
-                self.obstacles = None
+            # if self.obstacles is None:
+            #     self.obstacles = None
+
+            if self.current_status == self.STATUS_SAFETY_STOP:
+                self.get_logger().info('Control check: SAFETY STOP')
+                return
+            
             self.update_robot_status(self.STATUS_RUNNING)
             
             # Get current position and heading
@@ -624,24 +672,24 @@ class RobotNode(Node):
                 )
             elif self.controller_type == 'cbf':
 
-                if self.obstacles is None:
-                    v, omega = self.lqr_update_controller.compute_control_commands(
-                        current_position,
-                        current_heading,
-                        trajectory_list,
-                        traj_time,
-                        current_time
-                    )
-                    self.get_logger().info('LQR')
-                else:
-                    v, omega = self.cbf_controller.compute_control_commands(
-                        current_position,
-                        current_heading,
-                        trajectory_list,
-                        self.obstacles
-                    )
-                    self.get_logger().debug('CBF')
-                # self.get_logger().warn_once(f'Unknown controller type: {self.controller_type}')
+                # if self.obstacles is None:
+                #     v, omega = self.lqr_update_controller.compute_control_commands(
+                #         current_position,
+                #         current_heading,
+                #         trajectory_list,
+                #         traj_time,
+                #         current_time
+                #     )
+                #     self.get_logger().info('LQR')
+                # else:
+                #     v, omega = self.cbf_controller.compute_control_commands(
+                #         current_position,
+                #         current_heading,
+                #         trajectory_list,
+                #         self.obstacles
+                #     )
+                #     self.get_logger().debug('CBF')
+                self.get_logger().warn_once(f'Unknown controller type: {self.controller_type}')
                 return
             
             # Limit control commands

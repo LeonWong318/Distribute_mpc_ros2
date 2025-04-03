@@ -18,7 +18,7 @@ manager_publish_frequency: 10.0
 # cluster config
 cluster_control_frequency: 1.0
 close_to_target_rate: 0.5
-mpc_method: 'state_fusion' #choose from state_fusion and state_origin
+mpc_method: 'state_origin' #choose from state_fusion and state_origin
 
 # msg buffer config
 enable_gui: true
@@ -44,7 +44,7 @@ control_frequency: 10.0
 cluster_wait_timeout: 30.0
 
 # controller selection
-controller_type: 'cbf' # choose pure_pursuit/cbf/lqr/lqr_update
+controller_type: 'lqr_update' # choose pure_pursuit/cbf/lqr/lqr_update
 mpc_ts: 0.3 # keep align with ts in mpc_configs
 
 # Pure Pursuit parameters
@@ -68,6 +68,6 @@ lqr_lookahead_dist: 0.8     # Lookahead Distance
 lqr_lookahead_time:: 0.5
 lqr_lookahead_style: 'time' # time or dist
 
-# cbf laser processer parameters:
+# laser processer parameters:
 safety_margin: 0.2
-max_obstacle_distance: 10.0
+max_obstacle_distance: 0.5
