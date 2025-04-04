@@ -59,7 +59,8 @@ class ClusterNode(Node):
         self.schedule_path = self.get_parameter('schedule_path').value
         self.robot_start_path = self.get_parameter('robot_start_path').value
         self.mpc_method = self.get_parameter('mpc_method').value
-        
+        self.converge_flag = False
+
         self.get_logger().info(f'Initializing cluster node for robot {self.robot_id}')
                 
         self.load_config_files()
@@ -471,7 +472,7 @@ class ClusterNode(Node):
                 start_time = self.get_clock().now()
                 
                 # run controller
-                self.last_actions, self.pred_states, self.current_refs, self.debug_info = self.controller.run_step(
+                self.last_actions, self.pred_states, self.current_refs, self.debug_info, exist_status= self.controller.run_step(
                     static_obstacles=self.static_obstacles,
                     other_robot_states=robot_states_for_control
                 )
@@ -482,9 +483,14 @@ class ClusterNode(Node):
                 
                 # run step
                 self.controller.set_current_state(self._state)
-                
-                # publish traj to robot after calculating
-                self.publish_trajectory_to_robot()
+                if exist_status == 'Converged':
+                    # publish traj to robot after calculating
+                    self.converge_flag = True
+                    self.get_logger().info('Converged')
+                    self.publish_trajectory_to_robot()
+                else:
+                    self.converge_flag = False
+                    self.get_logger().info(f'Not converge reason: {exist_status}')
                 
             else:
                 self.get_logger().debug('Not enough other robot states, skip this control loop')
@@ -500,7 +506,9 @@ class ClusterNode(Node):
         try:
             if self.pred_states is None:
                 return
-
+            if self.converge_flag == False:
+                return
+            
             traj_msg = ClusterToRobotTrajectory()
             traj_msg.stamp = self.get_clock().now().to_msg()
 
@@ -521,6 +529,7 @@ class ClusterNode(Node):
         
     def publish_state_to_manager(self, stamp):
         try:
+            
             state_msg = ClusterToManagerState()
             state_msg.robot_id = self.robot_id
             state_msg.x = self._state[0]
@@ -529,7 +538,7 @@ class ClusterNode(Node):
             state_msg.idle = self.idle
             state_msg.stamp = stamp
 
-            if self.pred_states is not None:
+            if self.pred_states is not None and self.converge_flag:
                 flattened_states = []
                 for state in self.pred_states:
                     if isinstance(state, np.ndarray):

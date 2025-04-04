@@ -393,13 +393,13 @@ class TrajectoryTracker:
             self._stc_constraints, self._closest_obstacle_list = self.get_stc_constraints(static_obstacles)
             self._map_loaded = True
         dyn_constraints = self.get_dyn_constraints(full_dyn_obstacle_list)
-        actions, pred_states, ref_states, cost, monitored_cost = self._run_step(self._stc_constraints, dyn_constraints, other_robot_states, report_cost)
+        actions, pred_states, ref_states, cost, monitored_cost, exist_status= self._run_step(self._stc_constraints, dyn_constraints, other_robot_states, report_cost)
         step_runtime = timer()-step_time_start
         debug_info = DebugInfo(cost=cost, 
                                closest_obstacle_list=self._closest_obstacle_list, 
                                step_runtime=step_runtime, 
                                monitored_cost=monitored_cost)
-        return actions, pred_states, ref_states, debug_info
+        return actions, pred_states, ref_states, debug_info, exist_status
 
     def _run_step(self, stc_constraints: List, dyn_constraints: List, other_robot_states:Optional[List]=None, report_cost:bool=False):
         """Run the trajectory planner for one step, wrapped by `run_step`.
@@ -478,7 +478,7 @@ class TrajectoryTracker:
         self.cost_timelist.append(cost)
         self.solver_time_timelist.append(solver_time)
 
-        return actions, pred_states, ref_states, cost, monitored_costs
+        return actions, pred_states, ref_states, cost, monitored_costs, exit_status
 
     def run_solver(self, parameters:List, state: np.ndarray, take_steps:int=1):
         """Run the solver for the pre-defined MPC problem.
