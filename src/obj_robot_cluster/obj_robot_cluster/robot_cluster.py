@@ -94,42 +94,42 @@ class ClusterNode(Node):
         self.create_pub_and_sub()
         self.create_pub_temp()
     
-    def create_pub_temp(self):
-        self.state_before_fusion_pub = self.create_publisher(
-            RobotToClusterState,
-            f'/robot_{self.robot_id}/state_before_fusion',
-            self.best_effort_qos
-        )
+    # def create_pub_temp(self):
+    #     self.state_before_fusion_pub = self.create_publisher(
+    #         RobotToClusterState,
+    #         f'/robot_{self.robot_id}/state_before_fusion',
+    #         self.best_effort_qos
+    #     )
 
-        self.state_after_fusion_pub = self.create_publisher(
-            RobotToClusterState,
-            f'/robot_{self.robot_id}/state_after_fusion',
-            self.best_effort_qos
-        )
+    #     self.state_after_fusion_pub = self.create_publisher(
+    #         RobotToClusterState,
+    #         f'/robot_{self.robot_id}/state_after_fusion',
+    #         self.best_effort_qos
+    #     )
 
-    def publish_state_for_logging(self, pos, fusion_stage):
-        try:
-            self.get_logger().info(f"Attempting to publish {fusion_stage} state: {pos}")
-            state_msg = RobotToClusterState()
+    # def publish_state_for_logging(self, pos, fusion_stage):
+    #     try:
+    #         self.get_logger().info(f"Attempting to publish {fusion_stage} state: {pos}")
+    #         state_msg = RobotToClusterState()
 
-            state_msg.x = pos[0]
-            state_msg.y = pos[1]
-            state_msg.theta = self._state[2]
+    #         state_msg.x = pos[0]
+    #         state_msg.y = pos[1]
+    #         state_msg.theta = self._state[2]
 
-            state_msg.stamp = self.get_clock().now().to_msg()
-            state_msg.idle = self.idle
+    #         state_msg.stamp = self.get_clock().now().to_msg()
+    #         state_msg.idle = self.idle
 
-            if fusion_stage == "before_fusion":
-                self.state_before_fusion_pub.publish(state_msg)
-                self.get_logger().debug(f"Published before_fusion state: x={pos[0]}, y={pos[1]}")
-            elif fusion_stage == "after_fusion":
-                self.state_after_fusion_pub.publish(state_msg)
-                self.get_logger().debug(f"Published after_fusion state: x={pos[0]}, y={pos[1]}")
+    #         if fusion_stage == "before_fusion":
+    #             self.state_before_fusion_pub.publish(state_msg)
+    #             self.get_logger().debug(f"Published before_fusion state: x={pos[0]}, y={pos[1]}")
+    #         elif fusion_stage == "after_fusion":
+    #             self.state_after_fusion_pub.publish(state_msg)
+    #             self.get_logger().debug(f"Published after_fusion state: x={pos[0]}, y={pos[1]}")
 
-        except Exception as e:
-            import traceback
-            self.get_logger().error(f'Error publishing {fusion_stage} state for logging: {str(e)}')
-            self.get_logger().error(traceback.format_exc())
+    #     except Exception as e:
+    #         import traceback
+    #         self.get_logger().error(f'Error publishing {fusion_stage} state for logging: {str(e)}')
+    #         self.get_logger().error(traceback.format_exc())
     
     
     def create_pub_and_sub(self):
@@ -419,8 +419,8 @@ class ClusterNode(Node):
         if self.mpc_method == 'state_fusion':
             self.get_logger().debug('state_fusion')
             fused_state = self.current_state_update.get_new_current_state(self.old_traj.pred_states, current_time, current_pos, traj_time)
-            self.publish_state_for_logging(current_pos, "before_fusion")
-            self.publish_state_for_logging(fused_state, "after_fusion")
+            # self.publish_state_for_logging(current_pos, "before_fusion")
+            # self.publish_state_for_logging(fused_state, "after_fusion")
             return fused_state
         elif self.mpc_method == 'state_origin':
             self.get_logger().debug('state_origin')
