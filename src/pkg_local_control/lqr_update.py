@@ -199,7 +199,7 @@ class LQR_Update_Controller:
             # Compute LQR control
             u, _, _, _ = self.compute_control(current_state, x_ref, u_ref)
 
-            return u[0], u[1]
+            return u[0], u[1], x_ref
 
         except Exception as e:
             print(f"Error in LQR compute_control_commands: {str(e)}")
