@@ -6,6 +6,7 @@ from msg_interfaces.msg import (
     GazeboToManagerState, 
     RobotToRvizStatus,
     ClusterToRvizShortestPath,
+    RobotToRvizTargetPoint,
     PerformanceMetrics,
     PerformanceMetricsArray
 )
@@ -146,6 +147,10 @@ class RobotStateVisualizer(Node):
         self.evaluation_completed = False
         self.metrics_published = False
         
+        # target points(only available in some local control methods)
+        self.robot_target_points = {}
+        self.target_point_subscriptions = {}
+        
         self.load_data()
         self.create_robot_subscriptions()
         
@@ -186,6 +191,14 @@ class RobotStateVisualizer(Node):
                     10
                 )
                 self.shortest_path_subscriptions[robot_id] = shortest_path_sub
+                
+                target_point_sub = self.create_subscription(
+                    RobotToRvizTargetPoint,
+                    f'/robot_{robot_id}/target_point',
+                    lambda msg, rid=robot_id: self.target_point_callback(msg, rid),
+                    10
+                )
+                self.target_point_subscriptions[robot_id] = target_point_sub
                 
                 # Initialize with default status (Initializing)
                 self.robot_statuses[robot_id] = self.STATUS_INITIALIZING
@@ -241,6 +254,13 @@ class RobotStateVisualizer(Node):
         except Exception as e:
             self.get_logger().error(f'Error processing shortest path for robot {robot_id}: {str(e)}')
     
+    def target_point_callback(self, msg, robot_id):
+        """Callback for robot target point messages"""
+        try:
+            self.robot_target_points[robot_id] = (msg.x, msg.y, msg.stamp)
+            self.get_logger().debug(f'Received target point for robot {robot_id}: ({msg.x}, {msg.y})')
+        except Exception as e:
+            self.get_logger().error(f'Error processing target point for robot {robot_id}: {str(e)}')
     
     def load_data(self):
         try:
@@ -753,7 +773,62 @@ class RobotStateVisualizer(Node):
             transform.transform.rotation.w = q[3]
             
             self.tf_broadcaster.sendTransform(transform)
-        
+
+            if robot_id in self.robot_target_points:
+                target_x, target_y, _ = self.robot_target_points[robot_id]
+                
+                target_line = Marker()
+                target_line.header.frame_id = "map"
+                target_line.header.stamp = self.get_clock().now().to_msg()
+                target_line.ns = "robot_target_lines"
+                target_line.id = robot_id
+                target_line.type = Marker.LINE_LIST 
+                target_line.action = Marker.ADD
+                
+                target_line.scale.x = 0.08 
+                
+                target_line.color.r = r
+                target_line.color.g = g
+                target_line.color.b = b
+                target_line.color.a = 1.0
+                
+                start_point = Point()
+                start_point.x = state_msg.x
+                start_point.y = state_msg.y
+                start_point.z = 0.08
+                target_line.points.append(start_point)
+                
+                end_point = Point()
+                end_point.x = target_x
+                end_point.y = target_y
+                end_point.z = 0.08
+                target_line.points.append(end_point)
+                
+                marker_array.markers.append(target_line)
+                
+                target_marker = Marker()
+                target_marker.header.frame_id = "map"
+                target_marker.header.stamp = self.get_clock().now().to_msg()
+                target_marker.ns = "robot_target_points"
+                target_marker.id = robot_id
+                target_marker.type = Marker.SPHERE
+                target_marker.action = Marker.ADD
+                
+                target_marker.pose.position.x = target_x
+                target_marker.pose.position.y = target_y
+                target_marker.pose.position.z = 0.08
+                
+                target_marker.scale.x = 0.25
+                target_marker.scale.y = 0.25
+                target_marker.scale.z = 0.25
+                
+                target_marker.color.r = r
+                target_marker.color.g = g
+                target_marker.color.b = b
+                target_marker.color.a = 0.9
+                
+                marker_array.markers.append(target_marker)
+            
         # Add dijkstra path
         self.publish_shortest_path_markers(marker_array)
         

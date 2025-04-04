@@ -17,7 +17,7 @@ from pkg_local_control.lqr_update import LQR_Update_Controller
 from pkg_local_control.cbf_lqr import CBF_LQR_Controller
 from pkg_local_control.obt_processer import ObstacleProcessor
 
-from msg_interfaces.msg import ClusterToRobotTrajectory, RobotToClusterState, RobotToRvizStatus,ClusterBetweenRobotHeartBeat
+from msg_interfaces.msg import ClusterToRobotTrajectory, RobotToClusterState, RobotToRvizStatus, ClusterBetweenRobotHeartBeat, RobotToRvizTargetPoint
 from msg_interfaces.srv import RegisterRobot, ExecuteCommand
 from gazebo_msgs.msg import ContactsState
 from sensor_msgs.msg import LaserScan
@@ -268,6 +268,12 @@ class RobotNode(Node):
         self.status_pub = self.create_publisher(
             RobotToRvizStatus,
             f'/robot_{self.robot_id}/status',
+            self.reliable_qos
+        )
+        
+        self.target_point_pub = self.create_publisher(
+            RobotToRvizTargetPoint,
+            f'robot_{self.robot_id}/target_point',
             self.reliable_qos
         )
         
@@ -670,6 +676,8 @@ class RobotNode(Node):
                     traj_time,
                     current_time
                 )
+                self.publish_target_point(target)
+                
             elif self.controller_type == 'cbf':
 
                 # if self.obstacles is None:
@@ -770,6 +778,17 @@ class RobotNode(Node):
         except Exception as e:
             self.get_logger().error(f'Error publishing robot status: {str(e)}')
 
+    def publish_target_point(self, target_point):
+        try:
+            target_point_msg = RobotToRvizTargetPoint()
+            target_point_msg.x = target_point[0]
+            target_point_msg.y = target_point[1]
+            target_point_msg.stamp = self.get_clock().now().to_msg()
+
+            self.target_point_pub.publish(target_point_msg)
+
+        except Exception as e:
+            self.get_logger().error(f'Error publishing target point: {str(e)}')
     
     def update_robot_status(self, new_status):
         if self.current_status != new_status:

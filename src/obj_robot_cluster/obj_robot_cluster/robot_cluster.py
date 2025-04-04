@@ -92,7 +92,7 @@ class ClusterNode(Node):
         self.current_state_update = NewState(self.lookahead_time, self.config_mpc.ts, self.close_to_target_rate)
         
         self.create_pub_and_sub()
-        self.create_pub_temp()
+        # self.create_pub_temp()
     
     # def create_pub_temp(self):
     #     self.state_before_fusion_pub = self.create_publisher(
