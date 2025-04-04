@@ -3,13 +3,13 @@
   <model name="test_data">
     <static>true</static>
     <link name="wall_0">
-      <pose>-0.8 0.0 1.0 0 0 1.5707963267948966</pose>
+      <pose>9.2 10.0 1.0 0 0 1.5707963267948966</pose>
       <self_collide>0</self_collide>
       <kinematic>0</kinematic>
       <visual name="wall_0_visual">
         <geometry>
           <box>
-            <size>1.6 0.1 2.0</size>
+            <size>1.6000000000000014 0.1 2.0</size>
             </box>
           </geometry>
         <material>
@@ -29,7 +29,7 @@
       <collision name="wall_0_collision">
         <geometry>
           <box>
-            <size>1.6 0.1 2.0</size>
+            <size>1.6000000000000014 0.1 2.0</size>
             </box>
           </geometry>
         <laser_retro>0</laser_retro>
@@ -73,13 +73,13 @@
         </collision>
       </link>
     <link name="wall_1">
-      <pose>0.0 0.8 1.0 0 0 0.0</pose>
+      <pose>10.0 10.8 1.0 0 0 0.0</pose>
       <self_collide>0</self_collide>
       <kinematic>0</kinematic>
       <visual name="wall_1_visual">
         <geometry>
           <box>
-            <size>1.6 0.1 2.0</size>
+            <size>1.6000000000000014 0.1 2.0</size>
             </box>
           </geometry>
         <material>
@@ -99,7 +99,7 @@
       <collision name="wall_1_collision">
         <geometry>
           <box>
-            <size>1.6 0.1 2.0</size>
+            <size>1.6000000000000014 0.1 2.0</size>
             </box>
           </geometry>
         <laser_retro>0</laser_retro>
@@ -143,13 +143,13 @@
         </collision>
       </link>
     <link name="wall_2">
-      <pose>0.8 0.0 1.0 0 0 -1.5707963267948966</pose>
+      <pose>10.8 10.0 1.0 0 0 -1.5707963267948966</pose>
       <self_collide>0</self_collide>
       <kinematic>0</kinematic>
       <visual name="wall_2_visual">
         <geometry>
           <box>
-            <size>1.6 0.1 2.0</size>
+            <size>1.6000000000000014 0.1 2.0</size>
             </box>
           </geometry>
         <material>
@@ -169,7 +169,7 @@
       <collision name="wall_2_collision">
         <geometry>
           <box>
-            <size>1.6 0.1 2.0</size>
+            <size>1.6000000000000014 0.1 2.0</size>
             </box>
           </geometry>
         <laser_retro>0</laser_retro>
@@ -213,13 +213,13 @@
         </collision>
       </link>
     <link name="wall_3">
-      <pose>0.0 -0.8 1.0 0 0 3.141592653589793</pose>
+      <pose>10.0 9.2 1.0 0 0 3.141592653589793</pose>
       <self_collide>0</self_collide>
       <kinematic>0</kinematic>
       <visual name="wall_3_visual">
         <geometry>
           <box>
-            <size>1.6 0.1 2.0</size>
+            <size>1.6000000000000014 0.1 2.0</size>
             </box>
           </geometry>
         <material>
@@ -239,7 +239,7 @@
       <collision name="wall_3_collision">
         <geometry>
           <box>
-            <size>1.6 0.1 2.0</size>
+            <size>1.6000000000000014 0.1 2.0</size>
             </box>
           </geometry>
         <laser_retro>0</laser_retro>
@@ -283,7 +283,7 @@
         </collision>
       </link>
     <link name="wall_4">
-      <pose>-3.5 0.0 1.0 0 0 0.0</pose>
+      <pose>6.5 10.0 1.0 0 0 0.0</pose>
       <self_collide>0</self_collide>
       <kinematic>0</kinematic>
       <visual name="wall_4_visual">
@@ -353,7 +353,7 @@
         </collision>
       </link>
     <link name="wall_5">
-      <pose>-3.0 0.5 1.0 0 0 1.5707963267948966</pose>
+      <pose>7.0 10.5 1.0 0 0 1.5707963267948966</pose>
       <self_collide>0</self_collide>
       <kinematic>0</kinematic>
       <visual name="wall_5_visual">
@@ -423,7 +423,7 @@
         </collision>
       </link>
     <link name="wall_6">
-      <pose>-3.5 1.0 1.0 0 0 3.141592653589793</pose>
+      <pose>6.5 11.0 1.0 0 0 3.141592653589793</pose>
       <self_collide>0</self_collide>
       <kinematic>0</kinematic>
       <visual name="wall_6_visual">
@@ -493,7 +493,7 @@
         </collision>
       </link>
     <link name="wall_7">
-      <pose>-4.0 0.5 1.0 0 0 -1.5707963267948966</pose>
+      <pose>6.0 10.5 1.0 0 0 -1.5707963267948966</pose>
       <self_collide>0</self_collide>
       <kinematic>0</kinematic>
       <visual name="wall_7_visual">
@@ -563,7 +563,7 @@
         </collision>
       </link>
     <link name="wall_8">
-      <pose>0.0 -6.0 1.0 0 0 0.0</pose>
+      <pose>10.0 4.0 1.0 0 0 0.0</pose>
       <self_collide>0</self_collide>
       <kinematic>0</kinematic>
       <visual name="wall_8_visual">
@@ -633,7 +633,7 @@
         </collision>
       </link>
     <link name="wall_9">
-      <pose>6.0 0.0 1.0 0 0 1.5707963267948966</pose>
+      <pose>16.0 10.0 1.0 0 0 1.5707963267948966</pose>
       <self_collide>0</self_collide>
       <kinematic>0</kinematic>
       <visual name="wall_9_visual">
@@ -703,7 +703,7 @@
         </collision>
       </link>
     <link name="wall_10">
-      <pose>0.0 6.0 1.0 0 0 3.141592653589793</pose>
+      <pose>10.0 16.0 1.0 0 0 3.141592653589793</pose>
       <self_collide>0</self_collide>
       <kinematic>0</kinematic>
       <visual name="wall_10_visual">
@@ -773,7 +773,7 @@
         </collision>
       </link>
     <link name="wall_11">
-      <pose>-6.0 0.0 1.0 0 0 -1.5707963267948966</pose>
+      <pose>4.0 10.0 1.0 0 0 -1.5707963267948966</pose>
       <self_collide>0</self_collide>
       <kinematic>0</kinematic>
       <visual name="wall_11_visual">
