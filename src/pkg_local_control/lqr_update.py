@@ -1,4 +1,5 @@
 import numpy as np
+import math
 from scipy.linalg import solve_discrete_are
 
 def dlqr(A, B, Q, R):
@@ -135,15 +136,20 @@ class LQR_Update_Controller:
             if self.lookahead_style == 'dist':            
                 for i, point in enumerate(trajectory_list):
                     point_state = np.array([point[0], point[1]])
+                    point_angle = math.atan2(point[1]-current_position[1], point[0]-current_position[0])
                     dist = np.linalg.norm(current_state[:2] - point_state)
 
                     if dist < min_dist:
                         min_dist = dist
                         closest_idx = i
-
+                    # Compute the relative angle between the point and the current heading
+                    relative_angle = point_angle - current_heading
+                    # Normalize the angle to the range [-pi, pi]
+                    relative_angle = (relative_angle + math.pi) % (2 * math.pi) - math.pi
                     # Find the first point that is at least look_ahead_dist away
-                    if dist >= self.look_ahead_dist and look_ahead_idx is None:
-                        look_ahead_idx = i
+                    if dist >= self.look_ahead_dist and abs(relative_angle) <= math.pi / 2:
+                        if look_ahead_idx is None:
+                            look_ahead_idx = i
             elif self.lookahead_style == 'time':
                 
                 target_time = current_time + self.lookahead_time
