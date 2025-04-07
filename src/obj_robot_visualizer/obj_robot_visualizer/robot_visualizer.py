@@ -19,7 +19,6 @@ import os
 import yaml
 import colorsys
 from .evaluator_utils import PathEvaluator
-
 def quaternion_from_euler(ai, aj, ak):
     ai /= 2.0
     aj /= 2.0
@@ -105,6 +104,7 @@ class RobotStateVisualizer(Node):
         self.STATUS_DISCONNECT_STOP = 5
         self.STATUS_COLLISION = 6
         self.STATUS_SAFETY_STOP = 7
+        
         # Define status color mapping
         self.status_colors = {
             self.STATUS_INITIALIZING: (0.5, 0.5, 0.5),  # Gray
@@ -114,7 +114,7 @@ class RobotStateVisualizer(Node):
             self.STATUS_TARGET_REACHED: (0.0, 0.0, 1.0), # Blue
             self.STATUS_DISCONNECT_STOP: (1.0, 0.0, 0.0),     # Red
             self.STATUS_COLLISION: (1.0, 0.0, 1.0),      # Purple
-            self.STATUS_SAFETY_STOP: (1.0, 0.5, 0.0)
+            self.STATUS_SAFETY_STOP: (1.0, 0.5, 0.0)    # Organge
         }
         
         # Original subscription for planned trajectories
@@ -743,10 +743,11 @@ class RobotStateVisualizer(Node):
                 self.STATUS_RUNNING: "Running",
                 self.STATUS_EMERGENCY_STOP: "Emergency Stop",
                 self.STATUS_TARGET_REACHED: "Target Reached",
-                self.STATUS_SAFETY_STOP: "Safety Stop",
-                self.STATUS_COLLISION: "Collision Detected"
-                
+                self.STATUS_DISCONNECT_STOP: "Disconnect Stop",
+                self.STATUS_COLLISION: "Collision Detected",
+                self.STATUS_SAFETY_STOP: "Safety stop for collision avoidance"
             }
+            
             status_desc = status_desc_map.get(status, "Unknown")
             text_marker.text = f"Robot {robot_id} [{status_desc}]"
             

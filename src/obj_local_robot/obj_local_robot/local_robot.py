@@ -59,7 +59,6 @@ class RobotNode(Node):
             self.start_heart_beat()
             self.get_logger().info('Heartbeat mechanism started')
             
-            self.idle = False
             self.update_robot_status(self.STATUS_IDLE)
         
             return True
@@ -173,7 +172,7 @@ class RobotNode(Node):
             self.STATUS_RUNNING: "Running",
             self.STATUS_EMERGENCY_STOP: "Emergency Stop",
             self.STATUS_TARGET_REACHED: "Target Reached",
-            self.STATUS_DISCONNECT_STOP: "DISCONNECT Stop",
+            self.STATUS_DISCONNECT_STOP: "Disconnect Stop",
             self.STATUS_COLLISION: "Collision Detected",
             self.STATUS_SAFETY_STOP: "Safety stop for collision avoidance"
         }
@@ -182,7 +181,6 @@ class RobotNode(Node):
         self.setup_controllers()
 
         # Initialize state variables
-        self.idle = True
         self._state = None  # Current state
         self.current_trajectory = None  # Current trajectory
         self.trajectory_received = False  # Flag for trajectory reception
@@ -416,7 +414,6 @@ class RobotNode(Node):
                 self.get_logger().info(f'Cluster node {self.robot_id} is now connected')
                 
                 if self.current_status == self.STATUS_DISCONNECT_STOP:
-                    self.idle = False 
                     self.update_robot_status(self.STATUS_IDLE)
                 
             self.get_logger().debug(f'Received heartbeat from cluster {self.robot_id}')
@@ -460,11 +457,8 @@ class RobotNode(Node):
 
     
     def handle_cluster_offline(self):
-        if not self.idle:
-            self.get_logger().error(f'Cluster {self.robot_id} appears to be offline, entering DISCONNECT stop state')
-            self.idle = True
-            self.update_robot_status(self.STATUS_DISCONNECT_STOP)
-            self.execute_stop()
+        self.get_logger().error(f'Cluster {self.robot_id} appears to be offline, entering DISCONNECT stop state')
+        self.update_robot_status(self.STATUS_DISCONNECT_STOP)
 
     def execute_stop(self):
         try:
@@ -475,7 +469,7 @@ class RobotNode(Node):
 
     def trajectory_callback(self, msg: ClusterToRobotTrajectory):
         """Process trajectory message from cluster"""
-        try:    
+        try:
             # Mark trajectory as received
             self.trajectory_received = True
             
@@ -495,19 +489,16 @@ class RobotNode(Node):
                 min_distance = min(min_distance, distance)
 
             # Define threshold for acceptable distance (you can make this a parameter)
-            distance_threshold = 1000000.0  # meters
+            distance_threshold = 100.0  # meters
 
-            if min_distance > distance_threshold:
+            if min_distance >= distance_threshold:
                 self.get_logger().warn(f'Current position too far from trajectory (min distance: {min_distance:.2f}m). Stopping robot until next update.')
-                self.execute_stop()
-                self.current_trajectory = None
                 self.update_robot_status(self.STATUS_EMERGENCY_STOP)
-            else:
-                # Store current trajectory if distance is acceptable
+            elif self.current_status == self.STATUS_EMERGENCY_STOP or self.current_status == self.STATUS_RUNNING:
+                self.update_robot_status(self.STATUS_RUNNING)
                 self.current_trajectory = msg
-                self.get_logger().debug(f'Received valid trajectory with {len(msg.x)} points (min distance: {min_distance:.2f}m)')
+                self.get_logger().info(f'Received valid trajectory with {len(msg.x)} points (min distance: {min_distance:.2f}m)')
 
-            
         except Exception as e:
             self.get_logger().error(f'Error in trajectory_callback: {str(e)}')
     
@@ -528,10 +519,9 @@ class RobotNode(Node):
         self.get_logger().debug(f'Closest front obstacles: {closest_obstacles}')
         if closest_obstacles.shape[0] != 0:
             self.safety_stop_handling()
-            self.get_logger().info('SAFETY STOP')
+            self.get_logger().debug('SAFETY STOP')
         elif closest_obstacles.shape[0] == 0 and self.current_status == self.STATUS_SAFETY_STOP:
-            self.get_logger().info('return to running')
-            self.send_command_to_gazebo(0,0)
+            self.get_logger().debug('return to running')
             self.update_robot_status(self.STATUS_RUNNING)
         
 
@@ -553,10 +543,11 @@ class RobotNode(Node):
         self.get_logger().debug(f'Closest back obstacles: {closest_obstacles}')
 
     def safety_stop_handling(self):
-        self.send_command_to_gazebo(0, 0)
         self.update_robot_status(self.STATUS_SAFETY_STOP)
         if self.laser_processor.is_back_clear(self.back_obstacles, self.back_distances, 1.5):
             self.send_command_to_gazebo(-0.25, 0)
+        else:
+            self.send_command_to_gazebo(0, 0)
 
     def collision_callback(self, msg: ContactsState):
         try:
@@ -570,8 +561,6 @@ class RobotNode(Node):
 
             self.collision_detected = True
             self.update_robot_status(self.STATUS_COLLISION)
-            self.execute_stop()
-            self.idle = True
 
             collision_info = []
             for state in msg.states:
@@ -615,26 +604,33 @@ class RobotNode(Node):
     def control_loop_callback(self):
         """Control loop: compute and apply control commands"""
         try:
-            if self.idle:
+            if self.current_status == self.STATUS_INITIALIZING:
+                return
+            
+            if self.current_status == self.STATUS_EMERGENCY_STOP:
+                self.execute_stop()
+                return
+            
+            if self.current_status == self.STATUS_TARGET_REACHED:
+                self.execute_stop()
+                return
+            
+            if self.current_status == self.STATUS_DISCONNECT_STOP:
+                self.execute_stop()
+                return
+            
+            if self.current_status == self.STATUS_COLLISION:
+                self.execute_stop()
+                return
+            
+            if self.current_status == self.STATUS_SAFETY_STOP:
                 return
             
             if self._state is None:
                 return
             
-            # Check if trajectory and state are available
-            if self.current_trajectory is None:
-                # traj is None when first initialization or state/traj separate
-                self.send_command_to_gazebo(0, 0) 
-                self.update_robot_status(self.STATUS_EMERGENCY_STOP)
-                return
-            # if self.obstacles is None:
-            #     self.obstacles = None
-
-            if self.current_status == self.STATUS_SAFETY_STOP:
-                self.get_logger().info('Control check: SAFETY STOP')
-                return
-            
-            self.update_robot_status(self.STATUS_RUNNING)
+            if self.current_status == self.STATUS_IDLE: 
+                self.update_robot_status(self.STATUS_RUNNING)
             
             # Get current position and heading
             current_position = (self._state[0], self._state[1])
@@ -791,6 +787,10 @@ class RobotNode(Node):
             self.get_logger().error(f'Error publishing target point: {str(e)}')
     
     def update_robot_status(self, new_status):
+        if self.current_status == self.STATUS_COLLISION or self.current_status == self.STATUS_TARGET_REACHED:
+            # Reached Terminating Status
+            return
+        
         if self.current_status != new_status:
             old_state_desc = self.status_descriptions[self.current_status]
             new_state_desc = self.status_descriptions[new_status]
@@ -807,8 +807,6 @@ class RobotNode(Node):
         distance = np.linalg.norm(current_position - target_position)
 
         if distance < 0.3:
-            self.idle = True
-            self.execute_stop()
             self.update_robot_status(self.STATUS_TARGET_REACHED)
             self.get_logger().debug(f'Robot {self.robot_id} reached target. Distance: {distance:.3f}')
             return True
