@@ -7,7 +7,7 @@ ts: 0.3   # Size of the time-step (sampling time)
 
 ### MPC configuration
 N_hor: 20        # The length of the receding horizon controller
-action_steps: 5  # How many steps should be taken from each mpc-solution. Range (1 - N_hor)
+action_steps: 1  # How many steps should be taken from each mpc-solution. Range (1 - N_hor)
 # Helper variables (Generally does not have to be changed)
 nu: 2     # Number of control inputs (speed and angular speed)
 ns: 3     # Number of states for the robot (x,y,theta,e) [e is the channel width/permitted error, not included yet]
@@ -26,7 +26,7 @@ ang_acc_penalty: 2.0   # Cost angular acceleration
 qrpd: 10.0             # Cost for reference path deviation
 qpos: 5.0               # Cost for position deviation each time step to the reference
 qvel: 5.0              # Cost for speed    deviation each time step to the reference
-qtheta: 5.0             # Cost for heading  deviation each time step to the reference
+qtheta: 0.0             # Cost for heading  deviation each time step to the reference
 # Obstacle avoidance weights
 qstcobs: 100.0 # Cost for static obstacle avoidance (soft constraint)
 qdynobs: 500.0 # Cost for dynamic obstacle avoidance (soft constraint)
@@ -38,8 +38,14 @@ qpredrobot: 1000.0 # Cost for other robot's predicted trajectory
 qpN: 0.0               # Terminal cost; error relative to final reference position         
 qthetaN: 0.0            # Terminal cost; error relative to final reference heading     
 # Building options in the optimizer
+initial_tolerance: 0.001
+target_tolerance : 0.001
+max_inner_iterations : 500 #(given a penalty factor)
+max_outer_iterations : 15  #(increase the penalty factor)
+
 solver_type: 'PANOC'
 max_solver_time: 5000_000        # micros (0.5 sec)
+
 # max_solver_time: 1_0
 build_type: 'release'           # Can have 'debug' or 'release'
 build_directory: 'mpc_solver'   # Name of the directory where the build is created

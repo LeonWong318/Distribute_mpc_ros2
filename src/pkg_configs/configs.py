@@ -96,6 +96,10 @@ class MpcConfiguration(_Configuration):
         self.build_type = config.build_type             # [P] type of the generated solver
         self.bad_exit_codes = config.bad_exit_codes     # [P] bad exit codes of the solver
         self.optimizer_name = config.optimizer_name     # [P] name of the generated solver
+        self.initial_tolerance = config.initial_tolerance
+        self.target_tolerance = config.target_tolerance
+        self.max_inner_iterations = config.max_inner_iterations
+        self.max_outer_iterations = config.max_outer_iterations
 
         self.lin_vel_penalty = config.lin_vel_penalty   # Cost for linear velocity control action
         self.lin_acc_penalty = config.lin_acc_penalty   # Cost for linear acceleration
