@@ -83,6 +83,7 @@ class TrajectoryTracker:
         self.nu = self.config.nu
         self.N_hor = self.config.N_hor
         self.solver_type = self.config.solver_type
+        self.previous_solution = None
 
         # Initialization
         self._idle = True
@@ -508,12 +509,13 @@ class TrajectoryTracker:
                 return self.run_solver_tcp(parameters, state, take_steps)
 
             import opengen as og
-            solution:og.opengen.tcp.solver_status.SolverStatus = self.solver.run(parameters)
-            
+            # solution:og.opengen.tcp.solver_status.SolverStatus = self.solver.run(parameters)
+            solution:og.opengen.tcp.solver_status.SolverStatus = self.solver.run(parameters, initial_guess=self.previous_solution)
             u:List[float]       = solution.solution
             cost:float          = solution.cost
             exit_status:str     = solution.exit_status
             solver_time:float   = solution.solve_time_ms
+            self.previous_solution = u
 
         elif self.solver_type == 'Casadi':
             raise NotImplementedError
@@ -547,6 +549,8 @@ class TrajectoryTracker:
             cost:float          = solution.cost
             exit_status:str     = solution.exit_status
             solver_time:float   = solution.solve_time_ms
+            
+            self.previous_solution = u
         else: # Invocation failed - an error report is returned
             solver_error = solution.get()
             error_code = solver_error.code
