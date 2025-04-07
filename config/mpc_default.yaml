@@ -38,8 +38,8 @@ qpredrobot: 1000.0 # Cost for other robot's predicted trajectory
 qpN: 0.0               # Terminal cost; error relative to final reference position         
 qthetaN: 0.0            # Terminal cost; error relative to final reference heading     
 # Building options in the optimizer
-initial_tolerance: 0.001
-target_tolerance : 0.001
+initial_tolerance: 0.0001
+target_tolerance : 0.0001
 max_inner_iterations : 500 #(given a penalty factor)
 max_outer_iterations : 15  #(increase the penalty factor)
 
