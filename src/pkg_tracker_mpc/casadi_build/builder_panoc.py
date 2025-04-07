@@ -298,14 +298,13 @@ class PanocBuilder:
             .with_optimizer_name(self._cfg.optimizer_name)
 
         solver_config = og.config.SolverConfiguration() \
-            .with_initial_penalty(10) \
-            .with_max_duration_micros(self._cfg.max_solver_time)
-            # initial penalty = 1
-            # tolerance = 1e-4
-            # max_inner_iterations = 500 (given a penalty factor)
-            # max_outer_iterations = 10  (increase the penalty factor)
-            # penalty_weight_update_factor = 5.0
-            # max_duration_micros = 5_000_000 (5 sec)
+                    .with_initial_penalty(10) \
+                    .with_max_duration_micros(self._cfg.max_solver_time) \
+                    .with_initial_tolerance(self._cfg.initial_tolerance) \
+                    .with_tolerance(self._cfg.target_tolerance) \
+                    .with_max_inner_iterations(self._cfg.max_inner_iterations) \
+                    .with_max_outer_iterations(self._cfg.max_outer_iterations)
+
 
         builder = og.builder.OpEnOptimizerBuilder(problem, meta, build_config, solver_config) \
             .with_verbosity_level(1)
