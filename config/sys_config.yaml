@@ -64,7 +64,7 @@ lqr_update_q_pos: 1000.0    # Position error weight
 lqr_update_q_theta: 100.0   # Heading error weight
 lqr_update_r_v: 0.001       # Linear velocity control weight
 lqr_update_r_omega: 0.01    # Angular velocity control weight
-lqr_lookahead_dist: 0.8     # Lookahead Distance
+lqr_lookahead_dist: 0.5     # Lookahead Distance
 lqr_lookahead_time:: 0.5
 lqr_lookahead_style: 'dist' # time or dist
 
