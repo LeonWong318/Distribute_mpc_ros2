@@ -285,7 +285,7 @@ class RobotNode(Node):
         
         # Set heart beat period
         self.heart_beat_send_period = 0.1
-        self.heart_beat_check_period = 0.2
+        self.heart_beat_check_period = 0.1
         
         self.get_logger().info(f'Robot node initialized with controller: {self.controller_type}')
 
@@ -413,8 +413,8 @@ class RobotNode(Node):
                 self.cluster_connected = True
                 self.get_logger().info(f'Cluster node {self.robot_id} is now connected')
                 
-                if self.current_status == self.STATUS_DISCONNECT_STOP:
-                    self.update_robot_status(self.STATUS_IDLE)
+            if self.current_status == self.STATUS_DISCONNECT_STOP:
+                self.update_robot_status(self.STATUS_IDLE)
                 
             self.get_logger().debug(f'Received heartbeat from cluster {self.robot_id}')
         except Exception as e:
@@ -438,7 +438,7 @@ class RobotNode(Node):
             current_time = self.get_clock().now()
             time_diff = (current_time - self.last_heartbeat_time).nanoseconds / 1e9
 
-            if time_diff > self.heart_beat_check_period * 10.0:
+            if time_diff > self.heart_beat_check_period * 40.0:
                 if self.cluster_connected:
                     self.cluster_connected = False
                     self.get_logger().warn(f'Cluster node {self.robot_id} appears to be offline')

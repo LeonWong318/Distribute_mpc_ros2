@@ -73,7 +73,7 @@ class ClusterNode(Node):
         )
         
         self.heart_beat_send_period = 0.1
-        self.heart_beat_check_period = 0.2
+        self.heart_beat_check_period = 0.1
         self.waiting_for_robot = True
         self.robot_ready = False
         self.received_first_heartbeat = False
@@ -183,7 +183,7 @@ class ClusterNode(Node):
             time_diff = (current_time - self.last_heartbeat_time).nanoseconds / 1e9
             self.get_logger().debug(f'Last heartbeat from robot {self.robot_id} at {current_time.nanoseconds / 1e9:.1f} seconds')
             
-            if time_diff > self.heart_beat_check_period * 10.0:
+            if time_diff > self.heart_beat_check_period * 40.0:
                 self.get_logger().warn(f'No heartbeat from robot {self.robot_id} for {time_diff:.1f} seconds')
                 self.handle_robot_offline()
         except Exception as e:
