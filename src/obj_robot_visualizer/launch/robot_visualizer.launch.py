@@ -29,7 +29,7 @@ def generate_launch_description():
         print(f"Error reading configuration file {sys_config_path}: {str(e)}", file=sys.stderr)
         sys.exit(1)
     
-    required_params = ['map_path', 'graph_path', 'robot_start_path', 'robot_config_path', 'path_min_distance']
+    required_params = ['map_path', 'graph_path', 'robot_start_path', 'robot_config_path', 'path_min_distance', 'rviz_config_path']
     missing_params = [param for param in required_params if param not in default_config]
     
     if missing_params:
@@ -40,6 +40,7 @@ def generate_launch_description():
     default_graph_path = default_config['graph_path']
     default_robot_start_path = default_config['robot_start_path']
     default_robot_spec_path = default_config['robot_config_path']
+    default_rviz_config_path = default_config['rviz_config_path']
     default_min_distance = str(default_config['path_min_distance'])
     
     map_path_arg = DeclareLaunchArgument(
