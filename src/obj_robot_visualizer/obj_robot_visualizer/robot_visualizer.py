@@ -646,8 +646,8 @@ class RobotStateVisualizer(Node):
             # If there are predicted states, convert them to trajectory points
             if len(robot_state.pred_states) > 0:
                 trajectory_points = []
-                # Start from current robot position
-                trajectory_points.append((robot_state.x, robot_state.y))
+                # # Start from current robot position
+                # trajectory_points.append((robot_state.x, robot_state.y))
                 
                 # Add the predicted states (taking only x, y coordinates)
                 for i in range(0, len(robot_state.pred_states), 3):
