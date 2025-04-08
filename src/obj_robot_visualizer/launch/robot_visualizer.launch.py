@@ -9,7 +9,7 @@ import sys
 
 def generate_launch_description():
     pkg_share = get_package_share_directory('obj_robot_visualizer')
-    rviz_config_path = os.path.join(pkg_share, 'config', 'default.rviz')
+    default_rviz_config_path = os.path.join(pkg_share, 'config', 'default.rviz')
     
 
     workspace_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../../../..'))
@@ -72,6 +72,12 @@ def generate_launch_description():
         description='Minimum distance between path points'
     )
     
+    rviz_config_arg = DeclareLaunchArgument(
+        'rviz_config_path',
+        default_value=default_rviz_config_path,
+        description='Path to the RViz configuration file'
+    )
+    
     visualizer_node = Node(
         package='obj_robot_visualizer',
         executable='robot_visualizer',
@@ -90,7 +96,7 @@ def generate_launch_description():
         package='rviz2',
         executable='rviz2',
         name='rviz2',
-        arguments=['-d', rviz_config_path, '--fixed-frame', 'map'],
+        arguments=['-d', LaunchConfiguration('rviz_config_path'), '--fixed-frame', 'map'],
         output='screen'
     )
     
@@ -100,6 +106,7 @@ def generate_launch_description():
         robot_start_path_arg,
         robot_spec_path_arg,
         path_min_distance_arg,
+        rviz_config_arg,
         visualizer_node,
         rviz_node
     ])

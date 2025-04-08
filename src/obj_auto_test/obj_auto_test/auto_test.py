@@ -52,6 +52,7 @@ class AutoTest(Node):
         self.log_dir_base = self.get_parameter('log_dir').value
         self.workspace_root = self.get_parameter('workspace_root').value
         self.show_terminals = self.get_parameter('show_terminals').value
+        
 
         # Get the latency value list from parameters (if specified)
         self.declare_parameter('latency_values', [0.0, 0.1, 0.3, 0.5, 1.0])
@@ -61,6 +62,7 @@ class AutoTest(Node):
         self.declare_parameter('graph_path', '')
         self.declare_parameter('robot_start_path', '')
         self.declare_parameter('robot_spec_path', '')
+        self.declare_parameter('rviz_config_path', '')
         self.declare_parameter('map_name', '')
 
         # Default configuration
@@ -74,6 +76,7 @@ class AutoTest(Node):
         self.default_robot_start_path = self.get_parameter('robot_start_path').value
         self.default_robot_spec_path = self.get_parameter('robot_spec_path').value
         self.default_map_name = self.get_parameter('map_name').value
+        self.default_rviz_config_path = self.get_parameter('rviz_config_path').value
 
         # Initialize test scenarios list
         self.test_scenarios = []
@@ -94,6 +97,10 @@ class AutoTest(Node):
             self.default_iterations_per_latency = config.get('iterations_per_latency', self.default_iterations_per_latency)
             self.default_timeout_seconds = config.get('timeout_seconds', self.default_timeout_seconds)
 
+            if 'rviz_config_path' in config:
+                self.rviz_config_path = config['rviz_config_path']
+                self.get_logger().info(f'Using RViz config path from configuration: {self.rviz_config_path}')
+            
             # Load test scenarios if they exist in the config
             if 'test_scenarios' not in config or not isinstance(config['test_scenarios'], list) or not config['test_scenarios']:
                 self.get_logger().error('No valid test scenarios found in configuration file')
@@ -122,7 +129,9 @@ class AutoTest(Node):
                     self.get_logger().info(f"  Robot spec path: {scenario['robot_spec_path']}")
                 if 'world_file' in scenario:
                     self.get_logger().info(f"  World file: {scenario['world_file']}")
-
+                if 'rviz_config_path' in scenario:
+                    self.get_logger().info(f"  RViz config path: {scenario['rviz_config_path']}")
+                    
                 # Print test parameters
                 if 'latency_values' in scenario:
                     self.get_logger().info(f"  Latency values: {scenario['latency_values']}")
@@ -156,6 +165,7 @@ class AutoTest(Node):
             self.robot_start_path = scenario.get('robot_start_path', self.default_robot_start_path)
             self.robot_spec_path = scenario.get('robot_spec_path',self.default_robot_spec_path)
             self.map_name = scenario.get('world_file', self.default_map_name)
+            self.rviz_config_path = scenario.get('rviz_config_path', self.default_rviz_config_path)
 
             # Save a list of subscription objects (to prevent garbage collection)
             self._status_subscriptions = []
@@ -165,7 +175,8 @@ class AutoTest(Node):
                 'Robot Visualizer',
                 ['ros2', 'launch', 'obj_robot_visualizer', 'robot_visualizer.launch.py', 
                  f'map_path:={self.map_path}', f'graph_path:={self.graph_path}', 
-                 f'robot_start_path:={self.robot_start_path}', f'robot_spec_path:={self.robot_spec_path}']
+                 f'robot_start_path:={self.robot_start_path}', f'robot_spec_path:={self.robot_spec_path}',
+                 f'rviz_config_path:={self.rviz_config_path}']
             )
             self.get_logger().info('Started visualizer node')
             time.sleep(2)
@@ -375,6 +386,39 @@ class AutoTest(Node):
         time.sleep(2)
         return self.iteration_success
     
+    def save_rviz_screenshot(self, filename):
+        """Save screenshot of RViz window using direct capture method"""
+        try:
+            find_window_cmd = ['xdotool', 'search', '--onlyvisible', '--name', 'Rviz']
+            result = subprocess.run(find_window_cmd, capture_output=True, text=True)
+
+            if result.returncode != 0 or not result.stdout.strip():
+                self.get_logger().error('Failed to find RViz window')
+                return False
+
+            window_id = result.stdout.strip().split('\n')[0]
+            self.get_logger().info(f'Found RViz window ID: {window_id}')
+
+            screenshot_path = os.path.join(self.log_dir, filename)
+            capture_result = subprocess.run(
+                ['import', '-window', window_id, screenshot_path],
+                capture_output=True, text=True
+            )
+
+            if capture_result.returncode != 0:
+                self.get_logger().error(f'Screenshot capture failed: {capture_result.stderr}')
+                return False
+
+            if os.path.exists(screenshot_path):
+                self.get_logger().info(f'Screenshot successfully saved to {screenshot_path}')
+                return True
+            else:
+                self.get_logger().warn(f'Screenshot file not found after capture attempt')
+                return False
+        except Exception as e:
+            self.get_logger().error(f'Error saving screenshot: {str(e)}')
+            return False
+    
     def log_iteration_results(self, latency, iteration, success, metrics=None):
        log_path = os.path.join(self.log_dir, f'latency_{latency}_iteration_{iteration}.csv')
        
@@ -403,7 +447,8 @@ class AutoTest(Node):
                        metric.linear_smoothness,
                        metric.angular_smoothness
                    ])
-       
+           self.save_rviz_screenshot(f'latency_{latency}_iteration_{iteration}.png')
+           
        self.get_logger().info(f'Iteration results logged to {log_path}')
 
     def log_latency_summary(self, scenario_name, latency, success_rate, timeout_rate, collision_rate, avg_metrics):

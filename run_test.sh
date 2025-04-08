@@ -13,6 +13,36 @@ else
     echo "detected gnome-terminal"
 fi
 
+# Check for xdotool
+if ! command -v xdotool &> /dev/null; then
+    echo "installing xdotool"
+    sudo apt update
+    sudo apt install -y xdotool
+    if ! command -v xdotool &> /dev/null; then
+        echo "xdotool install failed"
+        USE_ALTERNATIVE=true
+    else
+        echo "xdotool installed"
+    fi
+else
+    echo "detected xdotool"
+fi
+
+# Check for imagemagick
+if ! ( command -v import &> /dev/null && command -v convert &> /dev/null ); then
+    echo "installing imagemagick"
+    sudo apt update
+    sudo apt install -y imagemagick
+    if ! ( command -v import &> /dev/null && command -v convert &> /dev/null ); then
+        echo "imagemagick install failed"
+        USE_ALTERNATIVE=true
+    else
+        echo "imagemagick installed"
+    fi
+else
+    echo "detected imagemagick"
+fi
+
 # Get the current working directory
 CURRENT_DIR=$(pwd)
 

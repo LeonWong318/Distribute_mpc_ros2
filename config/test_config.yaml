@@ -10,6 +10,7 @@ test_scenarios:
   #   robot_start_path: "data/test_data_new/robot_start.json"
   #   robot_spec_path: "data/test_data_new/schedule.csv"
   #   world_file: "test_data_new.world"
+  #   rviz_config_path: ""
   #   latency_values: [1.0]
   #   iterations_per_latency: 1
   #   timeout_seconds: 100.0
@@ -20,6 +21,7 @@ test_scenarios:
   #   robot_start_path: "data/test_data_cross/robot_start.json"
   #   robot_spec_path: "data/test_data_cross/schedule.csv"
   #   world_file: "test_data_cross.world"
+  #   rviz_config_path: ""
   #   latency_values: [1.0]
   #   iterations_per_latency: 1
   #   timeout_seconds: 100.0
@@ -30,6 +32,7 @@ test_scenarios:
     robot_start_path: "data/test_data/robot_start.json"
     robot_spec_path: "data/test_data/schedule.csv"
     world_file: "test_data.world"
+    rviz_config_path: "src/obj_robot_visualizer/config/test_data.rviz"
     latency_values: [0.0, 1.0]
     iterations_per_latency: 20
     timeout_seconds: 200.0

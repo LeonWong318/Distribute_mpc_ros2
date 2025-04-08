@@ -3,7 +3,7 @@ sys.path.append('src')
 
 import rclpy
 from rclpy.node import Node
-from rclpy.callback_groups import ReentrantCallbackGroup
+from rclpy.callback_groups import ReentrantCallbackGroup, MutuallyExclusiveCallbackGroup
 from rclpy.qos import QoSProfile, QoSReliabilityPolicy, QoSHistoryPolicy, QoSDurabilityPolicy
 from basic_motion_model.motion_model import UnicycleModel
 from pkg_configs.configs import CircularRobotSpecification, CBFconfig
@@ -194,6 +194,7 @@ class RobotNode(Node):
         
         # Create callback group
         self.callback_group = ReentrantCallbackGroup()
+        self.heartbeat_callback_group = MutuallyExclusiveCallbackGroup()
         
         # Set up QoS profiles
         self.reliable_qos = QoSProfile(
@@ -383,13 +384,13 @@ class RobotNode(Node):
             f'/cluster_{self.robot_id}/heartbeat',
             self.heartbeat_callback,
             self.best_effort_qos,
-            callback_group=self.callback_group
+            callback_group=self.heartbeat_callback_group
         )
 
         self.heartbeat_timer = self.create_timer(
             self.heart_beat_send_period,
             self.send_heartbeat,
-            callback_group=self.callback_group
+            callback_group=self.heartbeat_callback_group
         )
 
         self.last_heartbeat_time = self.get_clock().now()
@@ -398,7 +399,7 @@ class RobotNode(Node):
         self.heartbeat_check_timer = self.create_timer(
             self.heart_beat_check_period,
             self.check_heartbeat,
-            callback_group=self.callback_group
+            callback_group=self.heartbeat_callback_group
         )
 
         self.cluster_connected = False
@@ -440,7 +441,7 @@ class RobotNode(Node):
             current_time = self.get_clock().now()
             time_diff = (current_time - self.last_heartbeat_time).nanoseconds / 1e9
 
-            if time_diff > self.heart_beat_check_period * 40.0:
+            if time_diff > self.heart_beat_check_period * 60.0:
                 if self.cluster_connected:
                     self.cluster_connected = False
                     self.get_logger().warn(f'Cluster node {self.robot_id} appears to be offline')

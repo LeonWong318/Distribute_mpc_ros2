@@ -3,7 +3,7 @@ sys.path.append('src')
 
 import rclpy
 from rclpy.node import Node
-from rclpy.callback_groups import ReentrantCallbackGroup
+from rclpy.callback_groups import ReentrantCallbackGroup, MutuallyExclusiveCallbackGroup
 from rclpy.qos import QoSProfile, QoSReliabilityPolicy, QoSHistoryPolicy, QoSDurabilityPolicy
 import numpy as np
 import json
@@ -183,7 +183,7 @@ class ClusterNode(Node):
             time_diff = (current_time - self.last_heartbeat_time).nanoseconds / 1e9
             self.get_logger().debug(f'Last heartbeat from robot {self.robot_id} at {current_time.nanoseconds / 1e9:.1f} seconds')
             
-            if time_diff > self.heart_beat_check_period * 40.0:
+            if time_diff > self.heart_beat_check_period * 60.0:
                 self.get_logger().warn(f'No heartbeat from robot {self.robot_id} for {time_diff:.1f} seconds')
                 self.handle_robot_offline()
         except Exception as e:
@@ -299,6 +299,7 @@ class ClusterNode(Node):
             self.robot_check_timer.cancel()
 
     def start_heart_beat(self):
+        self.heartbeat_callback_group = MutuallyExclusiveCallbackGroup()
         self.heartbeat_pub = self.create_publisher(
             ClusterBetweenRobotHeartBeat,
             f'/cluster_{self.robot_id}/heartbeat',
@@ -310,13 +311,13 @@ class ClusterNode(Node):
             f'/robot_{self.robot_id}/heartbeat',
             self.heartbeat_callback,
             self.best_effort_qos,
-            callback_group=self.callback_group
+            callback_group=self.heartbeat_callback_group
         )
 
         self.heartbeat_timer = self.create_timer(
             self.heart_beat_send_period,
             self.send_heartbeat,
-            callback_group=self.callback_group
+            callback_group=self.heartbeat_callback_group
         )
 
         self.last_heartbeat_time = self.get_clock().now()
@@ -325,7 +326,7 @@ class ClusterNode(Node):
         self.heartbeat_check_timer = self.create_timer(
             self.heart_beat_check_period,
             self.check_heartbeat,
-            callback_group=self.callback_group
+            callback_group=self.heartbeat_callback_group
         )
     
     def initialize_cluster_components(self):
@@ -531,13 +532,20 @@ class ClusterNode(Node):
 
 def main(args=None):
     rclpy.init(args=args)
+    executor = rclpy.executors.MultiThreadedExecutor()
     
     node = ClusterNode()
     
+    executor.add_node(node)
+        
+    executor_thread = threading.Thread(target=executor.spin, daemon=True)
+    executor_thread.start()
+    
     try:
-        rclpy.spin(node)
+        # Keep the main thread running
+        executor_thread.join()
     except KeyboardInterrupt:
-        pass
+        node.get_logger().info('Keyboard interrupt received, shutting down...')
     finally:
         node.destroy_node()
         rclpy.shutdown()
