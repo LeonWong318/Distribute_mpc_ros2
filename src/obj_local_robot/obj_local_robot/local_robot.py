@@ -10,6 +10,7 @@ from pkg_configs.configs import CircularRobotSpecification, CBFconfig
 
 import numpy as np
 import time
+import math
 import asyncio
 from pkg_local_control.pure_pursuit import PurePursuit
 from pkg_local_control.lqr import LQRController
@@ -164,6 +165,7 @@ class RobotNode(Node):
         self.STATUS_DISCONNECT_STOP = 5
         self.STATUS_COLLISION = 6 
         self.STATUS_SAFETY_STOP = 7
+        self.safety_stop = False
         
         self.current_status = self.STATUS_INITIALIZING
         self.status_descriptions = {
@@ -514,14 +516,20 @@ class RobotNode(Node):
         
         closest_obstacles, _ = self.laser_processor.get_closest_front_obstacles(msg, self._state)
         
-        self.front_obstacles = closest_obstacles
+        
 
         self.get_logger().debug(f'Closest front obstacles: {closest_obstacles}')
         if closest_obstacles.shape[0] != 0:
+            self.send_command_to_gazebo(0, 0)
+            self.update_robot_status(self.STATUS_SAFETY_STOP)
+            self.front_obstacles = closest_obstacles
             self.safety_stop_handling()
             self.get_logger().debug('SAFETY STOP')
-        elif closest_obstacles.shape[0] == 0 and self.current_status == self.STATUS_SAFETY_STOP:
+        elif self.safety_stop:
+            self.safety_stop_handling()
+        elif closest_obstacles.shape[0] == 0 and self.current_status == self.STATUS_SAFETY_STOP and self.safety_stop == False:
             self.get_logger().debug('return to running')
+            self.front_obstacles = closest_obstacles
             self.update_robot_status(self.STATUS_RUNNING)
         
 
@@ -543,11 +551,46 @@ class RobotNode(Node):
         self.get_logger().debug(f'Closest back obstacles: {closest_obstacles}')
 
     def safety_stop_handling(self):
-        self.update_robot_status(self.STATUS_SAFETY_STOP)
+        
+        self.safety_stop = True
+
+        robot_x, robot_y, robot_theta = self._state  # θ in radians
+        min_distance = float('inf')
+        angle_to_closest_obstacle = 0.0
+
+        # Find the closest front obstacle and compute its distance and relative angle
+        for obs_x, obs_y in self.front_obstacles:
+            dx = obs_x - robot_x
+            dy = obs_y - robot_y
+            distance = math.hypot(dx, dy)
+            angle_global = math.atan2(dy, dx)
+            angle_relative = self.normalize_angle(angle_global - robot_theta)
+
+            if distance < min_distance:
+                min_distance = distance
+                angle_to_closest_obstacle = angle_relative
+
+        # If obstacle is far enough, stop safety stop
+        if min_distance > 1.0:
+            self.send_command_to_gazebo(0, 0)
+            self.safety_stop = False
+            return
+
+        # Otherwise, back off if rear is clear
         if self.laser_processor.is_back_clear(self.back_obstacles, self.back_distances, 1.5):
-            self.send_command_to_gazebo(-0.25, 0)
+            linear_speed = -0.25  # move backward
+            angular_correction = angle_to_closest_obstacle * 0.5  # steer away
+            self.send_command_to_gazebo(linear_speed, angular_correction)
         else:
             self.send_command_to_gazebo(0, 0)
+
+    def normalize_angle(self, angle):
+        """Normalize angle to [-pi, pi]."""
+        while angle > math.pi:
+            angle -= 2 * math.pi
+        while angle < -math.pi:
+            angle += 2 * math.pi
+        return angle
 
     def collision_callback(self, msg: ContactsState):
         try:

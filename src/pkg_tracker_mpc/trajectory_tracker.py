@@ -510,7 +510,7 @@ class TrajectoryTracker:
 
             import opengen as og
             # solution:og.opengen.tcp.solver_status.SolverStatus = self.solver.run(parameters)
-            solution:og.opengen.tcp.solver_status.SolverStatus = self.solver.run(parameters, initial_guess=self.previous_solution)
+            solution:og.opengen.tcp.solver_status.SolverStatus = self.solver.run(parameters)
             u:List[float]       = solution.solution
             cost:float          = solution.cost
             exit_status:str     = solution.exit_status

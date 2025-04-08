@@ -70,4 +70,4 @@ lqr_lookahead_style: 'dist' # time or dist
 
 # laser processer parameters:
 safety_margin: 0.2
-max_obstacle_distance: 0.5
+max_obstacle_distance: 0.6

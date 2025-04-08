@@ -24,40 +24,55 @@ class ObstacleProcessor:
         self.back_laser_offset = np.array([-0.354354, -0.2358])
         self.back_laser_rotation = -2.35619  # -135 degrees in radians
     
-    def _filter_obstacles(self, obstacles, robot_pose):
+    def _filter_obstacles(self, obstacles, robot_pose,  b=0.4):
         """
-        Filter and sort obstacles by closest distance
-        
+        Filter and sort obstacles inside an ellipse aligned with the robot's heading.
+
         Args:
-            obstacles: Array of obstacle positions in robot's coordinate frame
-            robot_pose: Current robot pose [x, y, theta] in map coordinates
-            
+            obstacles: np.ndarray of shape (N, 2), in map coordinates
+            robot_pose: [x, y, theta] — robot's pose in map coordinates
+            a: semi-major axis (forward/backward reach)
+            b: semi-minor axis (side reach)
+
         Returns:
-            Sorted obstacle positions and their distances
+            filtered_obstacles: obstacles inside ellipse, sorted by adjusted distance
+            filtered_distances: corresponding adjusted distances
         """
+        a = self.max_obstacle_distance
         if obstacles.size == 0:
             return np.empty((0, 2)), np.empty(0)
-        
-        # Extract robot position
-        robot_x, robot_y, _ = robot_pose
-        
-        # Calculate distances from robot position
-        distances = np.linalg.norm(obstacles - [robot_x, robot_y], axis=1)
-        
-        # Apply safety margin adjustment
+
+        robot_x, robot_y, robot_theta = robot_pose
+
+        # Translate obstacles to robot-centered coordinates
+        dx = obstacles[:, 0] - robot_x
+        dy = obstacles[:, 1] - robot_y
+
+        # Rotate points into robot's frame
+        cos_theta = np.cos(-robot_theta)
+        sin_theta = np.sin(-robot_theta)
+        x_local = dx * cos_theta - dy * sin_theta
+        y_local = dx * sin_theta + dy * cos_theta
+
+        # Ellipse check: (x/a)^2 + (y/b)^2 <= 1
+        in_ellipse = (x_local / a) ** 2 + (y_local / b) ** 2 <= 1.0
+
+        if not np.any(in_ellipse):
+            return np.empty((0, 2)), np.empty(0)
+
+        # Filter and sort by distance (in map frame)
+        filtered = obstacles[in_ellipse]
+        distances = np.linalg.norm(filtered - np.array([robot_x, robot_y]), axis=1)
         adjusted_distances = distances - self.safety_margin
-        
-        # Filter obstacles that are too far
+
         valid_indices = adjusted_distances <= self.max_obstacle_distance
         if not np.any(valid_indices):
             return np.empty((0, 2)), np.empty(0)
-        
-        # Sort by adjusted distance (closest first)
+
         sorted_indices = np.argsort(adjusted_distances[valid_indices])
-        filtered_obstacles = obstacles[valid_indices][sorted_indices]
-        filtered_distances = adjusted_distances[valid_indices][sorted_indices]
-        
-        return filtered_obstacles, filtered_distances
+        return filtered[valid_indices][sorted_indices], adjusted_distances[valid_indices][sorted_indices]
+
+
     
     def get_closest_front_obstacles(self, sensor: LaserScan, robot_pose, num_obstacles: int = 1):
         """
