@@ -491,7 +491,7 @@ class RobotNode(Node):
                 min_distance = min(min_distance, distance)
 
             # Define threshold for acceptable distance (you can make this a parameter)
-            distance_threshold = 100.0  # meters
+            distance_threshold = 2.0  # meters
 
             if min_distance >= distance_threshold:
                 self.get_logger().warn(f'Current position too far from trajectory (min distance: {min_distance:.2f}m). Stopping robot until next update.')
