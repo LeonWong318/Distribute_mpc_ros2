@@ -113,6 +113,48 @@ class LQR_Update_Controller:
         
         return u, K, P, eigVals
     
+    def is_forward(self, current_position, current_heading, trajectory_list):
+        """
+        Determine if the robot should drive forward or backward along the trajectory.
+
+        Args:
+            current_position: Tuple (x, y) of current position.
+            current_heading: Current heading angle (theta) in radians.
+            trajectory_list: List of trajectory points [(x, y, theta), ...].
+
+        Returns:
+            bool: True if should drive forward, False if backward.
+        """
+        if len(trajectory_list) < 2:
+            return True  # Not enough points to infer direction — default to forward
+
+        current_position = np.array(current_position)
+
+        # Extract only the x, y components from the trajectory
+        trajectory_xy = np.array([[x, y] for x, y, _ in trajectory_list])
+
+        # Step 1: get the first point
+        first_point = trajectory_xy[0]
+
+        # Step 2: Get the check trajectory point
+        check_point = trajectory_xy[5]
+
+        # Step 3: Compute the direction vector from first point to check point
+        path_direction = check_point - first_point
+        if np.linalg.norm(path_direction) == 0:
+            return True  # No direction — default to forward
+        path_direction /= np.linalg.norm(path_direction)
+        catch_direction = first_point-current_position
+        catch_direction /= np.linalg.norm(catch_direction)
+        # Step 4: Construct robot's heading vector
+        heading_vector = np.array([np.cos(current_heading), np.sin(current_heading)])
+        
+        # Step 5: Use dot product to determine alignment
+        check_dot = np.dot(heading_vector, path_direction)
+        catch_dot = np.dot(heading_vector, catch_direction)
+
+        return check_dot >= 0, catch_dot >= 0 # True → forward, False → backward
+
     def compute_control_commands(self, current_position, current_heading, trajectory_list, traj_time, current_time):
         """
         Compute LQR control commands with a Pure Pursuit inspired look-ahead mechanism.
@@ -132,24 +174,56 @@ class LQR_Update_Controller:
             min_dist = float('inf')
             closest_idx = 0
             look_ahead_idx = None
+            path_forward, catch_forward = self.is_forward(current_position=current_position,current_heading=current_heading, trajectory_list=trajectory_list)
+            if self.lookahead_style == 'dist':   
+                if path_forward:         
+                    for i, point in enumerate(trajectory_list):
+                        point_state = np.array([point[0], point[1]])
+                        point_angle = math.atan2(point[1]-current_position[1], point[0]-current_position[0])
+                        dist = np.linalg.norm(current_state[:2] - point_state)
 
-            if self.lookahead_style == 'dist':            
-                for i, point in enumerate(trajectory_list):
-                    point_state = np.array([point[0], point[1]])
-                    point_angle = math.atan2(point[1]-current_position[1], point[0]-current_position[0])
-                    dist = np.linalg.norm(current_state[:2] - point_state)
+                        if dist < min_dist:
+                            min_dist = dist
+                            closest_idx = i
+                        # Compute the relative angle between the point and the current heading
+                        relative_angle = point_angle - current_heading
+                        # Normalize the angle to the range [-pi, pi]
+                        relative_angle = (relative_angle + math.pi) % (2 * math.pi) - math.pi
+                        # Find the first point that is at least look_ahead_dist away
+                        if dist >= self.look_ahead_dist and abs(relative_angle) <= math.pi / 2:
+                            if look_ahead_idx is None:
+                                look_ahead_idx = i
+                elif catch_forward:
+                    for i, point in enumerate(trajectory_list):
+                        point_state = np.array([point[0], point[1]])
+                        point_angle = math.atan2(point[1]-current_position[1], point[0]-current_position[0])
+                        dist = np.linalg.norm(current_state[:2] - point_state)
 
-                    if dist < min_dist:
-                        min_dist = dist
-                        closest_idx = i
-                    # Compute the relative angle between the point and the current heading
-                    relative_angle = point_angle - current_heading
-                    # Normalize the angle to the range [-pi, pi]
-                    relative_angle = (relative_angle + math.pi) % (2 * math.pi) - math.pi
-                    # Find the first point that is at least look_ahead_dist away
-                    if dist >= self.look_ahead_dist and abs(relative_angle) <= math.pi / 2:
-                        if look_ahead_idx is None:
-                            look_ahead_idx = i
+                        if dist < min_dist:
+                            min_dist = dist
+                            closest_idx = i
+                        
+                        # Find the first point that is at least look_ahead_dist away
+                        if dist >= self.look_ahead_dist:
+                            if look_ahead_idx is None:
+                                look_ahead_idx = i
+                else:
+                    for i, point in enumerate(trajectory_list):
+                        point_state = np.array([point[0], point[1]])
+                        point_angle = math.atan2(point[1]-current_position[1], point[0]-current_position[0])
+                        dist = np.linalg.norm(current_state[:2] - point_state)
+
+                        if dist < min_dist:
+                            min_dist = dist
+                            closest_idx = i
+                        # Compute the relative angle between the point and the current heading
+                        relative_angle = point_angle - current_heading
+                        # Normalize the angle to the range [-pi, pi]
+                        relative_angle = (relative_angle + math.pi) % (2 * math.pi) - math.pi
+                        # Find the first point that is at least look_ahead_dist away
+                        if dist >= self.look_ahead_dist and abs(relative_angle) >= math.pi / 2:
+                            if look_ahead_idx is None:
+                                look_ahead_idx = i
             elif self.lookahead_style == 'time':
                 
                 target_time = current_time + self.lookahead_time
@@ -210,3 +284,41 @@ class LQR_Update_Controller:
         except Exception as e:
             print(f"Error in LQR compute_control_commands: {str(e)}")
             return 0.0, 0.0
+# def main():
+#     # Sampling time and control horizon
+#     Ts = 0.1
+#     mpc_ts = 0.1
+
+#     # Define LQR weights
+#     Q = np.diag([10, 10, 5])
+#     R = np.diag([1, 1])
+
+#     # Define max velocity and look-ahead config
+#     max_velocity = 1.0
+#     look_ahead_dist = 1.0
+#     lookahead_style = 'dist'  # or 'time'
+#     lookahead_time = 1.0
+
+#     # Create controller
+#     controller = LQR_Update_Controller(Ts, Q, R, max_velocity, look_ahead_dist, lookahead_style, lookahead_time, mpc_ts)
+
+#     # Create a simple trajectory (straight line forward)
+#     trajectory = [(i * 0.2, 0.0, 0.0) for i in range(20)]  # (x, y, theta)
+
+#     # Set initial robot state
+#     current_position = (0.0, 0.1)  # slightly off the path
+#     current_heading = 0.0
+#     traj_time = 0.0
+#     current_time = 0.0
+
+#     # Run the control computation
+#     v, omega, x_ref = controller.compute_control_commands(
+#         current_position, current_heading, trajectory, traj_time, current_time
+#     )
+
+#     # Output results
+#     print(f"Computed control commands:\n  v = {v:.3f} m/s\n  omega = {omega:.3f} rad/s")
+#     print(f"Tracking reference: {x_ref}")
+
+# if __name__ == "__main__":
+#     main()
