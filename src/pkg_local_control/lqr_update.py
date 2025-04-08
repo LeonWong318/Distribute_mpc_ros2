@@ -138,6 +138,7 @@ class LQR_Update_Controller:
 
         # Step 2: Get the check trajectory point
         check_point = trajectory_xy[5]
+        traj_point = trajectory_xy[-1]
 
         # Step 3: Compute the direction vector from first point to check point
         path_direction = check_point - first_point
@@ -146,14 +147,17 @@ class LQR_Update_Controller:
         path_direction /= np.linalg.norm(path_direction)
         catch_direction = first_point-current_position
         catch_direction /= np.linalg.norm(catch_direction)
+        traj_direction = traj_point - first_point
+        traj_direction /= np.linalg.norm(traj_direction)
         # Step 4: Construct robot's heading vector
         heading_vector = np.array([np.cos(current_heading), np.sin(current_heading)])
         
         # Step 5: Use dot product to determine alignment
         check_dot = np.dot(heading_vector, path_direction)
         catch_dot = np.dot(heading_vector, catch_direction)
+        traj_dot = np.dot(heading_vector, traj_direction)
 
-        return check_dot >= 0, catch_dot >= 0 # True → forward, False → backward
+        return check_dot >= 0, catch_dot >= 0, traj_dot >= 0 # True → forward, False → backward
 
     def compute_control_commands(self, current_position, current_heading, trajectory_list, traj_time, current_time):
         """
@@ -174,9 +178,10 @@ class LQR_Update_Controller:
             min_dist = float('inf')
             closest_idx = 0
             look_ahead_idx = None
-            path_forward, catch_forward = self.is_forward(current_position=current_position,current_heading=current_heading, trajectory_list=trajectory_list)
+            path_forward, catch_forward, traj_forward = self.is_forward(current_position=current_position,current_heading=current_heading, trajectory_list=trajectory_list)
             if self.lookahead_style == 'dist':   
-                if path_forward:         
+                if path_forward and (catch_forward or traj_forward):       
+                    # Forward condition  
                     for i, point in enumerate(trajectory_list):
                         point_state = np.array([point[0], point[1]])
                         point_angle = math.atan2(point[1]-current_position[1], point[0]-current_position[0])
@@ -193,21 +198,8 @@ class LQR_Update_Controller:
                         if dist >= self.look_ahead_dist and abs(relative_angle) <= math.pi / 2:
                             if look_ahead_idx is None:
                                 look_ahead_idx = i
-                elif catch_forward:
-                    for i, point in enumerate(trajectory_list):
-                        point_state = np.array([point[0], point[1]])
-                        point_angle = math.atan2(point[1]-current_position[1], point[0]-current_position[0])
-                        dist = np.linalg.norm(current_state[:2] - point_state)
-
-                        if dist < min_dist:
-                            min_dist = dist
-                            closest_idx = i
-                        
-                        # Find the first point that is at least look_ahead_dist away
-                        if dist >= self.look_ahead_dist:
-                            if look_ahead_idx is None:
-                                look_ahead_idx = i
-                else:
+                elif not path_forward and not (traj_forward and catch_forward):
+                    # Backward condition
                     for i, point in enumerate(trajectory_list):
                         point_state = np.array([point[0], point[1]])
                         point_angle = math.atan2(point[1]-current_position[1], point[0]-current_position[0])
@@ -224,6 +216,23 @@ class LQR_Update_Controller:
                         if dist >= self.look_ahead_dist and abs(relative_angle) >= math.pi / 2:
                             if look_ahead_idx is None:
                                 look_ahead_idx = i
+                    
+                else:
+                    # find closest point as target
+                    for i, point in enumerate(trajectory_list):
+                        point_state = np.array([point[0], point[1]])
+                        point_angle = math.atan2(point[1]-current_position[1], point[0]-current_position[0])
+                        dist = np.linalg.norm(current_state[:2] - point_state)
+
+                        if dist < min_dist:
+                            min_dist = dist
+                            closest_idx = i
+                        
+                        # Find the first point that is at least look_ahead_dist away
+                        if dist >= self.look_ahead_dist:
+                            if look_ahead_idx is None:
+                                look_ahead_idx = i
+                    
             elif self.lookahead_style == 'time':
                 
                 target_time = current_time + self.lookahead_time
