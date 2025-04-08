@@ -571,7 +571,7 @@ class RobotNode(Node):
                 angle_to_closest_obstacle = angle_relative
 
         # If obstacle is far enough, stop safety stop
-        if min_distance > 1.0:
+        if min_distance > 1.2:
             self.send_command_to_gazebo(0, 0)
             self.safety_stop = False
             return
