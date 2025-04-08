@@ -22,7 +22,7 @@ mpc_method: 'state_origin' #choose from state_fusion and state_origin
 
 # msg buffer config
 enable_gui: true
-mean_delay: 1.0
+mean_delay: 2.0
 stddev_delay: 0.1
 
 # gazebo converter config
