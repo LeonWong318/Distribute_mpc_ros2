@@ -229,7 +229,7 @@ class ClusterNode(Node):
     
     def add_schedule(self):
         self.planner.load_path(self.path_coords,self.path_times,nomial_speed=self.config_robot.lin_vel_max, method="linear")
-
+        self.get_logger().info(f"path_coords at scheduling: {self.path_coords}")
         goal_coord = self.path_coords[-1]
         goal_coord_prev = self.path_coords[-2]
         goal_heading = np.arctan2(goal_coord[1]-goal_coord_prev[1], goal_coord[0]-goal_coord_prev[0])
