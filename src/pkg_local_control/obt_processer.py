@@ -130,12 +130,37 @@ class ObstacleProcessor:
             bool: True if back area is clear for movement, False otherwise
         """
         # If no back obstacles detected, safe to move backward
+        if back_obstacles is None or back_distances is None:
+            return True
         if back_obstacles.size == 0 or back_distances.size == 0:
             return True
         
         # Check if the closest back obstacle is beyond the minimum safe distance
         # Note: back_distances already has safety margin applied from _filter_obstacles
         if back_distances[0] >= min_safe_distance:
+            return True
+        
+        return False
+    def is_front_clear(self, front_obstacles, front_distances, min_safe_distance: float = 0.5):
+        """
+        Check if the front area is clear enough for a small forward movement
+        using previously processed front obstacles
+        
+        Args:
+            min_safe_distance: Minimum required distance to consider area safe (meters)
+            
+        Returns:
+            bool: True if front area is clear for movement, False otherwise
+        """
+        # If no back obstacles detected, safe to move backward
+        if front_distances is None or front_obstacles is None:
+            return True
+        if front_obstacles.size == 0 or front_distances.size == 0:
+            return True
+        
+        # Check if the closest back obstacle is beyond the minimum safe distance
+        # Note: back_distances already has safety margin applied from _filter_obstacles
+        if front_distances[0] >= min_safe_distance:
             return True
         
         return False

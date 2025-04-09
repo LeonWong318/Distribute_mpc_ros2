@@ -165,7 +165,8 @@ class RobotNode(Node):
         self.STATUS_DISCONNECT_STOP = 5
         self.STATUS_COLLISION = 6 
         self.STATUS_SAFETY_STOP = 7
-        self.safety_stop = False
+        self.back_safety_stop = False
+        self.front_safety_stop = False
         
         self.current_status = self.STATUS_INITIALIZING
         self.status_descriptions = {
@@ -189,6 +190,7 @@ class RobotNode(Node):
         self.last_received_state_from_gazebo_time = self.get_clock().now().to_msg()
         self.collision_detected = False
         self.front_obstacles = None
+        self.front_distances = None
         self.back_obstacles = None
         self.back_distances = None
         
@@ -515,22 +517,20 @@ class RobotNode(Node):
         if self._state is None:
             return
         
-        closest_obstacles, _ = self.laser_processor.get_closest_front_obstacles(msg, self._state)
+        closest_obstacles, distances = self.laser_processor.get_closest_front_obstacles(msg, self._state)
+        self.front_obstacles = closest_obstacles
+        self.front_distances = distances
         
-        
-
         self.get_logger().debug(f'Closest front obstacles: {closest_obstacles}')
         if closest_obstacles.shape[0] != 0:
             self.send_command_to_gazebo(0, 0)
             self.update_robot_status(self.STATUS_SAFETY_STOP)
-            self.front_obstacles = closest_obstacles
-            self.safety_stop_handling()
+            self.front_safety_stop_handling()
             self.get_logger().debug('SAFETY STOP')
-        elif self.safety_stop:
-            self.safety_stop_handling()
-        elif closest_obstacles.shape[0] == 0 and self.current_status == self.STATUS_SAFETY_STOP and self.safety_stop == False:
+        elif self.front_safety_stop:
+            self.front_safety_stop_handling()
+        elif closest_obstacles.shape[0] == 0 and self.current_status == self.STATUS_SAFETY_STOP and self.back_safety_stop==False:
             self.get_logger().debug('return to running')
-            self.front_obstacles = closest_obstacles
             self.update_robot_status(self.STATUS_RUNNING)
         
 
@@ -545,15 +545,25 @@ class RobotNode(Node):
             return
         
         closest_obstacles, distances = self.laser_processor.get_closest_back_obstacles(msg, self._state)
-        
         self.back_obstacles = closest_obstacles
         self.back_distances = distances
-
-        self.get_logger().debug(f'Closest back obstacles: {closest_obstacles}')
-
-    def safety_stop_handling(self):
         
-        self.safety_stop = True
+        self.get_logger().debug(f'Closest back obstacles: {closest_obstacles}')
+        if closest_obstacles.shape[0] != 0:
+            self.send_command_to_gazebo(0, 0)
+            self.update_robot_status(self.STATUS_SAFETY_STOP)
+            self.back_safety_stop_handling()
+            self.get_logger().debug('SAFETY STOP')
+        elif self.back_safety_stop:
+            self.back_safety_stop_handling()
+        elif closest_obstacles.shape[0] == 0 and self.current_status == self.STATUS_SAFETY_STOP and self.front_safety_stop == False:
+            self.get_logger().debug('return to running')
+
+            self.update_robot_status(self.STATUS_RUNNING)
+
+    def front_safety_stop_handling(self):
+        
+        self.front_safety_stop = True
 
         robot_x, robot_y, robot_theta = self._state  # θ in radians
         min_distance = float('inf')
@@ -574,13 +584,47 @@ class RobotNode(Node):
         # If obstacle is far enough, stop safety stop
         if min_distance > 1.2:
             self.send_command_to_gazebo(0, 0)
-            self.safety_stop = False
+            self.front_safety_stop = False
             return
 
         # Otherwise, back off if rear is clear
         if self.laser_processor.is_back_clear(self.back_obstacles, self.back_distances, 1.5):
             linear_speed = -0.25  # move backward
             angular_correction = angle_to_closest_obstacle * 0.5  # steer away
+            self.send_command_to_gazebo(linear_speed, angular_correction)
+        else:
+            self.send_command_to_gazebo(0, 0)
+
+    def back_safety_stop_handling(self):
+        
+        self.back_safety_stop = True
+
+        robot_x, robot_y, robot_theta = self._state  # θ in radians
+        min_distance = float('inf')
+        angle_to_closest_obstacle = 0.0
+
+        # Find the closest back obstacle and compute its distance and relative angle
+        for obs_x, obs_y in self.back_obstacles:
+            dx = obs_x - robot_x
+            dy = obs_y - robot_y
+            distance = math.hypot(dx, dy)
+            angle_global = math.atan2(dy, dx)
+            angle_relative = self.normalize_angle(angle_global - robot_theta)
+
+            if distance < min_distance:
+                min_distance = distance
+                angle_to_closest_obstacle = angle_relative
+
+        # If obstacle is far enough, stop safety stop
+        if min_distance > 1.2:
+            self.send_command_to_gazebo(0, 0)
+            self.back_safety_stop = False
+            return
+
+        # Otherwise, front off if front is clear
+        if self.laser_processor.is_front_clear(self.front_obstacles, self.front_distances, 1.5):
+            linear_speed = 0.25  # move forkward
+            angular_correction = -angle_to_closest_obstacle * 0.5  # steer away
             self.send_command_to_gazebo(linear_speed, angular_correction)
         else:
             self.send_command_to_gazebo(0, 0)
