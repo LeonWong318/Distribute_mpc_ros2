@@ -398,8 +398,8 @@ class RobotStateVisualizer(Node):
                     cube_marker.scale.z = 1.0
 
                     cube_marker.color.r = 1.0
-                    cube_marker.color.g = 0.0
-                    cube_marker.color.b = 0.0
+                    cube_marker.color.g = 1.0
+                    cube_marker.color.b = 1.0
                     cube_marker.color.a = 0.8
 
                     marker_array.markers.append(cube_marker)

@@ -514,24 +514,45 @@ class RobotNode(Node):
         :param msg: LaserScan message from ROS
         """
         # Use the imported class to process the scan data
-        if self._state is None:
+        if self._state is None or self.current_status == self.STATUS_TARGET_REACHED:
+
             return
         
         closest_obstacles, distances = self.laser_processor.get_closest_front_obstacles(msg, self._state)
-        self.front_obstacles = closest_obstacles
-        self.front_distances = distances
+        # self.front_obstacles = closest_obstacles
+        # self.front_distances = distances
         
         self.get_logger().debug(f'Closest front obstacles: {closest_obstacles}')
-        if closest_obstacles.shape[0] != 0:
+        
+        if self.front_safety_stop:
+            self.front_distances = distances
+            self.front_safety_stop_handling()
+        elif closest_obstacles.shape[0] != 0:
             self.send_command_to_gazebo(0, 0)
             self.update_robot_status(self.STATUS_SAFETY_STOP)
+            self.front_obstacles = closest_obstacles
+            self.front_distances = distances
             self.front_safety_stop_handling()
             self.get_logger().debug('SAFETY STOP')
-        elif self.front_safety_stop:
-            self.front_safety_stop_handling()
-        elif closest_obstacles.shape[0] == 0 and self.current_status == self.STATUS_SAFETY_STOP and self.back_safety_stop==False:
-            self.get_logger().debug('return to running')
-            self.update_robot_status(self.STATUS_RUNNING)
+        elif self.current_status == self.STATUS_SAFETY_STOP:
+            
+            if self.back_safety_stop == False:
+                self.get_logger().debug('return to running')
+                self.front_distances = distances
+                self.front_obstacles = closest_obstacles
+                self.update_robot_status(self.STATUS_RUNNING)
+            elif self.back_obstacles is None:
+                self.back_safety_stop ==True
+                self.get_logger().debug('return to running')
+                self.front_distances = distances
+                self.front_obstacles = closest_obstacles
+                self.update_robot_status(self.STATUS_RUNNING)
+            elif self.back_obstacles.size ==0:
+                self.back_safety_stop = True
+                self.get_logger().debug('return to running')
+                self.front_distances = distances
+                self.front_obstacles = closest_obstacles
+                self.update_robot_status(self.STATUS_RUNNING)
         
 
     def back_laserscan_callback(self, msg: LaserScan):
@@ -541,26 +562,44 @@ class RobotNode(Node):
         :param msg: LaserScan message from ROS
         """
         # Use the imported class to process the scan data
-        if self._state is None:
+        if self._state is None or self.current_status == self.STATUS_TARGET_REACHED:
             return
         
         closest_obstacles, distances = self.laser_processor.get_closest_back_obstacles(msg, self._state)
-        self.back_obstacles = closest_obstacles
-        self.back_distances = distances
+        # self.back_obstacles = closest_obstacles
+        # self.back_distances = distances
         
         self.get_logger().debug(f'Closest back obstacles: {closest_obstacles}')
-        if closest_obstacles.shape[0] != 0:
+        
+        if self.back_safety_stop:
+            self.back_distances = distances
+            self.back_safety_stop_handling()
+        elif closest_obstacles.shape[0] != 0:
             self.send_command_to_gazebo(0, 0)
             self.update_robot_status(self.STATUS_SAFETY_STOP)
+            self.back_obstacles = closest_obstacles
+            self.back_distances = distances
             self.back_safety_stop_handling()
             self.get_logger().debug('SAFETY STOP')
-        elif self.back_safety_stop:
-            self.back_safety_stop_handling()
-        elif closest_obstacles.shape[0] == 0 and self.current_status == self.STATUS_SAFETY_STOP and self.front_safety_stop == False:
-            self.get_logger().debug('return to running')
-
-            self.update_robot_status(self.STATUS_RUNNING)
-
+        elif self.current_status == self.STATUS_SAFETY_STOP:
+                
+            if self.front_safety_stop == False:
+                self.get_logger().debug('return to running')
+                self.back_distances = distances
+                self.back_obstacles = closest_obstacles
+                self.update_robot_status(self.STATUS_RUNNING)
+            elif self.front_obstacles is None:
+                self.front_safety_stop = True
+                self.get_logger().debug('return to running')
+                self.back_distances = distances
+                self.back_obstacles = closest_obstacles
+                self.update_robot_status(self.STATUS_RUNNING)
+            elif self.front_obstacles.size ==0:
+                self.front_safety_stop = True
+                self.get_logger().debug('return to running')
+                self.back_distances = distances
+                self.back_obstacles = closest_obstacles
+                self.update_robot_status(self.STATUS_RUNNING)
     def front_safety_stop_handling(self):
         
         self.front_safety_stop = True
@@ -589,11 +628,13 @@ class RobotNode(Node):
 
         # Otherwise, back off if rear is clear
         if self.laser_processor.is_back_clear(self.back_obstacles, self.back_distances, 1.5):
+            
             linear_speed = -0.25  # move backward
             angular_correction = angle_to_closest_obstacle * 0.5  # steer away
             self.send_command_to_gazebo(linear_speed, angular_correction)
         else:
-            self.send_command_to_gazebo(0, 0)
+            self.get_logger().info(f'Cannot move backward since obstacle: {self.back_obstacles[0]}')
+            self.send_command_to_gazebo(0, -0.5)
 
     def back_safety_stop_handling(self):
         
@@ -623,11 +664,13 @@ class RobotNode(Node):
 
         # Otherwise, front off if front is clear
         if self.laser_processor.is_front_clear(self.front_obstacles, self.front_distances, 1.5):
-            linear_speed = 0.25  # move forkward
+            
+            linear_speed = 0.25  # move forward
             angular_correction = -angle_to_closest_obstacle * 0.5  # steer away
             self.send_command_to_gazebo(linear_speed, angular_correction)
         else:
-            self.send_command_to_gazebo(0, 0)
+            self.get_logger().info(f'Cannot move forward since obstacle: {self.front_obstacles[0]}')
+            self.send_command_to_gazebo(0, -0.5)
 
     def normalize_angle(self, angle):
         """Normalize angle to [-pi, pi]."""
