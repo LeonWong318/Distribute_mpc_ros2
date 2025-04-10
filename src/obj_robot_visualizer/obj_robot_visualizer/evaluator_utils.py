@@ -35,6 +35,12 @@ class PathEvaluator:
         
         self.previous_status[robot_id] = status
     
+    def reset(self):
+        self.robot_start_times = {}
+        self.robot_end_times = {}
+        self.previous_status = {}
+        self.robot_states = defaultdict(list)
+    
     def update_robot_state(self, robot_id, state_msg):
         if self.previous_status.get(robot_id) == self.STATUS_RUNNING:
             state_time = datetime.now()
@@ -223,6 +229,6 @@ class PathEvaluator:
     
     def all_robots_reached_target(self, robot_ids):
         for robot_id in robot_ids:
-            if robot_id not in self.robot_end_times:
+            if robot_id not in self.robot_end_times or robot_id not in self.robot_start_times:
                 return False
-        return True
+        return len(robot_ids) > 0 and len(self.robot_end_times) > 0

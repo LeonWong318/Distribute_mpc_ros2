@@ -324,7 +324,7 @@ class AutoTest(Node):
             self.test_completed.set()
     
     def metrics_callback(self, msg):
-        if self.test_completed.is_set():
+        if self.test_completed.is_set() and self.current_metrics is None:
             self.current_metrics = msg
             self.get_logger().info('Received performance metrics')
     
@@ -337,6 +337,8 @@ class AutoTest(Node):
             self.robot_statuses = {}
             self.received_status_updates = False 
 
+            self._status_subscriptions = []
+            
             self.get_logger().info('Reset simulation state variables for next iteration')
             return True
         except Exception as e:
@@ -383,7 +385,18 @@ class AutoTest(Node):
             self.failure_type = 'timeout'
             return False
 
-        time.sleep(2)
+        wait_time = 0
+        metrics_wait_timeout = 10.0
+        while wait_time < metrics_wait_timeout:
+            if self.current_metrics is not None:
+                break
+            time.sleep(0.5)
+            wait_time += 0.5
+            self.get_logger().info(f'Waiting for metrics data ({wait_time}/{metrics_wait_timeout}s)')
+
+        if self.current_metrics is None:
+            self.get_logger().warn('Failed to receive metrics within timeout')
+
         return self.iteration_success
     
     def save_rviz_screenshot(self, filename):
@@ -574,6 +587,8 @@ class AutoTest(Node):
                     for iteration in range(iterations_per_latency):
                         self.get_logger().info(f'Starting iteration {iteration+1}/{iterations_per_latency}')
 
+                        self.reset_simulation() 
+                        
                         if not self.start_simulation(scenario):
                             self.get_logger().error('Failed to start simulation, retrying...')
                             self.cleanup_processes()
@@ -601,7 +616,7 @@ class AutoTest(Node):
 
                         if iteration < iterations_per_latency - 1:
                             self.cleanup_processes()
-                            time.sleep(2)
+                            time.sleep(5)
 
                     success_rate = success_count / iterations_per_latency
                     timeout_rate = timeout_count / iterations_per_latency

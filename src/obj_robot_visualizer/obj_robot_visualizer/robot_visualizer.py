@@ -846,6 +846,9 @@ class RobotStateVisualizer(Node):
     def reset_path_evaluation(self):
         self.evaluation_completed = False
         self.path_evaluator = PathEvaluator(self.get_logger())
+        self.robot_paths = {}
+        self.robot_trajectories = {} 
+        self.robot_target_points = {}
         self.get_logger().info("Path evaluation has been reset for a new experiment.")
     
     def check_and_evaluate(self):
