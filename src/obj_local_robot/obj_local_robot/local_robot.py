@@ -484,6 +484,10 @@ class RobotNode(Node):
                 self.current_trajectory = msg
                 return
             
+            traj_time = msg.stamp.sec + msg.stamp.nanosec * 1e-9
+            current_time = self.get_clock().now().to_msg().sec + self.get_clock().now().to_msg().nanosec  * 1e-9
+            self.get_logger().info(f'natrual time delay is {(current_time - traj_time):.3f}')
+            
             # Calculate minimum distance between current state and trajectory points
             min_distance = float('inf')
             current_position = np.array([self._state[0], self._state[1]])
@@ -502,7 +506,7 @@ class RobotNode(Node):
             elif self.current_status == self.STATUS_EMERGENCY_STOP or self.current_status == self.STATUS_RUNNING:
                 self.update_robot_status(self.STATUS_RUNNING)
                 self.current_trajectory = msg
-                self.get_logger().info(f'Received valid trajectory with {len(msg.x)} points (min distance: {min_distance:.2f}m)')
+                self.get_logger().debug(f'Received valid trajectory with {len(msg.x)} points (min distance: {min_distance:.2f}m)')
 
         except Exception as e:
             self.get_logger().error(f'Error in trajectory_callback: {str(e)}')
@@ -633,7 +637,7 @@ class RobotNode(Node):
             angular_correction = angle_to_closest_obstacle * 0.5  # steer away
             self.send_command_to_gazebo(linear_speed, angular_correction)
         else:
-            self.get_logger().info(f'Cannot move backward since obstacle: {self.back_obstacles[0]}')
+            self.get_logger().debug(f'Cannot move backward since obstacle: {self.back_obstacles[0]}')
             self.send_command_to_gazebo(0, -0.5)
 
     def back_safety_stop_handling(self):
@@ -669,7 +673,7 @@ class RobotNode(Node):
             angular_correction = -angle_to_closest_obstacle * 0.5  # steer away
             self.send_command_to_gazebo(linear_speed, angular_correction)
         else:
-            self.get_logger().info(f'Cannot move forward since obstacle: {self.front_obstacles[0]}')
+            self.get_logger().debug(f'Cannot move forward since obstacle: {self.front_obstacles[0]}')
             self.send_command_to_gazebo(0, -0.5)
 
     def normalize_angle(self, angle):
@@ -779,7 +783,8 @@ class RobotNode(Node):
 
             traj_time = self.current_trajectory.stamp.sec + self.current_trajectory.stamp.nanosec * 1e-9
             current_time = self.get_clock().now().to_msg().sec + self.get_clock().now().to_msg().nanosec  * 1e-9
-
+            
+            
             # Compute control commands based on selected controller type
             if self.controller_type == 'pure_pursuit':
                 v, omega = self.pure_pursuit.compute_control_commands(
@@ -831,7 +836,7 @@ class RobotNode(Node):
             v = np.clip(v, -self.max_velocity, self.max_velocity)
             omega = np.clip(omega, -self.max_angular_velocity, self.max_angular_velocity)
             
-            self.get_logger().info(f'Sending Control commands ({self.controller_type}): v={v:.2f}, omega={omega:.2f}')
+            self.get_logger().debug(f'Sending Control commands ({self.controller_type}): v={v:.2f}, omega={omega:.2f}')
             
             # Send command and wait for state update
             self.send_command_to_gazebo(v, omega)
