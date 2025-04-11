@@ -26,8 +26,7 @@ from msg_interfaces.msg import (
     RobotToClusterState,
     ManagerToClusterStart,
     ClusterBetweenRobotHeartBeat,
-    ClusterToRvizShortestPath,
-    ClusterToRvizReferencePath
+    ClusterToRvizShortestPath
 )
 
 class ClusterNode(Node):
@@ -153,12 +152,6 @@ class ClusterNode(Node):
         self.shortest_path_pub = self.create_publisher(
             ClusterToRvizShortestPath,
             f'/robot_{self.robot_id}/shortest_path',
-            self.reliable_qos
-        )
-        
-        self.reference_path_pub = self.create_publisher(
-            ClusterToRvizReferencePath,
-            f'/robot_{self.robot_id}/reference_path',
             self.reliable_qos
         )
     
@@ -514,9 +507,6 @@ class ClusterNode(Node):
                 current_pos=current_pos,
                 idx_check_range=10
             )
-
-            # Publish ref states to Rviz for visualize
-            self.publish_reference_path(ref_states)
             
             self.get_logger().debug(f'Local ref_states:{ref_states}')
             self.ref_path = ref_states
@@ -546,6 +536,7 @@ class ClusterNode(Node):
                     self.check_dynamic_obstacles(ref_states=ref_states, robot_states_for_control=robot_states_for_control,
                                                  num_others=num_others,state_dim=state_dim,horizon=horizon)==False:
                     self.use_ref_path = True
+                    self.pred_states = self.ref_path
                     self.publish_trajectory_to_robot()
                     self.get_logger().info('Using ref path')
                 else:
@@ -569,8 +560,7 @@ class ClusterNode(Node):
                         self.publish_trajectory_to_robot()
                     else:
                         self.converge_flag = False
-
-                        self.publish_trajectory_to_robot()
+                        # self.publish_trajectory_to_robot()
                         self.get_logger().info(f'Not converge reason: {exist_status}')
                 
             else:
@@ -664,20 +654,6 @@ class ClusterNode(Node):
 
         except Exception as e:
             self.get_logger().error(f'Error publishing shortest path: {str(e)}')
-
-    def publish_reference_path(self, ref_path):
-        try:
-            path_msg = ClusterToRvizReferencePath()
-            path_msg.robot_id = self.robot_id
-
-            path_msg.x = [float(point[0]) for point in ref_path]
-            path_msg.y = [float(point[1]) for point in ref_path]
-            path_msg.theta = [float(point[2]) for point in ref_path]
-
-            self.reference_path_pub.publish(path_msg)
-
-        except Exception as e:
-            self.get_logger().error(f'Error publishing reference path: {str(e)}')
 
             
 def main(args=None):
