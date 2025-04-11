@@ -7,6 +7,8 @@ from rclpy.callback_groups import ReentrantCallbackGroup, MutuallyExclusiveCallb
 from rclpy.qos import QoSProfile, QoSReliabilityPolicy, QoSHistoryPolicy, QoSDurabilityPolicy
 import numpy as np
 import json
+from shapely.geometry import Polygon, Point, LineString
+import math
 
 from pkg_configs.configs import MpcConfiguration, CircularRobotSpecification
 from basic_motion_model.motion_model import UnicycleModel
@@ -86,6 +88,8 @@ class ClusterNode(Node):
         self.predicted_trajectory = None
         self.pred_states = None
         self.idle = True
+        self.ref_path = None
+        self.use_ref_path = False
         
         self._state_lock = threading.Lock()
         self._last_state_update_time = None
@@ -350,6 +354,7 @@ class ClusterNode(Node):
             self.static_obstacles = self.gpc.inflated_map.obstacle_coords_list
             self.path_coords, self.path_times = self.gpc.get_robot_schedule(self.robot_id)
             self.expected_robots = set(int(robot_id) for robot_id in self.robot_start.keys())
+            self.get_logger().info(f'static obstacles{self.static_obstacles}')
             
             # setup control
             self.setup_control_components()
@@ -395,6 +400,101 @@ class ClusterNode(Node):
         else:
             return current_pos
         
+    def check_static_obstacles_on_the_way(self, ref_states, step_size=0.1):
+        """
+        Check if there are any static obstacles from current position to start of ref_states,
+        and along the entire reference trajectory.
+
+        Parameters:
+            ref_states (np.ndarray): (N, 3) array of reference states
+            step_size (float): step size for interpolation from current state to ref start
+
+        Returns:
+            bool: True if any collision is detected, False otherwise
+        """
+        if ref_states.shape[0] == 0:
+            return False  # Nothing to check
+
+        # Convert obstacles to polygons
+        obstacle_polygons = [Polygon(ob) for ob in self.static_obstacles]
+
+        # Helper function to check a point against all obstacles
+        def is_colliding(x, y):
+            point = Point(x, y)
+            return any(poly.contains(point) for poly in obstacle_polygons)
+
+        # 1. Check path from current state to start of ref_states
+        x0, y0 = self._state[:2]
+        x1, y1 = ref_states[0, :2]
+        line = LineString([(x0, y0), (x1, y1)])
+        length = line.length
+        num_steps = max(2, int(length / step_size))
+        for i in range(num_steps):
+            pt = line.interpolate(i / (num_steps - 1), normalized=True)
+            if is_colliding(pt.x, pt.y):
+                return True
+
+        # 2. Check each point in ref_states
+        for x, y, _ in ref_states:
+            if is_colliding(x, y):
+                return True
+
+        return False
+    
+    def check_dynamic_obstacles(self, ref_states, robot_states_for_control, num_others, state_dim, horizon, radius=3):
+        """
+        Check dynamic obstacles: front zone presence and predicted trajectory cross.
+
+        Parameters:
+            ref_states (np.ndarray): (N, 3) reference path
+            robot_states_for_control (List[float]): Flat list of other robot states and predictions
+            num_others (int): number of other robots
+            state_dim (int): usually 3 (x, y, theta)
+            horizon (int): prediction horizon for each robot
+            radius (float): semi-circular front detection range
+
+        Returns:
+            bool: True if there's a dynamic obstacle concern
+        """
+        x0, y0, theta0 = self._state
+        my_path = np.vstack((self._state[:2], ref_states[:, :2]))
+        my_path_line = LineString(my_path)
+
+        # Loop over each robot
+        for i in range(num_others):
+            base_idx = i * state_dim
+            x, y, theta = robot_states_for_control[base_idx : base_idx + 3]
+
+            # --- Check semi-circular front zone ---
+            dx = x - x0
+            dy = y - y0
+            dist = np.hypot(dx, dy)
+            if dist <= radius:
+                angle_to_robot = math.atan2(dy, dx)
+                angle_diff = self._normalize_angle(angle_to_robot - theta0)
+                if -np.pi/2 <= angle_diff <= np.pi/2:
+                    return True  # Robot in front region
+
+            # --- Check predicted trajectory cross ---
+            pred_idx = (state_dim * num_others) + i * state_dim * horizon
+            pred_traj = robot_states_for_control[pred_idx : pred_idx + state_dim * horizon]
+            pred_points = [
+                (pred_traj[j], pred_traj[j+1])
+                for j in range(0, len(pred_traj) - state_dim + 1, state_dim)
+            ]
+            if len(pred_points) >= 2:
+                other_traj_line = LineString(pred_points)
+                if my_path_line.intersects(other_traj_line):
+                    return True
+
+        return False
+    
+    @staticmethod
+    def _normalize_angle(angle):
+        """Normalize angle to [-pi, pi]."""
+        return (angle + np.pi) % (2 * np.pi) - np.pi
+
+    
     def control_loop(self):
         try:
             if self.idle:
@@ -418,6 +518,8 @@ class ClusterNode(Node):
             # Publish ref states to Rviz for visualize
             self.publish_reference_path(ref_states)
             
+            self.get_logger().debug(f'Local ref_states:{ref_states}')
+            self.ref_path = ref_states
             self.controller.set_ref_states(ref_states, ref_speed=ref_speed)
             
             # get other robot states
@@ -440,27 +542,36 @@ class ClusterNode(Node):
                     idx_pred += state_dim * horizon
                 
                 start_time = self.get_clock().now()
-                
-                # run controller
-                self.last_actions, self.pred_states, self.current_refs, self.debug_info, exist_status= self.controller.run_step(
-                    static_obstacles=self.static_obstacles,
-                    other_robot_states=robot_states_for_control
-                )
-                
-                end_time = self.get_clock().now()
-                duration_ms = (end_time.nanoseconds - start_time.nanoseconds) / 1e9
-                self.get_logger().warning(f'Controller run_step() took {duration_ms:.3f} s')
-                
-                # run step
-                self.controller.set_current_state(self._state)
-                if exist_status == 'Converged':
-                    # publish traj to robot after calculating
-                    self.converge_flag = True
-                    self.get_logger().info('Converged')
+                if self.check_static_obstacles_on_the_way(ref_states=ref_states)==False and \
+                    self.check_dynamic_obstacles(ref_states=ref_states, robot_states_for_control=robot_states_for_control,
+                                                 num_others=num_others,state_dim=state_dim,horizon=horizon)==False:
+                    self.use_ref_path = True
                     self.publish_trajectory_to_robot()
+                    self.get_logger().info('Using ref path')
                 else:
-                    self.converge_flag = False
-                    self.get_logger().info(f'Not converge reason: {exist_status}')
+                    # run controller
+                    self.use_ref_path = False
+                    self.last_actions, self.pred_states, self.current_refs, self.debug_info, exist_status= self.controller.run_step(
+                        static_obstacles=self.static_obstacles,
+                        other_robot_states=robot_states_for_control
+                    )
+
+                    end_time = self.get_clock().now()
+                    duration_ms = (end_time.nanoseconds - start_time.nanoseconds) / 1e9
+                    self.get_logger().debug(f'Controller run_step() took {duration_ms:.3f} s')
+
+                    # run step
+                    self.controller.set_current_state(self._state)
+                    if exist_status == 'Converged':
+                        # publish traj to robot after calculating
+                        self.converge_flag = True
+                        self.get_logger().info('Converged')
+                        self.publish_trajectory_to_robot()
+                    else:
+                        self.converge_flag = False
+
+                        self.publish_trajectory_to_robot()
+                        self.get_logger().info(f'Not converge reason: {exist_status}')
                 
             else:
                 self.get_logger().debug('Not enough other robot states, skip this control loop')
@@ -476,7 +587,21 @@ class ClusterNode(Node):
         try:
             if self.pred_states is None:
                 return
-            if self.converge_flag == False:
+            if self.use_ref_path:
+                traj_msg = ClusterToRobotTrajectory()
+                traj_msg.stamp = self.get_clock().now().to_msg()
+
+                traj_msg.x = []
+                traj_msg.y = []
+                traj_msg.theta = []
+
+                for state in self.ref_path:
+                    if isinstance(state, np.ndarray):
+                        traj_msg.x.append(float(state[0]))
+                        traj_msg.y.append(float(state[1]))
+                        traj_msg.theta.append(float(state[2]))
+
+                self.to_robot_trajectory_pub.publish(traj_msg)
                 return
             
             traj_msg = ClusterToRobotTrajectory()
