@@ -416,9 +416,9 @@ class ClusterNode(Node):
             point = Point(x, y)
             return any(poly.contains(point) for poly in obstacle_polygons)
 
-        # 1. Check path from current state to start of ref_states
+        # 1. Check path from current state to end of ref_states
         x0, y0 = self._state[:2]
-        x1, y1 = ref_states[0, :2]
+        x1, y1 = ref_states[-1, :2]
         line = LineString([(x0, y0), (x1, y1)])
         length = line.length
         num_steps = max(2, int(length / step_size))
@@ -483,10 +483,37 @@ class ClusterNode(Node):
         return False
     
     @staticmethod
-    def _normalize_angle(angle):
-        """Normalize angle to [-pi, pi]."""
-        return (angle + np.pi) % (2 * np.pi) - np.pi
+    def generate_connecting_path(start, end, gap):
+        """
+        Generate points from `start` to `end` using fixed step size `gap`.
 
+        Args:
+            start (np.ndarray): shape (3,), current state [x, y, theta]
+            end (np.ndarray): shape (3,), target state [x, y, theta]
+            gap (float): distance between sampled points
+
+        Returns:
+            np.ndarray: (N, 3), each row is [x, y, theta]
+        """
+        start = np.array(start)
+        end = np.array(end)
+
+        vec = end[:2] - start[:2]
+        dist = np.linalg.norm(vec)
+        if dist < 1e-4:
+            return np.empty((0, 3))  # Already at the point
+
+        direction = vec / dist
+        num_steps = int(dist // gap)
+
+        path = []
+        for i in range(1, num_steps + 1):
+            x = start[0] + i * gap * direction[0]
+            y = start[1] + i * gap * direction[1]
+            theta = start[2] + (end[2] - start[2]) * (i / num_steps)
+            path.append([x, y, theta])
+
+        return np.array(path)
     
     def control_loop(self):
         try:
@@ -507,9 +534,15 @@ class ClusterNode(Node):
                 current_pos=current_pos,
                 idx_check_range=10
             )
-            
+            connecting_path = self.generate_connecting_path(
+                start=self._state,
+                end=ref_states[-1],
+                gap=0.2  # set your preferred step gap
+            )
+            # self.ref_path = np.vstack((self._state, ref_states))
+            self.ref_path = np.vstack((connecting_path, ref_states[-1]))
             self.get_logger().debug(f'Local ref_states:{ref_states}')
-            self.ref_path = ref_states
+            
             self.controller.set_ref_states(ref_states, ref_speed=ref_speed)
             
             # get other robot states
