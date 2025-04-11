@@ -8,8 +8,11 @@ from msg_interfaces.msg import (
     ClusterToRvizShortestPath,
     RobotToRvizTargetPoint,
     PerformanceMetrics,
-    PerformanceMetricsArray
+    PerformanceMetricsArray,
+    ClusterToRvizReferencePath
 )
+
+from rclpy.qos import QoSProfile, QoSReliabilityPolicy, QoSHistoryPolicy, QoSDurabilityPolicy
 from geometry_msgs.msg import Point
 from tf2_ros import TransformBroadcaster
 from geometry_msgs.msg import TransformStamped
@@ -68,6 +71,20 @@ class RobotStateVisualizer(Node):
         self.robot_spec_path = self.get_parameter('robot_spec_path').value
         self.path_min_distance = self.get_parameter('path_min_distance').value
         
+        self.reliable_qos = QoSProfile(
+            reliability=QoSReliabilityPolicy.RELIABLE,
+            history=QoSHistoryPolicy.KEEP_LAST,
+            durability=QoSDurabilityPolicy.TRANSIENT_LOCAL, #using Transient_local to prevent message loss
+            depth=10
+        )
+        
+        self.best_effort_qos = QoSProfile(
+            reliability=QoSReliabilityPolicy.BEST_EFFORT,
+            history=QoSHistoryPolicy.KEEP_LAST,
+            depth=10
+        )
+        
+        
         self.marker_publisher = self.create_publisher(
             MarkerArray,
             '/robot_visualization/markers',
@@ -92,8 +109,12 @@ class RobotStateVisualizer(Node):
         self.robot_statuses = {}
         # Store dijkstra shortest paths
         self.shortest_paths = {} 
+        # Store reference paths
+        self.reference_paths = {}
         # Store shortest path subscriptions
         self.shortest_path_subscriptions = {}
+        # Store reference path subscriptions
+        self.reference_path_subscriptions = {}
         
         # Define status codes
         self.STATUS_INITIALIZING = 0
@@ -200,6 +221,14 @@ class RobotStateVisualizer(Node):
                 )
                 self.target_point_subscriptions[robot_id] = target_point_sub
                 
+                reference_path_sub = self.create_subscription(
+                    ClusterToRvizReferencePath,
+                    f'/robot_{robot_id}/reference_path',
+                    lambda msg, rid=robot_id: self.reference_path_callback(msg, rid),
+                    self.reliable_qos
+                )
+                self.reference_path_subscriptions[robot_id] = reference_path_sub
+                
                 # Initialize with default status (Initializing)
                 self.robot_statuses[robot_id] = self.STATUS_INITIALIZING
                 
@@ -253,6 +282,19 @@ class RobotStateVisualizer(Node):
             self.get_logger().info(f'Received shortest path for robot {robot_id} with {len(path_points)} points')
         except Exception as e:
             self.get_logger().error(f'Error processing shortest path for robot {robot_id}: {str(e)}')
+    
+    def reference_path_callback(self, msg, robot_id):
+        """Callback for robot reference path messages"""
+        try:
+            path_points = []
+            for i in range(len(msg.x)):
+                path_points.append((msg.x[i], msg.y[i]))
+            
+            self.reference_paths[robot_id] = path_points
+            self.get_logger().info(f'Received reference path for robot {robot_id} with {len(path_points)} points')
+        except Exception as e:
+            self.get_logger().error(f'Error processing reference path for robot {robot_id}: {str(e)}')
+    
     
     def target_point_callback(self, msg, robot_id):
         """Callback for robot target point messages"""
@@ -542,6 +584,36 @@ class RobotStateVisualizer(Node):
                 p.x = point[0]
                 p.y = point[1]
                 p.z = 0.02  # Slightly above ground to avoid z-fighting
+                path_marker.points.append(p)
+            
+            marker_array.markers.append(path_marker)
+    
+    def publish_reference_path_markers(self, marker_array):
+        """Create and add reference path markers to the marker array"""
+        for robot_id, path_points in self.reference_paths.items():
+            if len(path_points) < 2:
+                continue
+                
+            path_marker = Marker()
+            path_marker.header.frame_id = "map"
+            path_marker.header.stamp = self.get_clock().now().to_msg()
+            path_marker.ns = "reference_paths"
+            path_marker.id = robot_id
+            path_marker.type = Marker.LINE_STRIP
+            path_marker.action = Marker.ADD
+            
+            path_marker.scale.x = 0.08
+            
+            path_marker.color.r = 0.7
+            path_marker.color.g = 0.0
+            path_marker.color.b = 0.9
+            path_marker.color.a = 0.9
+            
+            for point in path_points:
+                p = Point()
+                p.x = point[0]
+                p.y = point[1]
+                p.z = 0.04
                 path_marker.points.append(p)
             
             marker_array.markers.append(path_marker)
@@ -839,6 +911,9 @@ class RobotStateVisualizer(Node):
         # Add trajectory markers 
         self.publish_trajectory_markers(marker_array)
         
+        # Add reference path markers 
+        # self.publish_reference_path_markers(marker_array)
+        
         # Publish all markers
         if marker_array.markers:
             self.marker_publisher.publish(marker_array)
@@ -849,6 +924,7 @@ class RobotStateVisualizer(Node):
         self.robot_paths = {}
         self.robot_trajectories = {} 
         self.robot_target_points = {}
+        self.reference_paths = {}
         self.get_logger().info("Path evaluation has been reset for a new experiment.")
     
     def check_and_evaluate(self):

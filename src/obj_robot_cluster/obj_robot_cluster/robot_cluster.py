@@ -24,7 +24,8 @@ from msg_interfaces.msg import (
     RobotToClusterState,
     ManagerToClusterStart,
     ClusterBetweenRobotHeartBeat,
-    ClusterToRvizShortestPath
+    ClusterToRvizShortestPath,
+    ClusterToRvizReferencePath
 )
 
 class ClusterNode(Node):
@@ -148,6 +149,12 @@ class ClusterNode(Node):
         self.shortest_path_pub = self.create_publisher(
             ClusterToRvizShortestPath,
             f'/robot_{self.robot_id}/shortest_path',
+            self.reliable_qos
+        )
+        
+        self.reference_path_pub = self.create_publisher(
+            ClusterToRvizReferencePath,
+            f'/robot_{self.robot_id}/reference_path',
             self.reliable_qos
         )
     
@@ -408,6 +415,9 @@ class ClusterNode(Node):
                 idx_check_range=10
             )
 
+            # Publish ref states to Rviz for visualize
+            self.publish_reference_path(ref_states)
+            
             self.controller.set_ref_states(ref_states, ref_speed=ref_speed)
             
             # get other robot states
@@ -530,6 +540,21 @@ class ClusterNode(Node):
         except Exception as e:
             self.get_logger().error(f'Error publishing shortest path: {str(e)}')
 
+    def publish_reference_path(self, ref_path):
+        try:
+            path_msg = ClusterToRvizReferencePath()
+            path_msg.robot_id = self.robot_id
+
+            path_msg.x = [float(point[0]) for point in ref_path]
+            path_msg.y = [float(point[1]) for point in ref_path]
+            path_msg.theta = [float(point[2]) for point in ref_path]
+
+            self.reference_path_pub.publish(path_msg)
+
+        except Exception as e:
+            self.get_logger().error(f'Error publishing reference path: {str(e)}')
+
+            
 def main(args=None):
     rclpy.init(args=args)
     executor = rclpy.executors.MultiThreadedExecutor()

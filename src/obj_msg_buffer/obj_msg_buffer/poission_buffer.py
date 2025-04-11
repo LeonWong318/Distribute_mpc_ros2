@@ -221,7 +221,6 @@ class MultiTopicMessageBuffer(Node, QWidget):
                 sub_qos = self.reliable_qos
                 pub_qos = self.reliable_qos
 
-            # 创建订阅者
             self._subscribers[topic_id] = self.create_subscription(
                 config.msg_type,
                 config.topic_in,
@@ -230,7 +229,6 @@ class MultiTopicMessageBuffer(Node, QWidget):
                 callback_group=self.callback_group
             )
 
-            # 创建发布者
             self._publishers[topic_id] = self.create_publisher(
                 config.msg_type,
                 config.topic_out,

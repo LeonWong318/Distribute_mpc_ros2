@@ -16,6 +16,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/ClusterToManagerState.msg"
   "msg/ClusterToRobotTrajectory.msg"
   "msg/ClusterToRvizShortestPath.msg"
+  "msg/ClusterToRvizReferencePath.msg"
   "msg/GazeboToManagerState.msg"
   "msg/ManagerToClusterStart.msg"
   "msg/ManagerToClusterStateSet.msg"
