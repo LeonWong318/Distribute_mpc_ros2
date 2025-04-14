@@ -67,7 +67,7 @@ class RobotManager(Node):
         # Allow parallel execution
         self.service_group = ReentrantCallbackGroup()
         
-        self.qos_profile = QoSProfile(
+        self.reliable_qos = QoSProfile(
             reliability=QoSReliabilityPolicy.RELIABLE,
             durability=QoSDurabilityPolicy.TRANSIENT_LOCAL,
             history=QoSHistoryPolicy.KEEP_LAST,
@@ -85,13 +85,13 @@ class RobotManager(Node):
         self.states_publisher = self.create_publisher(
             ManagerToClusterStateSet,
             '/manager/robot_states',
-            self.qos_profile
+            self.reliable_qos
         )
         
         self.start_signal_publisher = self.create_publisher(
             ManagerToClusterStart,
             '/manager/global_start',
-            self.qos_profile
+            self.reliable_qos
         )
         
         self.create_timer(
@@ -226,7 +226,7 @@ class RobotManager(Node):
             ClusterToManagerState,
             f'/cluster_{robot_id}/state',
             lambda msg: self.cluster_state_callback(msg, robot_id),
-            self.qos_profile,
+            self.reliable_qos,
             callback_group=self.service_group
         )
         
@@ -238,7 +238,7 @@ class RobotManager(Node):
             GazeboToManagerState,
             f'/robot_{robot_id}/sim_state_delayed',
             lambda msg: self.converter_state_callback(msg, robot_id),
-            self.qos_profile,
+            self.reliable_qos,
             callback_group=self.service_group
         )
 

@@ -546,8 +546,7 @@ class ClusterNode(Node):
                 padding = np.tile(last_point, (num_to_add, 1))
                 connecting_path = np.vstack((connecting_path, padding))
                         # self.ref_path = np.vstack((self._state, ref_states))
-            self.ref_path = None
-            
+                                    
             self.ref_path = np.vstack((connecting_path, ref_states[-1]))
             self.get_logger().debug(f'Local ref_states:{ref_states}')
             
@@ -577,9 +576,10 @@ class ClusterNode(Node):
                     self.check_dynamic_obstacles(ref_states=ref_states, robot_states_for_control=robot_states_for_control,
                                                  num_others=num_others,state_dim=state_dim,horizon=horizon)==False:
                     self.use_ref_path = True
+                    self.converge_flag = True
                     self.pred_states = self.ref_path
                     self.publish_trajectory_to_robot()
-                    self.get_logger().info('Using ref path')
+                    self.get_logger().debug('Using ref path')
                 else:
                     # run controller
                     self.use_ref_path = False

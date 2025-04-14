@@ -73,27 +73,56 @@ class RobotStateVisualizer(Node):
         self.reliable_qos = QoSProfile(
             reliability=QoSReliabilityPolicy.RELIABLE,
             history=QoSHistoryPolicy.KEEP_LAST,
-            durability=QoSDurabilityPolicy.TRANSIENT_LOCAL, #using Transient_local to prevent message loss
+            durability=QoSDurabilityPolicy.TRANSIENT_LOCAL,
             depth=10
         )
         
         self.best_effort_qos = QoSProfile(
             reliability=QoSReliabilityPolicy.BEST_EFFORT,
             history=QoSHistoryPolicy.KEEP_LAST,
+            durability=QoSDurabilityPolicy.VOLATILE,
             depth=10
         )
         
-        
-        self.marker_publisher = self.create_publisher(
+        # Static markers (map, obstacles, graph nodes) - low frequency updates
+        self.static_marker_publisher = self.create_publisher(
             MarkerArray,
-            '/robot_visualization/markers',
-            10
+            '/robot_visualization/static_markers',
+            self.reliable_qos
+        )
+        
+        # Robot state markers (positions, orientations, status) - high frequency updates
+        self.robot_state_publisher = self.create_publisher(
+            MarkerArray,
+            '/robot_visualization/robot_states',
+            self.best_effort_qos
+        )
+        
+        # Path history markers - high frequency updates
+        self.path_publisher = self.create_publisher(
+            MarkerArray,
+            '/robot_visualization/paths',
+            self.best_effort_qos
+        )
+        
+        # Trajectory markers - high frequency updates
+        self.trajectory_publisher = self.create_publisher(
+            MarkerArray,
+            '/robot_visualization/trajectories',
+            self.best_effort_qos
+        )
+        
+        # Shortest path markers - low frequency updates
+        self.shortest_path_publisher = self.create_publisher(
+            MarkerArray,
+            '/robot_visualization/shortest_paths',
+            self.reliable_qos
         )
         
         self.metrics_publisher = self.create_publisher(
             PerformanceMetricsArray,
             '/performance_metrics',
-            10
+            self.reliable_qos
         )
         
         self.tf_broadcaster = TransformBroadcaster(self)
@@ -138,11 +167,23 @@ class RobotStateVisualizer(Node):
             ManagerToClusterStateSet,
             '/manager/robot_states',
             self.robot_trajectories_callback,
-            10
+            self.reliable_qos
         )
         
-        self.static_timer = self.create_timer(1.0, self.publish_static_markers)
-        self.visualization_timer = self.create_timer(0.1, self.publish_robot_visualization)
+        # Static markers - very low frequency (5 seconds)
+        self.static_timer = self.create_timer(5.0, self.publish_static_markers)
+        
+        # Shortest path markers - low frequency (2 seconds)
+        self.shortest_path_timer = self.create_timer(2.0, self.publish_shortest_path_markers)
+        
+        # Robot state visualization - high frequency (0.1 seconds)
+        self.robot_state_timer = self.create_timer(0.1, self.publish_robot_state_visualization)
+        
+        # Path history visualization - medium frequency (0.2 seconds)
+        self.path_timer = self.create_timer(0.2, self.publish_path_markers)
+        
+        # Trajectory visualization - medium frequency (0.2 seconds)
+        self.trajectory_timer = self.create_timer(0.2, self.publish_trajectory_markers)
         
         self.map_data = None
         self.graph_data = None
@@ -155,13 +196,19 @@ class RobotStateVisualizer(Node):
         # Dictionary to store planned trajectories
         # Format: {robot_id: [(x1, y1), (x2, y2), ...]}
         self.robot_trajectories = {}
+        # Dictionary to store reference paths
+        # Format: {robot_id: [(x1, y1), (x2, y2), ...]}
+        self.reference_paths = {}
         
         
         # Init Path evaluator
         self.path_evaluator = PathEvaluator(self.get_logger())
-        self.evaluation_timer = self.create_timer(1.0, self.check_and_evaluate)
+        self.evaluation_timer = self.create_timer(0.2, self.check_and_evaluate)
         self.evaluation_completed = False
         self.metrics_published = False
+        self.static_published = False
+        self.shortest_path_published = {}
+        self.previous_trajectory_counts = {}
         
         # target points(only available in some local control methods)
         self.robot_target_points = {}
@@ -187,7 +234,12 @@ class RobotStateVisualizer(Node):
                     GazeboToManagerState,
                     f'/robot_{robot_id}/real_state',
                     lambda msg, rid=robot_id: self.robot_real_state_callback(msg, rid),
-                    10
+                    QoSProfile(
+                        reliability=QoSReliabilityPolicy.RELIABLE,
+                        durability=QoSDurabilityPolicy.VOLATILE,
+                        history=QoSHistoryPolicy.KEEP_LAST,
+                        depth=10
+                    )
                 )
                 self.real_state_subscriptions[robot_id] = real_state_sub
                 
@@ -196,7 +248,7 @@ class RobotStateVisualizer(Node):
                     RobotToRvizStatus,
                     f'/robot_{robot_id}/status',
                     lambda msg, rid=robot_id: self.robot_status_callback(msg, rid),
-                    10
+                    self.reliable_qos
                 )
                 self.status_subscriptions[robot_id] = status_sub
                 
@@ -204,7 +256,7 @@ class RobotStateVisualizer(Node):
                     ClusterToRvizShortestPath,
                     f'/robot_{robot_id}/shortest_path',
                     lambda msg, rid=robot_id: self.shortest_path_callback(msg, rid),
-                    10
+                    self.reliable_qos
                 )
                 self.shortest_path_subscriptions[robot_id] = shortest_path_sub
                 
@@ -212,16 +264,40 @@ class RobotStateVisualizer(Node):
                     RobotToRvizTargetPoint,
                     f'/robot_{robot_id}/target_point',
                     lambda msg, rid=robot_id: self.target_point_callback(msg, rid),
-                    10
+                    self.reliable_qos
                 )
                 self.target_point_subscriptions[robot_id] = target_point_sub
                 
                 # Initialize with default status (Initializing)
                 self.robot_statuses[robot_id] = self.STATUS_INITIALIZING
                 
+                # Initialize shortest path publishing flag
+                self.shortest_path_published[robot_id] = False
+                
                 self.get_logger().info(f'Created subscriptions for robot {robot_id} (real state and status)')
             except ValueError:
                 self.get_logger().error(f'Invalid robot ID in robot_start.json: {robot_id_str}')
+    
+    def robot_trajectories_callback(self, msg):
+        """Callback for robot planned trajectories"""
+        # Extract and store planned trajectories from the message
+        for robot_state in msg.robot_states:
+            robot_id = robot_state.robot_id
+            
+            # If there are predicted states, convert them to trajectory points
+            if len(robot_state.pred_states) > 0:
+                trajectory_points = []
+                # # Start from current robot position
+                # trajectory_points.append((robot_state.x, robot_state.y))
+                
+                # Add the predicted states (taking only x, y coordinates)
+                for i in range(0, len(robot_state.pred_states), 3):
+                    if i + 1 < len(robot_state.pred_states):
+                        x = robot_state.pred_states[i]
+                        y = robot_state.pred_states[i + 1]
+                        trajectory_points.append((x, y))
+                self.robot_trajectories[robot_id] = None
+                self.robot_trajectories[robot_id] = trajectory_points
     
     def robot_real_state_callback(self, msg, robot_id):
         """Callback for individual robot real state messages"""
@@ -368,116 +444,136 @@ class RobotStateVisualizer(Node):
         return self.status_colors.get(status, (0.5, 0.5, 0.5))  # Default to gray if status unknown
     
     def publish_static_markers(self):
+            """Publish static markers (map boundaries, obstacles, graph nodes) at low frequency"""
+            # Only publish static markers once unless the data changes
+            if self.static_published:
+                return
+
+            marker_array = MarkerArray()
+
+            if self.map_data:
+                if "boundary_coords" in self.map_data:
+                    boundary_marker = Marker()
+                    boundary_marker.header.frame_id = "map"
+                    boundary_marker.header.stamp = self.get_clock().now().to_msg()
+                    boundary_marker.ns = "boundary"
+                    boundary_marker.id = 0
+                    boundary_marker.type = Marker.LINE_STRIP
+                    boundary_marker.action = Marker.ADD
+                    boundary_marker.scale.x = 0.1
+                    boundary_marker.color.r = 0.0
+                    boundary_marker.color.g = 0.0
+                    boundary_marker.color.b = 0.0
+                    boundary_marker.color.a = 1.0
+
+                    for coord in self.map_data["boundary_coords"]:
+                        p = Point()
+                        p.x = float(coord[0])
+                        p.y = float(coord[1])
+                        p.z = 0.0
+                        boundary_marker.points.append(p)
+
+                    if len(self.map_data["boundary_coords"]) > 0:
+                        p = Point()
+                        p.x = float(self.map_data["boundary_coords"][0][0])
+                        p.y = float(self.map_data["boundary_coords"][0][1])
+                        p.z = 0.0
+                        boundary_marker.points.append(p)
+
+                    marker_array.markers.append(boundary_marker)
+
+            if self.map_data and "obstacle_list" in self.map_data:
+                for i, obstacle in enumerate(self.map_data["obstacle_list"]):
+                    if len(obstacle) >= 3:
+                        center_x = float(sum(float(p[0]) for p in obstacle) / len(obstacle))
+                        center_y = float(sum(float(p[1]) for p in obstacle) / len(obstacle))
+
+                        max_distance_x = max(abs(float(p[0]) - center_x) for p in obstacle)
+                        max_distance_y = max(abs(float(p[1]) - center_y) for p in obstacle)
+
+                        cube_marker = Marker()
+                        cube_marker.header.frame_id = "map"
+                        cube_marker.header.stamp = self.get_clock().now().to_msg()
+                        cube_marker.ns = "obstacle_cubes"
+                        cube_marker.id = i
+                        cube_marker.type = Marker.CUBE
+                        cube_marker.action = Marker.ADD
+
+                        cube_marker.pose.position.x = center_x
+                        cube_marker.pose.position.y = center_y
+                        cube_marker.pose.position.z = 0.2
+
+                        cube_marker.scale.x = max_distance_x * 2
+                        cube_marker.scale.y = max_distance_y * 2
+                        cube_marker.scale.z = 1.0
+
+                        cube_marker.color.r = 1.0
+                        cube_marker.color.g = 1.0
+                        cube_marker.color.b = 1.0
+                        cube_marker.color.a = 0.8
+
+                        marker_array.markers.append(cube_marker)
+
+            if self.graph_data:
+                if "node_dict" in self.graph_data:
+                    for i, (node_id, coords) in enumerate(self.graph_data["node_dict"].items()):
+                        node_marker = Marker()
+                        node_marker.header.frame_id = "map"
+                        node_marker.header.stamp = self.get_clock().now().to_msg()
+                        node_marker.ns = "graph_nodes"
+                        node_marker.id = i
+                        node_marker.type = Marker.SPHERE
+                        node_marker.action = Marker.ADD
+                        node_marker.pose.position.x = float(coords[0])
+                        node_marker.pose.position.y = float(coords[1])
+                        node_marker.pose.position.z = 0.1
+                        node_marker.scale.x = 0.3
+                        node_marker.scale.y = 0.3
+                        node_marker.scale.z = 0.3
+                        node_marker.color.r = 0.0
+                        node_marker.color.g = 0.0
+                        node_marker.color.b = 1.0
+                        node_marker.color.a = 1.0
+                        marker_array.markers.append(node_marker)
+
+                        text_marker = Marker()
+                        text_marker.header.frame_id = "map"
+                        text_marker.header.stamp = self.get_clock().now().to_msg()
+                        text_marker.ns = "graph_node_labels"
+                        text_marker.id = i
+                        text_marker.type = Marker.TEXT_VIEW_FACING
+                        text_marker.action = Marker.ADD
+                        text_marker.pose.position.x = float(coords[0])
+                        text_marker.pose.position.y = float(coords[1])
+                        text_marker.pose.position.z = 0.4
+                        text_marker.text = node_id
+                        text_marker.scale.z = 0.2 
+                        text_marker.color.r = 1.0
+                        text_marker.color.g = 1.0
+                        text_marker.color.b = 1.0
+                        text_marker.color.a = 1.0
+                        marker_array.markers.append(text_marker)
+
+            if marker_array.markers:
+                self.static_marker_publisher.publish(marker_array)
+                self.static_published = True
+                self.get_logger().info("Published static markers")
+
+    
+    def publish_shortest_path_markers(self):
+        """Publish shortest path markers as a separate topic at low frequency"""
+        # Check if there are any unpublished shortest paths
+        any_unpublished = False
+        for robot_id in self.shortest_paths:
+            if not self.shortest_path_published.get(robot_id, False):
+                any_unpublished = True
+                break
+                
+        if not any_unpublished:
+            return
+            
         marker_array = MarkerArray()
         
-        if self.map_data:
-            if "boundary_coords" in self.map_data:
-                boundary_marker = Marker()
-                boundary_marker.header.frame_id = "map"
-                boundary_marker.header.stamp = self.get_clock().now().to_msg()
-                boundary_marker.ns = "boundary"
-                boundary_marker.id = 0
-                boundary_marker.type = Marker.LINE_STRIP
-                boundary_marker.action = Marker.ADD
-                boundary_marker.scale.x = 0.1
-                boundary_marker.color.r = 0.0
-                boundary_marker.color.g = 0.0
-                boundary_marker.color.b = 0.0
-                boundary_marker.color.a = 1.0
-
-                for coord in self.map_data["boundary_coords"]:
-                    p = Point()
-                    p.x = float(coord[0])
-                    p.y = float(coord[1])
-                    p.z = 0.0
-                    boundary_marker.points.append(p)
-
-                if len(self.map_data["boundary_coords"]) > 0:
-                    p = Point()
-                    p.x = float(self.map_data["boundary_coords"][0][0])
-                    p.y = float(self.map_data["boundary_coords"][0][1])
-                    p.z = 0.0
-                    boundary_marker.points.append(p)
-
-                marker_array.markers.append(boundary_marker)
-
-        if self.map_data and "obstacle_list" in self.map_data:
-            for i, obstacle in enumerate(self.map_data["obstacle_list"]):
-                if len(obstacle) >= 3:
-                    center_x = float(sum(float(p[0]) for p in obstacle) / len(obstacle))
-                    center_y = float(sum(float(p[1]) for p in obstacle) / len(obstacle))
-
-                    max_distance_x = max(abs(float(p[0]) - center_x) for p in obstacle)
-                    max_distance_y = max(abs(float(p[1]) - center_y) for p in obstacle)
-
-                    cube_marker = Marker()
-                    cube_marker.header.frame_id = "map"
-                    cube_marker.header.stamp = self.get_clock().now().to_msg()
-                    cube_marker.ns = "obstacle_cubes"
-                    cube_marker.id = i
-                    cube_marker.type = Marker.CUBE
-                    cube_marker.action = Marker.ADD
-
-                    cube_marker.pose.position.x = center_x
-                    cube_marker.pose.position.y = center_y
-                    cube_marker.pose.position.z = 0.2
-
-                    cube_marker.scale.x = max_distance_x * 2
-                    cube_marker.scale.y = max_distance_y * 2
-                    cube_marker.scale.z = 1.0
-
-                    cube_marker.color.r = 1.0
-                    cube_marker.color.g = 1.0
-                    cube_marker.color.b = 1.0
-                    cube_marker.color.a = 0.8
-
-                    marker_array.markers.append(cube_marker)
-
-        if self.graph_data:
-            if "node_dict" in self.graph_data:
-                for i, (node_id, coords) in enumerate(self.graph_data["node_dict"].items()):
-                    node_marker = Marker()
-                    node_marker.header.frame_id = "map"
-                    node_marker.header.stamp = self.get_clock().now().to_msg()
-                    node_marker.ns = "graph_nodes"
-                    node_marker.id = i
-                    node_marker.type = Marker.SPHERE
-                    node_marker.action = Marker.ADD
-                    node_marker.pose.position.x = float(coords[0])
-                    node_marker.pose.position.y = float(coords[1])
-                    node_marker.pose.position.z = 0.1
-                    node_marker.scale.x = 0.3
-                    node_marker.scale.y = 0.3
-                    node_marker.scale.z = 0.3
-                    node_marker.color.r = 0.0
-                    node_marker.color.g = 0.0
-                    node_marker.color.b = 1.0
-                    node_marker.color.a = 1.0
-                    marker_array.markers.append(node_marker)
-
-                    text_marker = Marker()
-                    text_marker.header.frame_id = "map"
-                    text_marker.header.stamp = self.get_clock().now().to_msg()
-                    text_marker.ns = "graph_node_labels"
-                    text_marker.id = i
-                    text_marker.type = Marker.TEXT_VIEW_FACING
-                    text_marker.action = Marker.ADD
-                    text_marker.pose.position.x = float(coords[0])
-                    text_marker.pose.position.y = float(coords[1])
-                    text_marker.pose.position.z = 0.4
-                    text_marker.text = node_id
-                    text_marker.scale.z = 0.2 
-                    text_marker.color.r = 1.0
-                    text_marker.color.g = 1.0
-                    text_marker.color.b = 1.0
-                    text_marker.color.a = 1.0
-                    marker_array.markers.append(text_marker)
-
-        if marker_array.markers:
-            self.marker_publisher.publish(marker_array)
-    
-    def publish_shortest_path_markers(self, marker_array):
-        """Create and add shortest path markers to the marker array"""
         for robot_id, path_points in self.shortest_paths.items():
             if len(path_points) < 2:
                 continue
@@ -531,6 +627,14 @@ class RobotStateVisualizer(Node):
                     point_marker.color.a = 0.9
                     
                     marker_array.markers.append(point_marker)
+        
+        if marker_array.markers:
+            self.shortest_path_publisher.publish(marker_array)
+            self.get_logger().info("Published shortest path markers")
+            
+            # Mark all shortest paths as published
+            for robot_id in self.shortest_paths:
+                self.shortest_path_published[robot_id] = True
     
     
     def should_add_to_path(self, robot_id, x, y):
@@ -542,8 +646,10 @@ class RobotStateVisualizer(Node):
         distance = math.sqrt((x - last_x)**2 + (y - last_y)**2)
         return distance >= self.path_min_distance
     
-    def publish_path_markers(self, marker_array):
-        """Create and add path history markers to the marker array"""
+    def publish_path_markers(self):
+        """Publish path history markers as a separate topic at medium frequency"""
+        marker_array = MarkerArray()
+        
         for robot_id, path_points in self.robot_paths.items():
             if len(path_points) < 2:
                 continue
@@ -574,20 +680,20 @@ class RobotStateVisualizer(Node):
                 path_marker.points.append(p)
             
             marker_array.markers.append(path_marker)
+            
+        if marker_array.markers:
+            self.path_publisher.publish(marker_array)
+            self.get_logger().debug(f"Published path markers for {len(marker_array.markers)} robots")
 
-    def publish_trajectory_markers(self, marker_array):
-        """Create and add trajectory markers to the marker array"""
-        # Initialize the dictionary to track previous trajectory point counts if it doesn't exist
-        if not hasattr(self, 'previous_trajectory_counts'):
-            self.previous_trajectory_counts = {}
-
+    def publish_trajectory_markers(self):
+        """Publish trajectory markers as a separate topic at medium frequency"""
+        marker_array = MarkerArray()
+        delete_marker_array = MarkerArray()
+        
         # Track robot IDs in the current iteration
         current_robot_ids = set(self.robot_trajectories.keys())
         previous_robot_ids = set(self.previous_trajectory_counts.keys())
-
-        # Create a separate MarkerArray for deletion operations to prevent confusion with other markers
-        delete_marker_array = MarkerArray()
-
+        
         # Process all current trajectories
         for robot_id, trajectory_points in self.robot_trajectories.items():
             current_point_count = len(trajectory_points)
@@ -745,33 +851,18 @@ class RobotStateVisualizer(Node):
             # Remove this robot from the dictionary
             del self.previous_trajectory_counts[robot_id]
 
+        # Publish trajectory markers
+        if marker_array.markers:
+            self.trajectory_publisher.publish(marker_array)
+            self.get_logger().debug(f"Published trajectory markers for {len(current_robot_ids)} robots")
+            
         # If there are delete markers, publish them separately
         if delete_marker_array.markers:
-            self.marker_publisher.publish(delete_marker_array)
-    
-    def robot_trajectories_callback(self, msg):
-        """Callback for robot planned trajectories"""
-        # Extract and store planned trajectories from the message
-        for robot_state in msg.robot_states:
-            robot_id = robot_state.robot_id
-            
-            # If there are predicted states, convert them to trajectory points
-            if len(robot_state.pred_states) > 0:
-                trajectory_points = []
-                # # Start from current robot position
-                # trajectory_points.append((robot_state.x, robot_state.y))
-                
-                # Add the predicted states (taking only x, y coordinates)
-                for i in range(0, len(robot_state.pred_states), 3):
-                    if i + 1 < len(robot_state.pred_states):
-                        x = robot_state.pred_states[i]
-                        y = robot_state.pred_states[i + 1]
-                        trajectory_points.append((x, y))
-                self.robot_trajectories[robot_id] = None
-                self.robot_trajectories[robot_id] = trajectory_points
-    
-    def publish_robot_visualization(self):
-        """Publish all robot visualization markers at a fixed rate"""
+            self.trajectory_publisher.publish(delete_marker_array)
+            self.get_logger().debug(f"Published trajectory deletion markers")
+
+    def publish_robot_state_visualization(self):
+        """Publish robot state visualization markers at high frequency"""
         marker_array = MarkerArray()
         
         # Visualize robot real states
@@ -887,6 +978,7 @@ class RobotStateVisualizer(Node):
             
             self.tf_broadcaster.sendTransform(transform)
 
+            # 5. Target point visualization if available
             if robot_id in self.robot_target_points:
                 target_x, target_y, _ = self.robot_target_points[robot_id]
                 
@@ -941,19 +1033,11 @@ class RobotStateVisualizer(Node):
                 target_marker.color.a = 0.9
                 
                 marker_array.markers.append(target_marker)
-            
-        # Add dijkstra path
-        self.publish_shortest_path_markers(marker_array)
         
-        # Add path history markers
-        self.publish_path_markers(marker_array)
-        
-        # Add trajectory markers 
-        self.publish_trajectory_markers(marker_array)
-        
-        # Publish all markers
+        # Publish robot state markers
         if marker_array.markers:
-            self.marker_publisher.publish(marker_array)
+            self.robot_state_publisher.publish(marker_array)
+            self.get_logger().debug(f"Published robot state markers for {len(self.robot_real_states)} robots")
 
     def reset_path_evaluation(self):
         self.evaluation_completed = False
@@ -1034,13 +1118,6 @@ class RobotStateVisualizer(Node):
             self.shortest_paths
         )
 
-    def reset_path_evaluation(self):
-        """Reset the path evaluator for a new experiment"""
-        self.evaluation_completed = False
-        self.metrics_published = False
-        self.path_evaluator = PathEvaluator(self.get_logger())
-        self.get_logger().info("Path evaluation has been reset for a new experiment.")
-    
 def main(args=None):
     rclpy.init(args=args)
     visualizer = RobotStateVisualizer()
