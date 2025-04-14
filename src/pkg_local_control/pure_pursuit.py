@@ -1,6 +1,7 @@
 import numpy as np
 from rclpy.clock import Clock
 from rclpy.time import Duration
+import math
 
 class PurePursuit:
     def __init__(self, lookahead_distance, Ts, v_max, alpha, lookahead_style, lookahead_time, mpc_ts):
@@ -22,8 +23,53 @@ class PurePursuit:
         self.lookahead_style = lookahead_style
         self.lookahead_time = lookahead_time
         self.mpc_ts = mpc_ts
+    def is_forward(self, current_position, current_heading, trajectory_list):
+        """
+        Determine if the robot should drive forward or backward along the trajectory.
 
-    def find_lookahead_point(self, trajectory, current_position, traj_time, current_time):
+        Args:
+            current_position: Tuple (x, y) of current position.
+            current_heading: Current heading angle (theta) in radians.
+            trajectory_list: List of trajectory points [(x, y, theta), ...].
+
+        Returns:
+            bool: True if should drive forward, False if backward.
+        """
+        if len(trajectory_list) < 2:
+            return True  # Not enough points to infer direction — default to forward
+
+        current_position = np.array(current_position)
+
+        # Extract only the x, y components from the trajectory
+        trajectory_xy = np.array([[x, y] for x, y, _ in trajectory_list])
+
+        # Step 1: get the first point
+        first_point = trajectory_xy[0]
+
+        # Step 2: Get the check trajectory point
+        check_point = trajectory_xy[5]
+        traj_point = trajectory_xy[-1]
+
+        # Step 3: Compute the direction vector from first point to check point
+        path_direction = check_point - first_point
+        if np.linalg.norm(path_direction) == 0:
+            return True  # No direction — default to forward
+        path_direction /= np.linalg.norm(path_direction)
+        catch_direction = first_point-current_position
+        catch_direction /= np.linalg.norm(catch_direction)
+        traj_direction = traj_point - first_point
+        traj_direction /= np.linalg.norm(traj_direction)
+        # Step 4: Construct robot's heading vector
+        heading_vector = np.array([np.cos(current_heading), np.sin(current_heading)])
+        
+        # Step 5: Use dot product to determine alignment
+        check_dot = np.dot(heading_vector, path_direction)
+        catch_dot = np.dot(heading_vector, catch_direction)
+        traj_dot = np.dot(heading_vector, traj_direction)
+
+        return check_dot >= 0, catch_dot >= 0, traj_dot >= 0 # True → forward, False → backward
+    
+    def find_lookahead_point(self, trajectory, current_position,current_heading, traj_time, current_time):
         """
         Find the lookahead point on the planned trajectory.
         
@@ -32,12 +78,32 @@ class PurePursuit:
         :param traj_time: the time when trajectory generated.
         :return: The lookahead point (x, y, theta) or None if not found.
         """
-        if self.lookahead_style == 'dist':
-            for point in trajectory:
-                px, py, theta = point
-                distance = np.linalg.norm(np.array([px, py]) - np.array(current_position))
-                if distance >= self.lookahead_distance:
-                    return point
+        current_state = np.array([current_position[0], current_position[1], current_heading])
+
+        # Find the closest point and the look-ahead point
+        min_dist = float('inf')
+        closest_idx = 0
+        look_ahead_idx = None
+        path_forward, catch_forward, traj_forward = self.is_forward(current_position=current_position,current_heading=current_heading, trajectory_list=trajectory)
+        if self.lookahead_style == 'dist':   
+            if path_forward and (catch_forward or traj_forward):       
+                # Forward condition  
+                for i, point in enumerate(trajectory):
+                    point_state = np.array([point[0], point[1]])
+                    point_angle = math.atan2(point[1]-current_position[1], point[0]-current_position[0])
+                    dist = np.linalg.norm(current_state[:2] - point_state)
+                    if dist < min_dist:
+                        min_dist = dist
+                        closest_idx = i
+                    # Compute the relative angle between the point and the current heading
+                    relative_angle = point_angle - current_heading
+                    # Normalize the angle to the range [-pi, pi]
+                    relative_angle = (relative_angle + math.pi) % (2 * math.pi) - math.pi
+                    # Find the first point that is at least look_ahead_dist away
+                    if dist >= self.look_ahead_dist and abs(relative_angle) <= math.pi / 2:
+                        if look_ahead_idx is None:
+                            look_ahead_idx = i
+            return trajectory[look_ahead_idx]
         elif self.lookahead_style == 'time':
             
             target_time = current_time + self.lookahead_time
@@ -80,15 +146,15 @@ class PurePursuit:
         :return: Control inputs: (v, omega).
         """
         # Find the lookahead point on the trajectory
-        lookahead_point = self.find_lookahead_point(trajectory, current_position, traj_time, current_time)
+        lookahead_point = self.find_lookahead_point(trajectory, current_position,current_heading, traj_time, current_time)
         if lookahead_point is None:
             # If no lookahead point is found, return zero control commands.
-            return 0.0, 0.0
+            return 0.0, 0.0, current_position
 
         # Transform the lookahead point into the vehicle's coordinate frame.
         transformed_point = self.transform_to_vehicle_frame(current_position, current_heading, lookahead_point)
         if transformed_point is None:
-            return 0.0, 0.0
+            return 0.0, 0.0, current_position
 
         # Only the lateral (y) coordinate is used to compute curvature.
         _, y_vehicle = transformed_point
@@ -102,7 +168,7 @@ class PurePursuit:
         # Compute angular velocity: omega = v * curvature.
         omega = v * curvature
 
-        return v, omega
+        return v, omega, lookahead_point
 
     def update_state(self, state, control_input):
         """

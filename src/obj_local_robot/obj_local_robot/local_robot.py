@@ -517,6 +517,9 @@ class RobotNode(Node):
                 self.current_trajectory = None
                 self.current_trajectory = msg
                 self.get_logger().debug(f'Received valid trajectory with {len(msg.x)} points (min distance: {min_distance:.2f}m)')
+            else:
+                self.current_trajectory = None
+                self.current_trajectory = msg
 
         except Exception as e:
             self.get_logger().error(f'Error in trajectory_callback: {str(e)}')
@@ -811,7 +814,18 @@ class RobotNode(Node):
                     trajectory_list
                 )
             elif self.controller_type == 'lqr_update':
-                v, omega, target = self.lqr_update_controller.compute_control_commands(
+                if self.current_trajectory.traj_type == 'mpc':
+                    v, omega, target = self.lqr_update_controller.compute_control_commands(
+                        current_position,
+                        current_heading,
+                        trajectory_list,
+                        traj_time,
+                        current_time,
+                        self.target_point
+                    )
+                    
+                else:
+                    v, omega , target= self.pure_pursuit.compute_control_commands(
                     current_position,
                     current_heading,
                     trajectory_list,
@@ -852,6 +866,7 @@ class RobotNode(Node):
             self.send_command_to_gazebo(v, omega)
             
         except Exception as e:
+            self.send_command_to_gazebo(0,0)
             self.get_logger().error(f'Error in control_loop_callback: {str(e)}')
 
     def send_command_to_gazebo(self, v, omega):

@@ -347,7 +347,7 @@ class ClusterNode(Node):
             self.static_obstacles = self.gpc.inflated_map.obstacle_coords_list
             self.path_coords, self.path_times = self.gpc.get_robot_schedule(self.robot_id)
             self.expected_robots = set(int(robot_id) for robot_id in self.robot_start.keys())
-            self.get_logger().info(f'static obstacles{self.static_obstacles}')
+            self.get_logger().debug(f'static obstacles{self.static_obstacles}')
             
             # setup control
             self.setup_control_components()
@@ -481,6 +481,18 @@ class ClusterNode(Node):
                     return True
 
         return False
+    def _normalize_angle(self, angle):
+        """
+        Normalize angle to the range (-pi, pi].
+    
+        Parameters:
+            angle (float): angle in radians
+    
+        Returns:
+            float: normalized angle
+        """
+        return (angle + np.pi) % (2 * np.pi) - np.pi
+
     
     @staticmethod
     def generate_connecting_path(start, end, gap):
@@ -506,7 +518,7 @@ class ClusterNode(Node):
         direction = vec / dist
         num_steps = int(dist // gap)
 
-        path = []
+        path = [start]
         for i in range(1, num_steps + 1):
             x = start[0] + i * gap * direction[0]
             y = start[1] + i * gap * direction[1]
@@ -544,6 +556,7 @@ class ClusterNode(Node):
                 num_to_add = 10 - len(connecting_path)
                 last_point = ref_states[-1]
                 padding = np.tile(last_point, (num_to_add, 1))
+                self.get_logger().info(f'Connecting path is:{connecting_path}')
                 connecting_path = np.vstack((connecting_path, padding))
                         # self.ref_path = np.vstack((self._state, ref_states))
                                     
@@ -625,7 +638,7 @@ class ClusterNode(Node):
                 traj_msg.x = []
                 traj_msg.y = []
                 traj_msg.theta = []
-
+                traj_msg.traj_type = 'ref'
                 for state in self.ref_path:
                     if isinstance(state, np.ndarray):
                         traj_msg.x.append(float(state[0]))
@@ -641,7 +654,7 @@ class ClusterNode(Node):
             traj_msg.x = []
             traj_msg.y = []
             traj_msg.theta = []
-
+            traj_msg.traj_type = 'mpc'
             for state in self.pred_states:
                 if isinstance(state, np.ndarray):
                     traj_msg.x.append(float(state[0]))
