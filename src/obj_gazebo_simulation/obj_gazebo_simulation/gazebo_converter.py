@@ -61,7 +61,7 @@ class RobotControlConverter(Node):
         self.timer_callback_group = MutuallyExclusiveCallbackGroup()
         
         # Create QoS profiles for reliable communication
-        self.reliable_qos = QoSProfile(
+        self.volatile_qos = QoSProfile(
             reliability=QoSReliabilityPolicy.RELIABLE,
             durability=QoSDurabilityPolicy.VOLATILE,
             history=QoSHistoryPolicy.KEEP_LAST,
@@ -73,7 +73,7 @@ class RobotControlConverter(Node):
             Odometry,
             f'/robot_{self.robot_id}/odom',
             self.odom_callback,
-            self.reliable_qos,
+            self.volatile_qos,
             callback_group=self.odom_callback_group
         )
         
@@ -81,21 +81,21 @@ class RobotControlConverter(Node):
         self.cmd_vel_pub = self.create_publisher(
             Twist,
             f'/robot_{self.robot_id}/cmd_vel',
-            self.reliable_qos
+            self.volatile_qos
         )
         
         # Publisher for robot state
         self.state_pub = self.create_publisher(
             GazeboToManagerState,
             f'/robot_{self.robot_id}/sim_state',
-            self.reliable_qos
+            self.volatile_qos
         )
         
         # Publisher for robot state without noise
         self.real_state_pub = self.create_publisher(
             GazeboToManagerState,
             f'/robot_{self.robot_id}/real_state',
-            self.reliable_qos
+            self.volatile_qos
         )
         
         # Initialize robot state

@@ -13,6 +13,8 @@ from rclpy.node import Node
 from threading import Event
 import math
 from msg_interfaces.msg import PerformanceMetricsArray, RobotToRvizStatus
+from rclpy.qos import QoSProfile, QoSReliabilityPolicy, QoSHistoryPolicy, QoSDurabilityPolicy
+
 
 class AutoTest(Node):
     def __init__(self):
@@ -29,12 +31,19 @@ class AutoTest(Node):
         self.current_latency = 0.0
         self.workspace_root = os.getcwd()
         self.failure_type = None
-                
+        
+        self.reliable_qos = QoSProfile(
+            reliability=QoSReliabilityPolicy.RELIABLE,
+            history=QoSHistoryPolicy.KEEP_LAST,
+            durability=QoSDurabilityPolicy.TRANSIENT_LOCAL,
+            depth=10
+        )
+        
         self.metrics_subscription = self.create_subscription(
             PerformanceMetricsArray,
             '/performance_metrics',
             self.metrics_callback,
-            10
+            self.reliable_qos 
         )
         
         self.get_logger().info('AutoTest node initialized successfully')
@@ -242,7 +251,7 @@ class AutoTest(Node):
                     RobotToRvizStatus,
                     f'/robot_{robot_id}/status',
                     make_callback(robot_id),
-                    10
+                    self.reliable_qos
                 )
                 self._status_subscriptions.append(subscription)
                 self.get_logger().info(f'Created status subscription for robot {robot_id}')

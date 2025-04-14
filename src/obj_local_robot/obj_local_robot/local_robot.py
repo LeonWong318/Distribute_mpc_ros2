@@ -212,6 +212,14 @@ class RobotNode(Node):
             depth=10
         )
         
+        self.volatile_qos = QoSProfile(
+            reliability=QoSReliabilityPolicy.RELIABLE,
+            history=QoSHistoryPolicy.KEEP_LAST,
+            durability=QoSDurabilityPolicy.VOLATILE,
+            depth=10
+        )
+        
+        
         # Create registration service client
         self.register_client = self.create_client(
             RegisterRobot,
@@ -233,7 +241,7 @@ class RobotNode(Node):
             LaserScan,
             f'/robot_{self.robot_id}/f_scan',
             self.front_laserscan_callback,
-            self.best_effort_qos,
+            self.volatile_qos,
             callback_group=self.callback_group
         )
 
@@ -241,7 +249,7 @@ class RobotNode(Node):
             LaserScan,
             f'/robot_{self.robot_id}/b_scan',
             self.back_laserscan_callback,
-            self.best_effort_qos,
+            self.volatile_qos,
             callback_group=self.callback_group
         )
         
@@ -250,7 +258,7 @@ class RobotNode(Node):
             ContactsState,
             f'/robot_{self.robot_id}/robot_collision',
             self.collision_callback,
-            self.best_effort_qos,
+            self.volatile_qos,
             callback_group=self.callback_group
         )
     
