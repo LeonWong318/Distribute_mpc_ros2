@@ -574,13 +574,26 @@ class RobotStateVisualizer(Node):
                 path_marker.points.append(p)
             
             marker_array.markers.append(path_marker)
-    
+
     def publish_trajectory_markers(self, marker_array):
         """Create and add trajectory markers to the marker array"""
+        # Initialize the dictionary to track previous trajectory point counts if it doesn't exist
+        if not hasattr(self, 'previous_trajectory_counts'):
+            self.previous_trajectory_counts = {}
+
+        # Track robot IDs in the current iteration
+        current_robot_ids = set(self.robot_trajectories.keys())
+        previous_robot_ids = set(self.previous_trajectory_counts.keys())
+
+        # Create a separate MarkerArray for deletion operations to prevent confusion with other markers
+        delete_marker_array = MarkerArray()
+
+        # Process all current trajectories
         for robot_id, trajectory_points in self.robot_trajectories.items():
-            if len(trajectory_points) < 2:
-                continue
-            
+            current_point_count = len(trajectory_points)
+            previous_point_count = self.previous_trajectory_counts.get(robot_id, 0)
+
+            # Trajectory line marker
             trajectory_marker = Marker()
             trajectory_marker.header.frame_id = "map"
             trajectory_marker.header.stamp = self.get_clock().now().to_msg()
@@ -588,83 +601,153 @@ class RobotStateVisualizer(Node):
             trajectory_marker.id = robot_id
             trajectory_marker.type = Marker.LINE_STRIP
             trajectory_marker.action = Marker.ADD
-            
+
             trajectory_marker.scale.x = 0.05  # Line width
-            
+
             # Orange color for planned trajectories
             trajectory_marker.color.r = 1.0
             trajectory_marker.color.g = 0.5
             trajectory_marker.color.b = 0.0
             trajectory_marker.color.a = 0.7  # Slightly transparent
-            
-            # Add all points in the trajectory
-            for point in trajectory_points:
-                p = Point()
-                p.x = point[0]
-                p.y = point[1]
-                p.z = 0.05  # Slightly above ground to avoid z-fighting
-                trajectory_marker.points.append(p)
-            
-            # Add trajectory line marker to array
-            marker_array.markers.append(trajectory_marker)
-            
-            for i, point in enumerate(trajectory_points):
-                
-                # Create point marker (sphere)
-                point_marker = Marker()
-                point_marker.header.frame_id = "map"
-                point_marker.header.stamp = self.get_clock().now().to_msg()
-                point_marker.ns = "trajectory_points"
-                # Unique ID for each point: robot_id * 1000 + point_index
-                point_marker.id = robot_id * 1000 + i
-                point_marker.type = Marker.SPHERE
-                point_marker.action = Marker.ADD
-                
-                point_marker.pose.position.x = point[0]
-                point_marker.pose.position.y = point[1]
-                point_marker.pose.position.z = 0.07  # Slightly above the line
-                
-                # Small sphere
-                point_marker.scale.x = 0.15
-                point_marker.scale.y = 0.15
-                point_marker.scale.z = 0.15
-                
-                # Color slightly different from trajectory line (more yellowish)
-                point_marker.color.r = 1.0
-                point_marker.color.g = 0.8
-                point_marker.color.b = 0.0
-                point_marker.color.a = 0.9
-                
-                marker_array.markers.append(point_marker)
-                
-                # Create sequence number text marker
-                text_marker = Marker()
-                text_marker.header.frame_id = "map"
-                text_marker.header.stamp = self.get_clock().now().to_msg()
-                text_marker.ns = "trajectory_numbers"
-                # Unique ID for each text: robot_id * 1000 + point_index
-                text_marker.id = robot_id * 1000 + i
-                text_marker.type = Marker.TEXT_VIEW_FACING
-                text_marker.action = Marker.ADD
-                
-                # Position text slightly offset from the point
-                text_marker.pose.position.x = point[0] + 0.15
-                text_marker.pose.position.y = point[1] + 0.15
-                text_marker.pose.position.z = 0.1  # Above the point
-                
-                # Set sequence number as text (starting from 1)
-                text_marker.text = str(i + 1)
-                
-                # Small text size to avoid overlaps
-                text_marker.scale.z = 0.15
-                
-                # White text with full opacity
-                text_marker.color.r = 1.0
-                text_marker.color.g = 1.0
-                text_marker.color.b = 1.0
-                text_marker.color.a = 1.0
-                
-                marker_array.markers.append(text_marker)
+
+            # Only add trajectory if there are enough points
+            if len(trajectory_points) >= 2:
+                # Add all trajectory points
+                for point in trajectory_points:
+                    p = Point()
+                    p.x = point[0]
+                    p.y = point[1]
+                    p.z = 0.05  # Slightly above ground to avoid z-fighting
+                    trajectory_marker.points.append(p)
+
+                # Add trajectory line marker to array
+                marker_array.markers.append(trajectory_marker)
+
+                # Add markers for each trajectory point
+                for i, point in enumerate(trajectory_points):
+                    # Create point marker (sphere)
+                    point_marker = Marker()
+                    point_marker.header.frame_id = "map"
+                    point_marker.header.stamp = self.get_clock().now().to_msg()
+                    point_marker.ns = "trajectory_points"
+                    # Unique ID for each point: robot_id * 1000 + point_index
+                    point_marker.id = robot_id * 1000 + i
+                    point_marker.type = Marker.SPHERE
+                    point_marker.action = Marker.ADD
+
+                    point_marker.pose.position.x = point[0]
+                    point_marker.pose.position.y = point[1]
+                    point_marker.pose.position.z = 0.07  # Slightly above the line
+
+                    # Small sphere
+                    point_marker.scale.x = 0.15
+                    point_marker.scale.y = 0.15
+                    point_marker.scale.z = 0.15
+
+                    # Color slightly different from trajectory line (more yellowish)
+                    point_marker.color.r = 1.0
+                    point_marker.color.g = 0.8
+                    point_marker.color.b = 0.0
+                    point_marker.color.a = 0.9
+
+                    marker_array.markers.append(point_marker)
+
+                    # Create sequence number text marker
+                    text_marker = Marker()
+                    text_marker.header.frame_id = "map"
+                    text_marker.header.stamp = self.get_clock().now().to_msg()
+                    text_marker.ns = "trajectory_numbers"
+                    # Unique ID for each text: robot_id * 1000 + point_index
+                    text_marker.id = robot_id * 1000 + i
+                    text_marker.type = Marker.TEXT_VIEW_FACING
+                    text_marker.action = Marker.ADD
+
+                    # Position text slightly offset from the point
+                    text_marker.pose.position.x = point[0] + 0.15
+                    text_marker.pose.position.y = point[1] + 0.15
+                    text_marker.pose.position.z = 0.1  # Above the point
+
+                    # Set sequence number as text (starting from 1)
+                    text_marker.text = str(i + 1)
+
+                    # Small text size to avoid overlaps
+                    text_marker.scale.z = 0.15
+
+                    # White text with full opacity
+                    text_marker.color.r = 1.0
+                    text_marker.color.g = 1.0
+                    text_marker.color.b = 1.0
+                    text_marker.color.a = 1.0
+
+                    marker_array.markers.append(text_marker)
+            else:
+                # If not enough trajectory points, just send a delete command for the trajectory
+                trajectory_marker.action = Marker.DELETE
+                delete_marker_array.markers.append(trajectory_marker)
+
+            # If current point count is less than previous, delete excess points
+            if current_point_count < previous_point_count:
+                for i in range(current_point_count, previous_point_count):
+                    # Delete excess point markers
+                    delete_point_marker = Marker()
+                    delete_point_marker.header.frame_id = "map"
+                    delete_point_marker.header.stamp = self.get_clock().now().to_msg()
+                    delete_point_marker.ns = "trajectory_points"
+                    delete_point_marker.id = robot_id * 1000 + i
+                    delete_point_marker.action = Marker.DELETE
+                    delete_marker_array.markers.append(delete_point_marker)
+
+                    # Delete excess text markers
+                    delete_text_marker = Marker()
+                    delete_text_marker.header.frame_id = "map"
+                    delete_text_marker.header.stamp = self.get_clock().now().to_msg()
+                    delete_text_marker.ns = "trajectory_numbers"
+                    delete_text_marker.id = robot_id * 1000 + i
+                    delete_text_marker.action = Marker.DELETE
+                    delete_marker_array.markers.append(delete_text_marker)
+
+            # Update the trajectory point count record
+            self.previous_trajectory_counts[robot_id] = current_point_count
+
+        # Clean up trajectories for robots that no longer exist
+        robots_to_remove = previous_robot_ids - current_robot_ids
+        for robot_id in robots_to_remove:
+            # Delete trajectory line
+            delete_trajectory = Marker()
+            delete_trajectory.header.frame_id = "map"
+            delete_trajectory.header.stamp = self.get_clock().now().to_msg()
+            delete_trajectory.ns = "trajectories"
+            delete_trajectory.id = robot_id
+            delete_trajectory.action = Marker.DELETE
+            delete_marker_array.markers.append(delete_trajectory)
+
+            # Delete all trajectory points and text for this robot
+            previous_point_count = self.previous_trajectory_counts[robot_id]
+            for i in range(previous_point_count):
+                # Delete point marker
+                delete_point = Marker()
+                delete_point.header.frame_id = "map"
+                delete_point.header.stamp = self.get_clock().now().to_msg()
+                delete_point.ns = "trajectory_points"
+                delete_point.id = robot_id * 1000 + i
+                delete_point.action = Marker.DELETE
+                delete_marker_array.markers.append(delete_point)
+
+                # Delete text marker
+                delete_text = Marker()
+                delete_text.header.frame_id = "map"
+                delete_text.header.stamp = self.get_clock().now().to_msg()
+                delete_text.ns = "trajectory_numbers"
+                delete_text.id = robot_id * 1000 + i
+                delete_text.action = Marker.DELETE
+                delete_marker_array.markers.append(delete_text)
+
+            # Remove this robot from the dictionary
+            del self.previous_trajectory_counts[robot_id]
+
+        # If there are delete markers, publish them separately
+        if delete_marker_array.markers:
+            self.marker_publisher.publish(delete_marker_array)
     
     def robot_trajectories_callback(self, msg):
         """Callback for robot planned trajectories"""
