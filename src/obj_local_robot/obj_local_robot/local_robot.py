@@ -481,6 +481,7 @@ class RobotNode(Node):
             # Check if state is initialized
             if self._state is None:
                 self.get_logger().warn('Received trajectory but state is not initialized yet')
+                self.current_trajectory = None
                 self.current_trajectory = msg
                 return
             
@@ -505,6 +506,7 @@ class RobotNode(Node):
                 self.update_robot_status(self.STATUS_EMERGENCY_STOP)
             elif self.current_status == self.STATUS_EMERGENCY_STOP or self.current_status == self.STATUS_RUNNING:
                 self.update_robot_status(self.STATUS_RUNNING)
+                self.current_trajectory = None
                 self.current_trajectory = msg
                 self.get_logger().debug(f'Received valid trajectory with {len(msg.x)} points (min distance: {min_distance:.2f}m)')
 

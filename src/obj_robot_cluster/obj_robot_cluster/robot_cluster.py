@@ -539,7 +539,15 @@ class ClusterNode(Node):
                 end=ref_states[-1],
                 gap=0.2  # set your preferred step gap
             )
-            # self.ref_path = np.vstack((self._state, ref_states))
+            # Ensure connecting_path has at least 10 points
+            if len(connecting_path) < 10:
+                num_to_add = 10 - len(connecting_path)
+                last_point = ref_states[-1]
+                padding = np.tile(last_point, (num_to_add, 1))
+                connecting_path = np.vstack((connecting_path, padding))
+                        # self.ref_path = np.vstack((self._state, ref_states))
+            self.ref_path = None
+            
             self.ref_path = np.vstack((connecting_path, ref_states[-1]))
             self.get_logger().debug(f'Local ref_states:{ref_states}')
             

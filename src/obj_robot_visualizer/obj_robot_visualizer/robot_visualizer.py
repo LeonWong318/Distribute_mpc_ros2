@@ -767,7 +767,7 @@ class RobotStateVisualizer(Node):
                         x = robot_state.pred_states[i]
                         y = robot_state.pred_states[i + 1]
                         trajectory_points.append((x, y))
-                
+                self.robot_trajectories[robot_id] = None
                 self.robot_trajectories[robot_id] = trajectory_points
     
     def publish_robot_visualization(self):
