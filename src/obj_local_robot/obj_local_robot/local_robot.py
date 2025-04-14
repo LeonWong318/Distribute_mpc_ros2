@@ -830,7 +830,8 @@ class RobotNode(Node):
                     current_heading,
                     trajectory_list,
                     traj_time,
-                    current_time
+                    current_time,
+                    self.target_point
                 )
                 self.publish_target_point(target)
                 

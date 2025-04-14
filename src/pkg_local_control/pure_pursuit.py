@@ -100,9 +100,11 @@ class PurePursuit:
                     # Normalize the angle to the range [-pi, pi]
                     relative_angle = (relative_angle + math.pi) % (2 * math.pi) - math.pi
                     # Find the first point that is at least look_ahead_dist away
-                    if dist >= self.look_ahead_dist and abs(relative_angle) <= math.pi / 2:
+                    if dist >= self.lookahead_distance and abs(relative_angle) <= math.pi / 2:
                         if look_ahead_idx is None:
                             look_ahead_idx = i
+            if look_ahead_idx is None:
+                look_ahead_idx = len(trajectory) -1
             return trajectory[look_ahead_idx]
         elif self.lookahead_style == 'time':
             
@@ -135,7 +137,7 @@ class PurePursuit:
         y_vehicle = dx * np.sin(-current_heading) + dy * np.cos(-current_heading)
         return x_vehicle, y_vehicle
 
-    def compute_control_commands(self, current_position, current_heading, trajectory, traj_time, current_time):
+    def compute_control_commands(self, current_position, current_heading, trajectory, traj_time, current_time, target_point):
         """
         Compute the control commands (v, omega) based on Pure Pursuit.
         
@@ -149,7 +151,7 @@ class PurePursuit:
         lookahead_point = self.find_lookahead_point(trajectory, current_position,current_heading, traj_time, current_time)
         if lookahead_point is None:
             # If no lookahead point is found, return zero control commands.
-            return 0.0, 0.0, current_position
+            lookahead_point = target_point
 
         # Transform the lookahead point into the vehicle's coordinate frame.
         transformed_point = self.transform_to_vehicle_frame(current_position, current_heading, lookahead_point)
