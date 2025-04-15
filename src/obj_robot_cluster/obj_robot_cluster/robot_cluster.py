@@ -403,10 +403,10 @@ class ClusterNode(Node):
             step_size (float): step size for interpolation from current state to ref start
 
         Returns:
-            bool: True if any collision is detected, False otherwise
+            
         """
         if ref_states.shape[0] == 0:
-            return False  # Nothing to check
+            return False, 'end' # Nothing to check
 
         # Convert obstacles to polygons
         obstacle_polygons = [Polygon(ob) for ob in self.static_obstacles]
@@ -415,7 +415,10 @@ class ClusterNode(Node):
         def is_colliding(x, y):
             point = Point(x, y)
             return any(poly.contains(point) for poly in obstacle_polygons)
-
+        
+        connecting_end_check = True
+        connecting_first_check = True
+        ref_check = True
         # 1. Check path from current state to end of ref_states
         x0, y0 = self._state[:2]
         x1, y1 = ref_states[-1, :2]
@@ -425,14 +428,27 @@ class ClusterNode(Node):
         for i in range(num_steps):
             pt = line.interpolate(i / (num_steps - 1), normalized=True)
             if is_colliding(pt.x, pt.y):
-                return True
-
-        # 2. Check each point in ref_states
+                connecting_end_check = False
+        # 2. check path from current state to first of ref_states
+        x2, y2 = ref_states[0,:2]
+        line_1 = LineString([(x0, y0), (x2, y2)])
+        length_1 = line_1.length
+        num_steps_1 = max(2, int(length_1 / step_size))
+        for i in range(num_steps_1):
+            pt = line_1.interpolate(i / (num_steps_1 - 1), normalized=True)
+            if is_colliding(pt.x, pt.y):
+                connecting_first_check = False
+        # 3. Check each point in ref_states
         for x, y, _ in ref_states:
             if is_colliding(x, y):
-                return True
+                ref_check = False
 
-        return False
+        if connecting_end_check:
+            return False, 'end'
+        elif connecting_first_check and ref_check:
+            return False, 'first'
+        else:
+            return True, 'collision'
     
     def check_dynamic_obstacles(self, ref_states, robot_states_for_control, num_others, state_dim, horizon, radius=3):
         """
@@ -546,21 +562,26 @@ class ClusterNode(Node):
                 current_pos=current_pos,
                 idx_check_range=10
             )
-            connecting_path = self.generate_connecting_path(
+            connecting_end_path = self.generate_connecting_path(
                 start=self._state,
                 end=ref_states[-1],
                 gap=0.2  # set your preferred step gap
             )
+            connecting_first_path = self.generate_connecting_path(
+                start=self._state,
+                end=ref_states[0],
+                gap=0.2
+            )
             # Ensure connecting_path has at least 10 points
-            if len(connecting_path) < 10:
-                num_to_add = 10 - len(connecting_path)
+            if len(connecting_end_path) < 10:
+                num_to_add = 10 - len(connecting_end_path)
                 last_point = ref_states[-1]
                 padding = np.tile(last_point, (num_to_add, 1))
-                self.get_logger().info(f'Connecting path is:{connecting_path}')
-                connecting_path = np.vstack((connecting_path, padding))
-                        # self.ref_path = np.vstack((self._state, ref_states))
+                self.get_logger().info(f'Connecting path is:{connecting_end_path}')
+                connecting_end_path = np.vstack((connecting_end_path, padding))
+                    
                                     
-            self.ref_path = np.vstack((connecting_path, ref_states[-1]))
+            
             self.get_logger().debug(f'Local ref_states:{ref_states}')
             
             self.controller.set_ref_states(ref_states, ref_speed=ref_speed)
@@ -585,9 +606,16 @@ class ClusterNode(Node):
                     idx_pred += state_dim * horizon
                 
                 start_time = self.get_clock().now()
-                if self.check_static_obstacles_on_the_way(ref_states=ref_states)==False and \
+                check_static, path_type = self.check_static_obstacles_on_the_way(ref_states=ref_states)
+                
+                if  check_static is False and \
                     self.check_dynamic_obstacles(ref_states=ref_states, robot_states_for_control=robot_states_for_control,
                                                  num_others=num_others,state_dim=state_dim,horizon=horizon)==False:
+                    
+                    if path_type == 'first':
+                        self.ref_path = np.vstack((connecting_first_path, ref_states))
+                    else:
+                        self.ref_path = np.vstack((connecting_end_path, ref_states[-1]))
                     self.use_ref_path = True
                     self.converge_flag = True
                     self.pred_states = self.ref_path
