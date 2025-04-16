@@ -1,0 +1,2 @@
+Scenario,Latency,Success Rate,Timeout Rate,Collision Rate,Avg Execution Time,Avg Deviation,Avg Path Length,Avg Linear Smoothness,Avg Angular Smoothness
+schedule_demo_data,0.0,0.86,0.02,0.12,57.272983065116264,4.908949000520346,51.0,1566.9041883112645,542.1203332926979
