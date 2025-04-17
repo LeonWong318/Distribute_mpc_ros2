@@ -700,11 +700,11 @@ class RobotNode(Node):
                 self.send_command_to_gazebo(linear_speed, angular_correction)
             else:
                 linear_speed = 0.25  # move forward
-                angular_correction = -angle_to_target_relative * 0.5  # steer away
+                angular_correction = angle_to_target_relative * 0.5  # steer away
                 self.send_command_to_gazebo(linear_speed, angular_correction)
         else:
             self.get_logger().debug(f'Cannot move forward since obstacle: {self.front_obstacles[0]}')
-            angular_correction = -angle_to_target_relative * 0.5
+            angular_correction = angle_to_target_relative * 0.5
             self.send_command_to_gazebo(0, angular_correction)
 
     def normalize_angle(self, angle):
