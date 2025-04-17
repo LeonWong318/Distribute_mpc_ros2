@@ -193,7 +193,7 @@ class RobotNode(Node):
         self.front_distances = None
         self.back_obstacles = None
         self.back_distances = None
-        
+        self.target = None
         # Create callback group
         self.callback_group = ReentrantCallbackGroup()
         self.heartbeat_callback_group = MutuallyExclusiveCallbackGroup()
@@ -637,6 +637,11 @@ class RobotNode(Node):
                 min_distance = distance
                 angle_to_closest_obstacle = angle_relative
 
+        target_dx = self.target[0] - robot_x
+        target_dy = self.target[1] - robot_y
+        angle_to_target_global = math.atan2(target_dy, target_dx)
+        angle_to_target_relative = self.normalize_angle(angle_to_target_global-robot_theta)
+
         # If obstacle is far enough, stop safety stop
         if min_distance > 1.2:
             self.send_command_to_gazebo(0, 0)
@@ -647,11 +652,16 @@ class RobotNode(Node):
         if self.laser_processor.is_back_clear(self.back_obstacles, self.back_distances, 1.5):
             
             linear_speed = -0.25  # move backward
-            angular_correction = angle_to_closest_obstacle * 0.5  # steer away
-            self.send_command_to_gazebo(linear_speed, angular_correction)
+            if min_distance  <  0.8:
+                angular_correction = angle_to_closest_obstacle * 0.5  # steer away
+                self.send_command_to_gazebo(linear_speed, angular_correction)
+            else:
+                angular_correction = angle_to_target_relative * 0.5
+                self.send_command_to_gazebo(linear_speed, angular_correction)
         else:
             self.get_logger().debug(f'Cannot move backward since obstacle: {self.back_obstacles[0]}')
-            self.send_command_to_gazebo(0, -0.5)
+            angular_correction = angle_to_target_relative * 0.5
+            self.send_command_to_gazebo(0, angular_correction)
 
     def back_safety_stop_handling(self):
         
@@ -672,7 +682,10 @@ class RobotNode(Node):
             if distance < min_distance:
                 min_distance = distance
                 angle_to_closest_obstacle = angle_relative
-
+        target_dx = self.target[0] - robot_x
+        target_dy = self.target[1] - robot_y
+        angle_to_target_global = math.atan2(target_dy, target_dx)
+        angle_to_target_relative = self.normalize_angle(angle_to_target_global-robot_theta)
         # If obstacle is far enough, stop safety stop
         if min_distance > 1.2:
             self.send_command_to_gazebo(0, 0)
@@ -681,13 +694,18 @@ class RobotNode(Node):
 
         # Otherwise, front off if front is clear
         if self.laser_processor.is_front_clear(self.front_obstacles, self.front_distances, 1.5):
-            
-            linear_speed = 0.25  # move forward
-            angular_correction = -angle_to_closest_obstacle * 0.5  # steer away
-            self.send_command_to_gazebo(linear_speed, angular_correction)
+            if min_distance <0.8:
+                linear_speed = 0.25  # move forward
+                angular_correction = -angle_to_closest_obstacle * 0.5  # steer away
+                self.send_command_to_gazebo(linear_speed, angular_correction)
+            else:
+                linear_speed = 0.25  # move forward
+                angular_correction = -angle_to_target_relative * 0.5  # steer away
+                self.send_command_to_gazebo(linear_speed, angular_correction)
         else:
             self.get_logger().debug(f'Cannot move forward since obstacle: {self.front_obstacles[0]}')
-            self.send_command_to_gazebo(0, -0.5)
+            angular_correction = -angle_to_target_relative * 0.5
+            self.send_command_to_gazebo(0, angular_correction)
 
     def normalize_angle(self, angle):
         """Normalize angle to [-pi, pi]."""
@@ -815,7 +833,7 @@ class RobotNode(Node):
                 )
             elif self.controller_type == 'lqr_update':
                 if self.current_trajectory.traj_type == 'mpc':
-                    v, omega, target = self.lqr_update_controller.compute_control_commands(
+                    v, omega, self.target = self.lqr_update_controller.compute_control_commands(
                         current_position,
                         current_heading,
                         trajectory_list,
@@ -825,7 +843,7 @@ class RobotNode(Node):
                     )
                     
                 else:
-                    v, omega , target= self.pure_pursuit.compute_control_commands(
+                    v, omega , self.target= self.pure_pursuit.compute_control_commands(
                     current_position,
                     current_heading,
                     trajectory_list,
@@ -833,7 +851,7 @@ class RobotNode(Node):
                     current_time,
                     self.target_point
                 )
-                self.publish_target_point(target)
+                self.publish_target_point(self.target)
                 
             elif self.controller_type == 'cbf':
 
