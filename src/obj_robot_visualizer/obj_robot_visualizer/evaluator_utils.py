@@ -8,8 +8,11 @@ class PathEvaluator:
         self.logger = logger
         self.robot_start_times = {}
         self.robot_end_times = {}
-        self.previous_status = {}
+        self.current_status = {}
         self.robot_states = defaultdict(list)
+
+        self.start_recorded = {}
+        self.finish_recorded = {}
         
         self.STATUS_INITIALIZING = 0
         self.STATUS_IDLE = 1
@@ -20,36 +23,40 @@ class PathEvaluator:
         self.STATUS_COLLISION = 6
     
     def update_robot_status(self, robot_id, status):
-        if robot_id not in self.previous_status:
-            self.previous_status[robot_id] = status
-            return
-            
-        if status == self.STATUS_RUNNING and self.previous_status[robot_id] != self.STATUS_RUNNING:
+        if robot_id not in self.start_recorded:
+            self.start_recorded[robot_id] = False
+        if robot_id not in self.finish_recorded:
+            self.finish_recorded[robot_id] = False
+        
+        if status == self.STATUS_INITIALIZING and not self.start_recorded[robot_id]:
             self.robot_start_times[robot_id] = datetime.now()
             self.robot_states[robot_id] = []
+            self.start_recorded[robot_id] = True
             self.logger.info(f"Robot {robot_id} started running at {self.robot_start_times[robot_id]}")
             
-        elif status == self.STATUS_TARGET_REACHED and self.previous_status[robot_id] == self.STATUS_RUNNING:
+        elif status == self.STATUS_TARGET_REACHED and not self.finish_recorded[robot_id]:
             self.robot_end_times[robot_id] = datetime.now()
+            self.finish_recorded[robot_id] = True
             self.logger.info(f"Robot {robot_id} reached target at {self.robot_end_times[robot_id]}")
         
-        self.previous_status[robot_id] = status
+        self.current_status[robot_id] = status
     
     def reset(self):
         self.robot_start_times = {}
         self.robot_end_times = {}
-        self.previous_status = {}
+        self.current_status = {}
         self.robot_states = defaultdict(list)
+        self.start_recorded = False
+        self.finish_recorded = False
     
     def update_robot_state(self, robot_id, state_msg):
-        if self.previous_status.get(robot_id) == self.STATUS_RUNNING:
-            state_time = datetime.now()
-            self.robot_states[robot_id].append({
-                'x': state_msg.x,
-                'y': state_msg.y,
-                'theta': state_msg.theta,
-                'time': state_time
-            })
+        state_time = datetime.now()
+        self.robot_states[robot_id].append({
+            'x': state_msg.x,
+            'y': state_msg.y,
+            'theta': state_msg.theta,
+            'time': state_time
+        })
     
     def _point_to_line_segment_distance(self, point, line_start, line_end):
         line_vec = (line_end[0] - line_start[0], line_end[1] - line_start[1])
