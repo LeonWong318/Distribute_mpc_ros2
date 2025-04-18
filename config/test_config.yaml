@@ -4,6 +4,7 @@ iterations_per_latency: 20
 timeout_seconds: 300.0
 
 test_scenarios:
+<<<<<<< HEAD
   # - name: "test_data_new"
   #   map_path: "data/test_data_new/map.json"
   #   graph_path: "data/test_data_new/graph.json"
@@ -14,6 +15,18 @@ test_scenarios:
   #   latency_values: [0.0]
   #   iterations_per_latency: 1
   #   timeout_seconds: 150.0
+=======
+  # - name: "schedule_demo_data"
+  #   map_path: "data/schedule_demo_data/map.json"
+  #   graph_path: "data/schedule_demo_data/graph.json"
+  #   robot_start_path: "data/schedule_demo_data/robot_start.json"
+  #   robot_spec_path: "data/schedule_demo_data/schedule.csv"
+  #   world_file: "schedule_demo_data.world"
+  #   rviz_config_path: "src/obj_robot_visualizer/config/schedule_demo_data.rviz"
+  #   latency_values: [0.0,0.5,1.0]
+  #   iterations_per_latency: 50
+  #   timeout_seconds: 360.0
+>>>>>>> 2dc66e55bfa2c71715a906aad4a5de7144022ed8
 
   # - name: "test_data_cross"
   #   map_path: "data/test_data_cross/map.json"
@@ -33,6 +46,10 @@ test_scenarios:
     robot_spec_path: "data/test_data/schedule.csv"
     world_file: "test_data.world"
     rviz_config_path: "src/obj_robot_visualizer/config/test_data.rviz"
+<<<<<<< HEAD
     latency_values: [0.0]
+=======
+    latency_values: [0.0, 1.0]
+>>>>>>> 2dc66e55bfa2c71715a906aad4a5de7144022ed8
     iterations_per_latency: 50
     timeout_seconds: 200.0
