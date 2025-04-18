@@ -91,19 +91,6 @@ class MultiRobotSpawner(Node):
             ET.SubElement(diff_drive, "publish_wheel_tf").text = "true"
             ET.SubElement(diff_drive, "odometry_frame").text = "odom"
             ET.SubElement(diff_drive, "robot_base_frame").text = f"{robot_namespace}/chassis"
-    
-            # Add laser plugin
-            laser_sensor = root.find(".//sensor[@name='laser']")
-            if laser_sensor is not None:
-                laser_plugin = ET.SubElement(laser_sensor, "plugin")
-                laser_plugin.set("name", "laser")
-                laser_plugin.set("filename", "libgazebo_ros_ray_sensor.so")
-    
-                laser_ros = ET.SubElement(laser_plugin, "ros")
-                ET.SubElement(laser_ros, "namespace").text = f"/{robot_namespace}"
-                ET.SubElement(laser_ros, "argument").text = f"--ros-args --remap ~/out:={robot_namespace}/scan"
-    
-                ET.SubElement(laser_plugin, "output_type").text = "sensor_msgs/LaserScan"
             
             base_link = root.find(".//link[@name='base_footprint']")
             if base_link is not None:
