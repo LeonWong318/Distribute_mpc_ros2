@@ -112,7 +112,7 @@
       </visual>
       <sensor name='back_laser_link' type='ray'>
         <visualize>0</visualize>
-        <update_rate>12.5</update_rate>
+        <update_rate>25</update_rate>
         <ray>
           <scan>
             <horizontal>
@@ -145,7 +145,7 @@
       </sensor>
       <sensor name='front_laser_link' type='ray'>
         <visualize>0</visualize>
-        <update_rate>12.5</update_rate>
+        <update_rate>25</update_rate>
         <ray>
           <scan>
             <horizontal>

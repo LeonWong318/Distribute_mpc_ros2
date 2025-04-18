@@ -1,8 +1,8 @@
 # data path
 map_path: 'data/test_data/map.json'
 graph_path: 'data/test_data/graph.json'
-robot_start_path: 'data/test_data/robot_start_single.json'
-robot_spec_path: 'data/test_data/schedule_single.csv'
+robot_start_path: 'data/test_data/robot_start.json'
+robot_spec_path: 'data/test_data/schedule.csv'
 
 # config path
 mpc_config_path: 'config/mpc_default.yaml'
@@ -23,7 +23,7 @@ mpc_method: 'state_origin' #choose from state_fusion and state_origin
 
 # msg buffer config
 enable_gui: true
-mean_delay: 1.0
+mean_delay: 2.0
 stddev_delay: 0.1
 
 # gazebo converter config

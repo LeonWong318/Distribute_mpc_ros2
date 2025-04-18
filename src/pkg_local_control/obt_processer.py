@@ -116,6 +116,7 @@ class ObstacleProcessor:
         closest_obstacles, distances = self._filter_obstacles(map_obstacles, robot_pose)
         
         n = min(num_obstacles, closest_obstacles.shape[0])
+        
         return closest_obstacles[:n], distances
     
     def is_back_clear(self, back_obstacles, back_distances, min_safe_distance: float = 0.5):
@@ -164,3 +165,56 @@ class ObstacleProcessor:
             return True
         
         return False
+    
+    def is_location_occupied(self, location, sensor: LaserScan, robot_pose, from_front_laser=True):
+        """
+        Check whether the given location is occupied by an obstacle based on raw LaserScan data.
+
+        Args:
+            location: (x, y) tuple or np.ndarray representing map coordinates to check
+            sensor: LaserScan message
+            robot_pose: [x, y, theta] of the robot in map frame
+            from_front_laser: If True, use front laser; else, use back laser
+
+        Returns:
+            True if the location is within safety margin of any raw obstacle point, False otherwise.
+        """
+        # Choose the correct laser position and orientation
+        laser_offset = self.front_laser_offset if from_front_laser else self.back_laser_offset
+        laser_rotation = self.front_laser_rotation if from_front_laser else self.back_laser_rotation
+
+        # Extract valid laser scan points
+        angles = np.linspace(sensor.angle_min, sensor.angle_max, len(sensor.ranges))
+        ranges = np.array(sensor.ranges)
+        range_min = 0.2
+        range_max = self.max_obstacle_distance
+
+        valid = (~np.isnan(ranges)) & (ranges >= range_min) & (ranges <= range_max)
+        if not np.any(valid):
+            return False
+
+        # Convert to local laser frame
+        local_obstacles = np.vstack((
+            ranges[valid] * np.cos(angles[valid]),
+            ranges[valid] * np.sin(angles[valid])
+        )).T
+
+        # Transform to robot frame
+        laser_cos, laser_sin = np.cos(laser_rotation), np.sin(laser_rotation)
+        laser_rotation_matrix = np.array([[laser_cos, -laser_sin], [laser_sin, laser_cos]])
+        local_obstacles = np.dot(local_obstacles, laser_rotation_matrix.T) + laser_offset
+
+        # Transform to map frame
+        robot_x, robot_y, robot_theta = robot_pose
+        cos_theta, sin_theta = np.cos(robot_theta), np.sin(robot_theta)
+        rotation = np.array([[cos_theta, -sin_theta], [sin_theta, cos_theta]])
+        map_obstacles = np.dot(local_obstacles, rotation.T) + np.array([robot_x, robot_y])
+        # Check if there are any obstacles to compare
+        if map_obstacles.size == 0:
+            return False
+
+        # Check distance to the given location
+        location = np.array(location)
+        distances = np.linalg.norm(map_obstacles - location, axis=1)
+
+        return np.any(distances <= self.safety_margin)

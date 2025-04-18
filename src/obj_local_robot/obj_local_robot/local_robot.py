@@ -507,7 +507,7 @@ class RobotNode(Node):
                 min_distance = min(min_distance, distance)
 
             # Define threshold for acceptable distance (you can make this a parameter)
-            distance_threshold = 2.0  # meters
+            distance_threshold = 1.0  # meters
 
             if min_distance >= distance_threshold:
                 self.get_logger().warn(f'Current position too far from trajectory (min distance: {min_distance:.2f}m). Stopping robot until next update.')
@@ -542,8 +542,19 @@ class RobotNode(Node):
         self.get_logger().debug(f'Closest front obstacles: {closest_obstacles}')
         
         if self.front_safety_stop:
-            self.front_distances = distances
-            self.front_safety_stop_handling()
+            if closest_obstacles.shape[0] != 0:
+                self.front_distances = distances
+                self.front_obstacles = closest_obstacles
+                self.front_safety_stop_handling()
+            elif self.laser_processor.is_location_occupied(self.front_obstacles, msg, self._state, True):
+                self.front_distances = distances
+                self.front_safety_stop_handling()
+            else:
+                self.get_logger().debug('return to running')
+                self.front_distances = distances
+                self.front_obstacles = closest_obstacles
+                self.front_safety_stop = False
+                self.update_robot_status(self.STATUS_RUNNING)
         elif closest_obstacles.shape[0] != 0:
             self.send_command_to_gazebo(0, 0)
             self.update_robot_status(self.STATUS_SAFETY_STOP)
@@ -586,11 +597,22 @@ class RobotNode(Node):
         # self.back_obstacles = closest_obstacles
         # self.back_distances = distances
         
-        self.get_logger().debug(f'Closest back obstacles: {closest_obstacles}')
+        self.get_logger().info(f'Closest back obstacles: {closest_obstacles}')
         
         if self.back_safety_stop:
-            self.back_distances = distances
-            self.back_safety_stop_handling()
+            if closest_obstacles.shape[0] != 0:
+                self.back_distances = distances
+                self.back_obstacles = closest_obstacles
+                self.back_safety_stop_handling()
+            elif self.laser_processor.is_location_occupied(self.back_obstacles, msg, self._state, False):
+                self.back_distances = distances
+                self.back_safety_stop_handling()
+            else:
+                self.get_logger().debug('return to running')
+                self.back_distances = distances
+                self.back_obstacles = closest_obstacles
+                self.back_safety_stop = False
+                self.update_robot_status(self.STATUS_RUNNING)
         elif closest_obstacles.shape[0] != 0:
             self.send_command_to_gazebo(0, 0)
             self.update_robot_status(self.STATUS_SAFETY_STOP)
@@ -703,7 +725,7 @@ class RobotNode(Node):
                 angular_correction = angle_to_target_relative * 0.5  # steer away
                 self.send_command_to_gazebo(linear_speed, angular_correction)
         else:
-            self.get_logger().debug(f'Cannot move forward since obstacle: {self.front_obstacles[0]}')
+            self.get_logger().info(f'Cannot move forward since obstacle: {self.front_obstacles[0]}')
             angular_correction = angle_to_target_relative * 0.5
             self.send_command_to_gazebo(0, angular_correction)
 
