@@ -29,7 +29,7 @@ class PathEvaluator:
         if robot_id not in self.finish_recorded:
             self.finish_recorded[robot_id] = False
         
-        if status == self.STATUS_INITIALIZING and not self.start_recorded[robot_id]:
+        if status == self.STATUS_RUNNING and not self.start_recorded[robot_id]:
             self.robot_start_times[robot_id] = datetime.now()
             self.robot_states[robot_id] = []
             self.start_recorded[robot_id] = True
