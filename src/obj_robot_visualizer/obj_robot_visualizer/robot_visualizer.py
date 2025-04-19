@@ -1059,14 +1059,11 @@ class RobotStateVisualizer(Node):
         robot_ids = list(self.robot_statuses.keys())
 
         for robot_id in robot_ids:
-            self.get_logger().info(f"Robot {robot_id} status: {self.robot_statuses.get(robot_id)}")
-            self.get_logger().info(f"Robot {robot_id} in start_times: {robot_id in self.path_evaluator.robot_start_times}")
-            self.get_logger().info(f"Robot {robot_id} in end_times: {robot_id in self.path_evaluator.robot_end_times}")
+            self.get_logger().debug(f"Robot {robot_id} status: {self.robot_statuses.get(robot_id)}")
+            self.get_logger().debug(f"Robot {robot_id} in start_times: {robot_id in self.path_evaluator.robot_start_times}")
+            self.get_logger().debug(f"Robot {robot_id} in end_times: {robot_id in self.path_evaluator.robot_end_times}")
     
-        all_reached = self.path_evaluator.all_robots_reached_target(robot_ids)
-        self.get_logger().info(f"All robots reached target: {all_reached}")
-
-        if all_reached:
+        if self.path_evaluator.all_robots_reached_target(robot_ids):
             self.get_logger().info("All robots have reached their targets. Starting path evaluation...")
 
             evaluation_results = self.path_evaluator.evaluate_robot_paths(

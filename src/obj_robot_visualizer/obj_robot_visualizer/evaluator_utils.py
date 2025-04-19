@@ -117,7 +117,7 @@ class PathEvaluator:
             area += 0.5 * (d1 + d2) * segment_length
             
         return area
-    
+
     def _calculate_smoothness(self, robot_id):
         states = self.robot_states.get(robot_id, [])
         if len(states) < 3:
@@ -126,67 +126,98 @@ class PathEvaluator:
                 'linear_smoothness': float('inf'),
                 'angular_smoothness': float('inf')
             }
-        
+
+        fixed_dt = 0.1
+
         velocities = []
         angular_velocities = []
-        
+
         for i in range(1, len(states)):
             dx = states[i]['x'] - states[i-1]['x']
             dy = states[i]['y'] - states[i-1]['y']
             dtheta = states[i]['theta'] - states[i-1]['theta']
-            
+
             dtheta = math.atan2(math.sin(dtheta), math.cos(dtheta))
-            
+
             dt = (states[i]['time'] - states[i-1]['time']).total_seconds()
-            
+
             if dt > 0:
-                v = math.sqrt(dx*dx + dy*dy) / dt
-                omega = dtheta / dt
-                
+                v_real = math.sqrt(dx*dx + dy*dy) / dt
+                omega_real = dtheta / dt
+
+                v = math.sqrt(dx*dx + dy*dy) / fixed_dt
+                omega = dtheta / fixed_dt
+
                 velocities.append(v)
                 angular_velocities.append(omega)
+
+                self.logger.debug(f"Robot {robot_id} - Real velocity: {v_real:.4f} m/s, Normalized: {v:.4f} m/s")
             else:
                 self.logger.warn(f"Zero time difference detected for robot {robot_id}")
-        
+
         if len(velocities) < 2:
             self.logger.warn(f"Insufficient acceleration data to calculate smoothness for robot {robot_id}")
             return {
                 'linear_smoothness': float('inf'),
                 'angular_smoothness': float('inf')
             }
-        
+
         linear_accelerations = []
         angular_accelerations = []
-        
+
         for i in range(1, len(velocities)):
             dv = velocities[i] - velocities[i-1]
             domega = angular_velocities[i] - angular_velocities[i-1]
-            
-            dt = (states[i+1]['time'] - states[i]['time']).total_seconds()
-            
-            if dt > 0:
-                a = dv / dt
-                alpha = domega / dt
-                
-                linear_accelerations.append(abs(a))
-                angular_accelerations.append(abs(alpha))
-            else:
-                self.logger.warn(f"Zero time difference detected for robot {robot_id}")
-        
+
+            a = dv / fixed_dt
+            alpha = domega / fixed_dt
+
+            linear_accelerations.append(abs(a))
+            angular_accelerations.append(abs(alpha))
+
         if not linear_accelerations or not angular_accelerations:
             self.logger.warn(f"Insufficient acceleration data to calculate smoothness for robot {robot_id}")
             return {
                 'linear_smoothness': float('inf'),
                 'angular_smoothness': float('inf')
             }
-        
-        linear_smoothness = sum(linear_accelerations) / len(linear_accelerations)
-        angular_smoothness = sum(angular_accelerations) / len(angular_accelerations)
-        
+
+        linear_accelerations = self._remove_outliers(linear_accelerations)
+        angular_accelerations = self._remove_outliers(angular_accelerations)
+
+        linear_smoothness = self._calculate_median(linear_accelerations)
+        angular_smoothness = self._calculate_median(angular_accelerations)
+
+        self.logger.info(f"Robot {robot_id} - Linear smoothness: {linear_smoothness:.4f}, Angular smoothness: {angular_smoothness:.4f}")
+
         return {
             'linear_smoothness': linear_smoothness,
             'angular_smoothness': angular_smoothness
         }
+
+    def _remove_outliers(self, data_list):
+        if not data_list:
+            return data_list
+
+        mean = sum(data_list) / len(data_list)
+        std_dev = math.sqrt(sum((x - mean)**2 for x in data_list) / len(data_list))
+
+        filtered_data = [x for x in data_list if abs(x - mean) <= 2 * std_dev]
+
+        return filtered_data if filtered_data else data_list
+
+    def _calculate_median(self, data_list):
+        if not data_list:
+            return float('inf')
+
+        sorted_data = sorted(data_list)
+        n = len(sorted_data)
+
+        if n % 2 == 0:
+            mid = n // 2
+            return (sorted_data[mid-1] + sorted_data[mid]) / 2
+        else:
+            return sorted_data[n // 2]
         
     def evaluate_robot_paths(self, robot_ids, robot_paths, shortest_paths):
         results = {}
