@@ -327,9 +327,11 @@ class RobotStateVisualizer(Node):
         
         self.path_evaluator.update_robot_status(robot_id, msg.state)
         
-        # Log status change if it's new
-        if old_status is not None and old_status != msg.state:
-            self.get_logger().info(f'Robot {robot_id} status changed from {old_status} to {msg.state}: {msg.state_desc}')
+        try:
+            self.path_evaluator.update_robot_status(robot_id, msg.state)
+            self.get_logger().debug(f"Successfully updated status for robot {robot_id} to {msg.state}")
+        except Exception as e:
+            self.get_logger().error(f"Error updating status for robot {robot_id}: {str(e)}")
         
         # Debug log
         self.get_logger().debug(f'Received status for robot {robot_id}: {msg.state} ({msg.state_desc})')
@@ -1056,7 +1058,15 @@ class RobotStateVisualizer(Node):
 
         robot_ids = list(self.robot_statuses.keys())
 
-        if self.path_evaluator.all_robots_reached_target(robot_ids):
+        for robot_id in robot_ids:
+            self.get_logger().info(f"Robot {robot_id} status: {self.robot_statuses.get(robot_id)}")
+            self.get_logger().info(f"Robot {robot_id} in start_times: {robot_id in self.path_evaluator.robot_start_times}")
+            self.get_logger().info(f"Robot {robot_id} in end_times: {robot_id in self.path_evaluator.robot_end_times}")
+    
+        all_reached = self.path_evaluator.all_robots_reached_target(robot_ids)
+        self.get_logger().info(f"All robots reached target: {all_reached}")
+
+        if all_reached:
             self.get_logger().info("All robots have reached their targets. Starting path evaluation...")
 
             evaluation_results = self.path_evaluator.evaluate_robot_paths(

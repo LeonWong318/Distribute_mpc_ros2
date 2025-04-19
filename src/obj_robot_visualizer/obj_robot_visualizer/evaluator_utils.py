@@ -19,8 +19,9 @@ class PathEvaluator:
         self.STATUS_RUNNING = 2
         self.STATUS_EMERGENCY_STOP = 3
         self.STATUS_TARGET_REACHED = 4
-        self.STATUS_SAFETY_STOP = 5
+        self.STATUS_DISCONNECT_STOP = 5
         self.STATUS_COLLISION = 6
+        self.STATUS_SAFETY_STOP = 7
     
     def update_robot_status(self, robot_id, status):
         if robot_id not in self.start_recorded:
@@ -46,8 +47,8 @@ class PathEvaluator:
         self.robot_end_times = {}
         self.current_status = {}
         self.robot_states = defaultdict(list)
-        self.start_recorded = False
-        self.finish_recorded = False
+        self.start_recorded = {}
+        self.finish_recorded = {}
     
     def update_robot_state(self, robot_id, state_msg):
         state_time = datetime.now()
