@@ -24,7 +24,7 @@ class ObstacleProcessor:
         self.back_laser_offset = np.array([-0.354354, -0.2358])
         self.back_laser_rotation = -2.35619  # -135 degrees in radians
     
-    def _filter_obstacles(self, obstacles, robot_pose, a = 2.0,  b=0.4):
+    def _filter_obstacles(self, obstacles, robot_pose, a = 2.0,  b=0.6):
         """
         Filter and sort obstacles inside an ellipse aligned with the robot's heading.
 

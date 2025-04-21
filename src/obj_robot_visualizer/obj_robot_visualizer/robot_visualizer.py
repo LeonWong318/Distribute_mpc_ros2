@@ -15,6 +15,7 @@ from rclpy.qos import QoSProfile, QoSReliabilityPolicy, QoSHistoryPolicy, QoSDur
 from geometry_msgs.msg import Point
 from tf2_ros import TransformBroadcaster
 from geometry_msgs.msg import TransformStamped
+import numpy as np
 import math
 import json
 import os
@@ -190,6 +191,10 @@ class RobotStateVisualizer(Node):
         self.robot_start_data = None
         self.vehicle_width = 0.5
         
+        self.radar_points = None
+        self.radar_precomputed = False
+        self.radar_step_size = 0.02  # 2cm grid for smoother edges
+    
         # Dictionary to store robot path histories
         # Format: {robot_id: [(x1, y1), (x2, y2), ...]}
         self.robot_paths = {}
@@ -445,6 +450,116 @@ class RobotStateVisualizer(Node):
         status = self.robot_statuses.get(robot_id, self.STATUS_INITIALIZING)
         return self.status_colors.get(status, (0.5, 0.5, 0.5))  # Default to gray if status unknown
     
+    def precompute_radar_shape(self):
+        """Precompute the radar detection shape using analytic solution with 6 points"""
+        if self.radar_precomputed:
+            return
+
+        # Parameters
+        a = 2.0  # Long half-axis (2.0m) along robot's heading (x-axis when theta=0)
+        b = 0.6  # Short half-axis (0.6m) perpendicular to robot's heading (y-axis when theta=0)
+        circle_radius = 0.7  # Circle radius (0.7m)
+
+        # Create a list to store our vertices, we'll add them in counter-clockwise order
+        vertices = []
+
+        # Start with the positive x-axis intersection (0 degrees)
+        x_pos = min(a, circle_radius)  # Take the smaller of ellipse a or circle radius
+        vertices.append((x_pos, 0.0))
+
+        theta = math.pi/4 
+
+        # Point on the ellipse at this angle
+        ellipse_x = a * math.cos(theta)
+        ellipse_y = b * math.sin(theta)
+        ellipse_r = math.sqrt(ellipse_x**2 + ellipse_y**2)
+
+        # If this point is outside the circle, scale it to lie on the circle
+        if ellipse_r > circle_radius:
+            scale = circle_radius / ellipse_r
+            ellipse_x *= scale
+            ellipse_y *= scale
+
+        vertices.append((ellipse_x, ellipse_y))
+
+        # Add the positive y-axis intersection (90 degrees)
+        y_pos = min(b, circle_radius)  # Take the smaller of ellipse b or circle radius
+        vertices.append((0.0, y_pos))
+
+        # Add a point in the second quadrant (approximately 135 degrees)
+        theta = 3*math.pi/4  # 135 degrees
+
+        # Point on the ellipse at this angle
+        ellipse_x = a * math.cos(theta)
+        ellipse_y = b * math.sin(theta)
+        ellipse_r = math.sqrt(ellipse_x**2 + ellipse_y**2)
+
+        # If this point is outside the circle, scale it to lie on the circle
+        if ellipse_r > circle_radius:
+            scale = circle_radius / ellipse_r
+            ellipse_x *= scale
+            ellipse_y *= scale
+
+        vertices.append((ellipse_x, ellipse_y))
+
+        # Add the negative x-axis intersection (180 degrees)
+        x_neg = -min(a, circle_radius)  # Negative of the smaller of ellipse a or circle radius
+        vertices.append((x_neg, 0.0))
+
+        # Add a point in the third quadrant (approximately 225 degrees)
+        theta = 5*math.pi/4  # 225 degrees
+
+        # Point on the ellipse at this angle
+        ellipse_x = a * math.cos(theta)
+        ellipse_y = b * math.sin(theta)
+        ellipse_r = math.sqrt(ellipse_x**2 + ellipse_y**2)
+
+        # If this point is outside the circle, scale it to lie on the circle
+        if ellipse_r > circle_radius:
+            scale = circle_radius / ellipse_r
+            ellipse_x *= scale
+            ellipse_y *= scale
+
+        vertices.append((ellipse_x, ellipse_y))
+
+        # Add the negative y-axis intersection (270 degrees)
+        y_neg = -min(b, circle_radius)  # Negative of the smaller of ellipse b or circle radius
+        vertices.append((0.0, y_neg))
+
+        # Add a point in the fourth quadrant (approximately 315 degrees)
+        theta = 7*math.pi/4  # 315 degrees
+
+        # Point on the ellipse at this angle
+        ellipse_x = a * math.cos(theta)
+        ellipse_y = b * math.sin(theta)
+        ellipse_r = math.sqrt(ellipse_x**2 + ellipse_y**2)
+
+        # If this point is outside the circle, scale it to lie on the circle
+        if ellipse_r > circle_radius:
+            scale = circle_radius / ellipse_r
+            ellipse_x *= scale
+            ellipse_y *= scale
+
+        vertices.append((ellipse_x, ellipse_y))
+
+        # Store the polygon vertices for rendering
+        self.radar_vertices = vertices
+
+        # Center point for triangle fan
+        center_point = (0.0, 0.0)
+
+        # Create triangle fan indices for rendering
+        # Each triangle connects the center to two consecutive vertices
+        self.radar_triangles = []
+
+        # Create triangles: (center, v[i], v[i+1])
+        for i in range(len(vertices)):
+            next_idx = (i + 1) % len(vertices)  # Wrap around to the first vertex
+            self.radar_triangles.append((center_point, vertices[i], vertices[next_idx]))
+
+        self.radar_precomputed = True
+        self.get_logger().info(f"Precomputed radar shape with {len(vertices)} vertices and {len(self.radar_triangles)} triangles")
+
     def publish_static_markers(self):
             """Publish static markers (map boundaries, obstacles, graph nodes) at low frequency"""
             # Only publish static markers once unless the data changes
@@ -865,69 +980,96 @@ class RobotStateVisualizer(Node):
 
     def publish_robot_state_visualization(self):
         """Publish robot state visualization markers at high frequency"""
+        # Ensure radar shape is precomputed
+        self.precompute_radar_shape()
+
         marker_array = MarkerArray()
-        
+
         # Visualize robot real states
         for robot_id, state_msg in self.robot_real_states.items():
             # Get status color for this robot
             r, g, b = self.get_robot_status_color(robot_id)
-            
-            # 1. Robot circle (representing size)
-            robot_circle = Marker()
-            robot_circle.header.frame_id = "map"
-            robot_circle.header.stamp = self.get_clock().now().to_msg()
-            robot_circle.ns = "robot_size"
-            robot_circle.id = robot_id
-            robot_circle.type = Marker.CYLINDER
-            robot_circle.action = Marker.ADD
-            
-            robot_circle.pose.position.x = state_msg.x
-            robot_circle.pose.position.y = state_msg.y
-            robot_circle.pose.position.z = 0.05
-            
-            robot_circle.scale.x = self.vehicle_width
-            robot_circle.scale.y = self.vehicle_width
-            robot_circle.scale.z = 0.5
-            
+
+            # Extract robot position and orientation
+            robot_x = state_msg.x
+            robot_y = state_msg.y
+            robot_theta = state_msg.theta
+
+            # 1. Radar detection range visualization
+            radar_marker = Marker()
+            radar_marker.header.frame_id = "map"
+            radar_marker.header.stamp = self.get_clock().now().to_msg()
+            radar_marker.ns = "robot_radar"
+            radar_marker.id = robot_id
+            radar_marker.type = Marker.TRIANGLE_LIST
+            radar_marker.action = Marker.ADD
+
+            # Set marker pose to the robot position with orientation
+            radar_marker.pose.position.x = robot_x
+            radar_marker.pose.position.y = robot_y
+            radar_marker.pose.position.z = 0.05  # Slightly above ground
+
+            # Apply robot orientation
+            q = quaternion_from_euler(0, 0, robot_theta)
+            radar_marker.pose.orientation.x = q[0]
+            radar_marker.pose.orientation.y = q[1]
+            radar_marker.pose.orientation.z = q[2]
+            radar_marker.pose.orientation.w = q[3]
+
+            # Use same color as robot but with specified transparency
+            radar_marker.color.r = r
+            radar_marker.color.g = g
+            radar_marker.color.b = b
+            radar_marker.color.a = 0.3
+
+            # Set scale (1.0 for TRIANGLE_LIST means no scaling)
+            radar_marker.scale.x = 1.0
+            radar_marker.scale.y = 1.0
+            radar_marker.scale.z = 1.0
+
+            # Add the precomputed triangles, transformed to the robot's frame
+            for triangle in self.radar_triangles:
+                for corner in triangle:
+                    point = Point()
+                    point.x = corner[0]  # Already in robot's local frame
+                    point.y = corner[1]
+                    point.z = 0.0
+                    radar_marker.points.append(point)
+
+            marker_array.markers.append(radar_marker)
+
+            # 2. Robot representation as a cuboid (rectangle box)
+            robot_box = Marker()
+            robot_box.header.frame_id = "map"
+            robot_box.header.stamp = self.get_clock().now().to_msg()
+            robot_box.ns = "robot_size"
+            robot_box.id = robot_id
+            robot_box.type = Marker.CUBE
+            robot_box.action = Marker.ADD
+
+            robot_box.pose.position.x = robot_x
+            robot_box.pose.position.y = robot_y
+            robot_box.pose.position.z = 0.25  # Half of the height to place it on the ground
+
+            # Apply same robot orientation
+            robot_box.pose.orientation.x = q[0]
+            robot_box.pose.orientation.y = q[1]
+            robot_box.pose.orientation.z = q[2]
+            robot_box.pose.orientation.w = q[3]
+
+            # Set dimensions to 0.9m length, 0.6m width, 0.5m height
+            robot_box.scale.x = 0.9  # Length along robot's forward direction
+            robot_box.scale.y = 0.6  # Width perpendicular to robot's forward direction
+            robot_box.scale.z = 0.5  # Height
+
             # Set color based on robot status
-            robot_circle.color.r = r
-            robot_circle.color.g = g
-            robot_circle.color.b = b
-            robot_circle.color.a = 0.9
-            
-            marker_array.markers.append(robot_circle)
-            
-            # 2. Robot direction arrow
-            robot_marker = Marker()
-            robot_marker.header.frame_id = "map"
-            robot_marker.header.stamp = self.get_clock().now().to_msg()
-            robot_marker.ns = "robots"
-            robot_marker.id = robot_id
-            robot_marker.type = Marker.ARROW
-            robot_marker.action = Marker.ADD
-            
-            robot_marker.pose.position.x = state_msg.x
-            robot_marker.pose.position.y = state_msg.y
-            robot_marker.pose.position.z = 0.1
-            
-            q = quaternion_from_euler(0, 0, state_msg.theta)
-            robot_marker.pose.orientation.x = q[0]
-            robot_marker.pose.orientation.y = q[1]
-            robot_marker.pose.orientation.z = q[2]
-            robot_marker.pose.orientation.w = q[3]
-            
-            robot_marker.scale.x = self.vehicle_width
-            robot_marker.scale.y = 0.2 
-            robot_marker.scale.z = 0.1 
-            
-            # Set color based on robot status
-            robot_marker.color.r = r
-            robot_marker.color.g = g
-            robot_marker.color.b = b
-            robot_marker.color.a = 1.0
-            
-            marker_array.markers.append(robot_marker)
-            
+            robot_box.color.r = r
+            robot_box.color.g = g
+            robot_box.color.b = b
+            robot_box.color.a = 0.9
+
+            marker_array.markers.append(robot_box)
+
             # 3. Robot label with ID and status description
             text_marker = Marker()
             text_marker.header.frame_id = "map"
@@ -936,10 +1078,10 @@ class RobotStateVisualizer(Node):
             text_marker.id = robot_id
             text_marker.type = Marker.TEXT_VIEW_FACING
             text_marker.action = Marker.ADD
-            text_marker.pose.position.x = state_msg.x
-            text_marker.pose.position.y = state_msg.y
-            text_marker.pose.position.z = 0.3
-            
+            text_marker.pose.position.x = robot_x
+            text_marker.pose.position.y = robot_y
+            text_marker.pose.position.z = 0.6  # Position text above the robot
+
             # Add status description to robot label if available
             status = self.robot_statuses.get(robot_id, self.STATUS_INITIALIZING)
             status_desc_map = {
@@ -952,38 +1094,38 @@ class RobotStateVisualizer(Node):
                 self.STATUS_COLLISION: "Collision Detected",
                 self.STATUS_SAFETY_STOP: "Safety stop for collision avoidance"
             }
-            
+
             status_desc = status_desc_map.get(status, "Unknown")
             text_marker.text = f"Robot {robot_id} [{status_desc}]"
-            
+
             text_marker.scale.z = 0.2
             text_marker.color.a = 1.0
             text_marker.color.r = 1.0
             text_marker.color.g = 1.0
             text_marker.color.b = 1.0
             marker_array.markers.append(text_marker)
-            
+
             # 4. TF transform
             transform = TransformStamped()
             transform.header.frame_id = "map"
             transform.header.stamp = self.get_clock().now().to_msg()
             transform.child_frame_id = f"robot_{robot_id}"
-            
-            transform.transform.translation.x = state_msg.x
-            transform.transform.translation.y = state_msg.y
+
+            transform.transform.translation.x = robot_x
+            transform.transform.translation.y = robot_y
             transform.transform.translation.z = 0.0
-            
+
             transform.transform.rotation.x = q[0]
             transform.transform.rotation.y = q[1]
             transform.transform.rotation.z = q[2]
             transform.transform.rotation.w = q[3]
-            
+
             self.tf_broadcaster.sendTransform(transform)
 
             # 5. Target point visualization if available
             if robot_id in self.robot_target_points:
                 target_x, target_y, _ = self.robot_target_points[robot_id]
-                
+
                 target_line = Marker()
                 target_line.header.frame_id = "map"
                 target_line.header.stamp = self.get_clock().now().to_msg()
@@ -991,28 +1133,28 @@ class RobotStateVisualizer(Node):
                 target_line.id = robot_id
                 target_line.type = Marker.LINE_LIST 
                 target_line.action = Marker.ADD
-                
+
                 target_line.scale.x = 0.08 
-                
+
                 target_line.color.r = r
                 target_line.color.g = g
                 target_line.color.b = b
                 target_line.color.a = 1.0
-                
+
                 start_point = Point()
-                start_point.x = state_msg.x
-                start_point.y = state_msg.y
+                start_point.x = robot_x
+                start_point.y = robot_y
                 start_point.z = 0.08
                 target_line.points.append(start_point)
-                
+
                 end_point = Point()
                 end_point.x = target_x
                 end_point.y = target_y
                 end_point.z = 0.08
                 target_line.points.append(end_point)
-                
+
                 marker_array.markers.append(target_line)
-                
+
                 target_marker = Marker()
                 target_marker.header.frame_id = "map"
                 target_marker.header.stamp = self.get_clock().now().to_msg()
@@ -1020,27 +1162,27 @@ class RobotStateVisualizer(Node):
                 target_marker.id = robot_id
                 target_marker.type = Marker.SPHERE
                 target_marker.action = Marker.ADD
-                
+
                 target_marker.pose.position.x = target_x
                 target_marker.pose.position.y = target_y
                 target_marker.pose.position.z = 0.08
-                
+
                 target_marker.scale.x = 0.25
                 target_marker.scale.y = 0.25
                 target_marker.scale.z = 0.25
-                
+
                 target_marker.color.r = r
                 target_marker.color.g = g
                 target_marker.color.b = b
                 target_marker.color.a = 0.9
-                
+
                 marker_array.markers.append(target_marker)
-        
+
         # Publish robot state markers
         if marker_array.markers:
             self.robot_state_publisher.publish(marker_array)
             self.get_logger().debug(f"Published robot state markers for {len(self.robot_real_states)} robots")
-
+    
     def reset_path_evaluation(self):
         self.evaluation_completed = False
         self.path_evaluator = PathEvaluator(self.get_logger())
