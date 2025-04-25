@@ -450,7 +450,10 @@ class ClusterNode(Node):
         for x, y, _ in ref_states:
             if is_colliding(x, y):
                 ref_check = False
-
+        ref_states_5 = ref_states[5:]
+        for x, y, _ in ref_states_5:
+            if is_colliding(x, y):
+                connecting_end_check = False
         if connecting_end_check:
             return False, 'end'
         elif connecting_first_check and ref_check:
@@ -623,7 +626,7 @@ class ClusterNode(Node):
                     if path_type == 'first':
                         self.ref_path = np.vstack((connecting_first_path, ref_states))
                     else:
-                        self.ref_path = np.vstack((connecting_end_path, ref_states[5]))
+                        self.ref_path = np.vstack((connecting_end_path, ref_states[5:]))
                     self.use_ref_path = True
                     self.converge_flag = True
                     self.pred_states = self.ref_path
