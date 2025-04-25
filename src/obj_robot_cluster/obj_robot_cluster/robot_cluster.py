@@ -421,7 +421,7 @@ class ClusterNode(Node):
         ref_check = True
         # 1. Check path from current state to end of ref_states
         x0, y0 = self._state[:2]
-        x1, y1 = ref_states[-1, :2]
+        x1, y1 = ref_states[5, :2]
         line = LineString([(x0, y0), (x1, y1)])
         length = line.length
         num_steps = max(2, int(length / step_size))
@@ -564,7 +564,7 @@ class ClusterNode(Node):
             )
             connecting_end_path = self.generate_connecting_path(
                 start=self._state,
-                end=ref_states[-1],
+                end=ref_states[5],
                 gap=0.2  # set your preferred step gap
             )
             connecting_first_path = self.generate_connecting_path(
@@ -615,7 +615,7 @@ class ClusterNode(Node):
                     if path_type == 'first':
                         self.ref_path = np.vstack((connecting_first_path, ref_states))
                     else:
-                        self.ref_path = np.vstack((connecting_end_path, ref_states[-1]))
+                        self.ref_path = np.vstack((connecting_end_path, ref_states[5]))
                     self.use_ref_path = True
                     self.converge_flag = True
                     self.pred_states = self.ref_path
