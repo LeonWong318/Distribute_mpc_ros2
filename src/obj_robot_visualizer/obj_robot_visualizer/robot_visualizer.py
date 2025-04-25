@@ -6,6 +6,7 @@ from msg_interfaces.msg import (
     GazeboToManagerState, 
     RobotToRvizStatus,
     ClusterToRvizShortestPath,
+    ClusterToRvizConvergeSignal,
     RobotToRvizTargetPoint,
     PerformanceMetrics,
     PerformanceMetricsArray
@@ -120,6 +121,12 @@ class RobotStateVisualizer(Node):
             self.reliable_qos
         )
         
+        self.non_converged_publisher = self.create_publisher(
+            MarkerArray,
+            '/robot_visualization/non_converged_markers',
+            self.best_effort_qos
+        )
+        
         self.metrics_publisher = self.create_publisher(
             PerformanceMetricsArray,
             '/performance_metrics',
@@ -140,6 +147,9 @@ class RobotStateVisualizer(Node):
         self.shortest_paths = {} 
         # Store shortest path subscriptions
         self.shortest_path_subscriptions = {}
+        # Store converge signal subscriptions
+        self.converge_signal_subscriptions = {}
+        
         
         # Define status codes
         self.STATUS_INITIALIZING = 0
@@ -186,6 +196,9 @@ class RobotStateVisualizer(Node):
         # Trajectory visualization - medium frequency (0.2 seconds)
         self.trajectory_timer = self.create_timer(0.2, self.publish_trajectory_markers)
         
+        # Converged visualization - medium frequency (0.5 seconds)
+        self.non_converged_timer = self.create_timer(0.5, self.publish_non_converged_markers)
+        
         self.map_data = None
         self.graph_data = None
         self.robot_start_data = None
@@ -204,7 +217,10 @@ class RobotStateVisualizer(Node):
         # Dictionary to store reference paths
         # Format: {robot_id: [(x1, y1), (x2, y2), ...]}
         self.reference_paths = {}
-        
+        # Counter of convergence time
+        self.convergence_success_counts = {}
+        self.convergence_failure_counts = {}
+        self.non_converged_positions = {}
         
         # Init Path evaluator
         self.path_evaluator = PathEvaluator(self.get_logger())
@@ -272,6 +288,17 @@ class RobotStateVisualizer(Node):
                     self.reliable_qos
                 )
                 self.target_point_subscriptions[robot_id] = target_point_sub
+                
+                converge_signal_sub = self.create_subscription(
+                    ClusterToRvizConvergeSignal,
+                    f'/robot_{robot_id}/converge_signal',
+                    lambda msg, rid=robot_id: self.converge_signal_callback(msg, rid),
+                    self.reliable_qos
+                )
+                self.converge_signal_subscriptions[robot_id] = converge_signal_sub
+                self.convergence_success_counts[robot_id] = 0
+                self.convergence_failure_counts[robot_id] = 0
+                self.non_converged_positions[robot_id] = []
                 
                 # Initialize with default status (Initializing)
                 self.robot_statuses[robot_id] = self.STATUS_INITIALIZING
@@ -1222,6 +1249,60 @@ class RobotStateVisualizer(Node):
             self.evaluation_completed = True
             return evaluation_results
 
+    def converge_signal_callback(self, msg, robot_id):
+        try:
+            if msg.is_converge:
+                self.convergence_success_counts[robot_id] += 1
+                self.get_logger().debug(f'Robot {robot_id} converged successfully. Total success count: {self.convergence_success_counts[robot_id]}')
+            else:
+                self.convergence_failure_counts[robot_id] += 1
+                self.get_logger().debug(f'Robot {robot_id} failed to converge. Total failure count: {self.convergence_failure_counts[robot_id]}')
+                
+                if robot_id in self.robot_real_states:
+                    current_state = self.robot_real_states[robot_id]
+                    self.non_converged_positions[robot_id].append((current_state.x, current_state.y))
+                    self.get_logger().debug(f'Recorded non-converged position for robot {robot_id}: ({current_state.x}, {current_state.y})')
+        except Exception as e:
+            self.get_logger().error(f'Error processing convergence signal for robot {robot_id}: {str(e)}')
+    
+    def publish_non_converged_markers(self):
+        marker_array = MarkerArray()
+        
+        marker_id = 0
+        
+        for robot_id, positions in self.non_converged_positions.items():
+            self.get_logger().error(f'draw')
+            for pos_idx, position in enumerate(positions):
+                marker = Marker()
+                marker.header.frame_id = "map"
+                marker.header.stamp = self.get_clock().now().to_msg()
+                marker.ns = "non_converged_markers"
+                marker.id = marker_id
+                marker_id += 1
+                
+                marker.type = Marker.SPHERE
+                marker.action = Marker.ADD
+                
+                marker.pose.position.x = position[0]
+                marker.pose.position.y = position[1]
+                marker.pose.position.z = 0.1
+                
+                marker.scale.x = 0.2
+                marker.scale.y = 0.2
+                marker.scale.z = 0.2
+                
+                marker.color.r = 1.0 
+                marker.color.g = 0.0
+                marker.color.b = 0.0
+                marker.color.a = 0.6 
+                
+                marker_array.markers.append(marker)
+        
+        if marker_array.markers:
+            self.non_converged_publisher.publish(marker_array)
+            self.get_logger().debug(f"Published {len(marker_array.markers)} non-converged position markers")
+
+    
     def publish_performance_metrics(self, evaluation_results):
         """
         Publish performance metrics for all robots
@@ -1247,6 +1328,18 @@ class RobotStateVisualizer(Node):
             metric_msg.path_length = results['path_length']
             metric_msg.linear_smoothness = results['linear_smoothness']
             metric_msg.angular_smoothness = results['angular_smoothness']
+            
+            success_count = self.convergence_success_counts.get(robot_id, 0)
+            failure_count = self.convergence_failure_counts.get(robot_id, 0)
+            total_count = success_count + failure_count
+
+            metric_msg.convergence_success_count = success_count
+            metric_msg.convergence_failure_count = failure_count
+
+            if total_count > 0:
+                metric_msg.convergence_success_rate = float(success_count) / total_count
+            else:
+                metric_msg.convergence_success_rate = 0.0
             
             metrics_array_msg.metrics.append(metric_msg)
         

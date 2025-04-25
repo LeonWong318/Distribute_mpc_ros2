@@ -5,3 +5,6 @@ float64 execution_time
 float64 path_length
 float64 linear_smoothness
 float64 angular_smoothness
+uint32 convergence_success_count
+uint32 convergence_failure_count
+float64 convergence_success_rate
