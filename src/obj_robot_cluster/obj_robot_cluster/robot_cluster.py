@@ -26,7 +26,8 @@ from msg_interfaces.msg import (
     RobotToClusterState,
     ManagerToClusterStart,
     ClusterBetweenRobotHeartBeat,
-    ClusterToRvizShortestPath
+    ClusterToRvizShortestPath,
+    ClusterToRvizConvergeSignal
 )
 
 class ClusterNode(Node):
@@ -143,6 +144,7 @@ class ClusterNode(Node):
             self.reliable_qos
         )
         
+        
         self.to_robot_trajectory_pub = self.create_publisher(
             ClusterToRobotTrajectory,
             f'/cluster_{self.robot_id}/trajectory',
@@ -152,6 +154,12 @@ class ClusterNode(Node):
         self.shortest_path_pub = self.create_publisher(
             ClusterToRvizShortestPath,
             f'/robot_{self.robot_id}/shortest_path',
+            self.reliable_qos
+        )
+        
+        self.converge_signal_pub = self.create_publisher(
+            ClusterToRvizConvergeSignal,
+            f'/robot_{self.robot_id}/converge_signal',
             self.reliable_qos
         )
     
@@ -640,10 +648,12 @@ class ClusterNode(Node):
                         self.converge_flag = True
                         self.get_logger().info('Converged')
                         self.publish_trajectory_to_robot()
+                        self.publish_converge_signal(self.converge_flag)
                     else:
                         self.converge_flag = False
                         # self.publish_trajectory_to_robot()
                         self.get_logger().info(f'Not converge reason: {exist_status}')
+                        self.publish_converge_signal(self.converge_flag)
                 
             else:
                 self.get_logger().debug('Not enough other robot states, skip this control loop')
@@ -732,12 +742,24 @@ class ClusterNode(Node):
             path_msg.y = [float(coord[1]) for coord in self.path_coords]
 
             self.shortest_path_pub.publish(path_msg)
-            self.get_logger().info(f'Published shortest path for robot {self.robot_id} with {len(self.path_coords)} points')
+            self.get_logger().debug(f'Published shortest path for robot {self.robot_id} with {len(self.path_coords)} points')
 
         except Exception as e:
             self.get_logger().error(f'Error publishing shortest path: {str(e)}')
 
+    def publish_converge_signal(self,is_converge):
+        try:
+            converge_msg = ClusterToRvizConvergeSignal()
+            converge_msg.robot_id = self.robot_id
+            converge_msg.is_converge = is_converge
+            converge_msg.stamp = self.get_clock().now().to_msg()
             
+            self.converge_signal_pub.publish(converge_msg)
+            self.get_logger().info(f'Published converge signal for robot {self.robot_id} with converge signal is {is_converge}')
+            
+        except Exception as e:
+            self.get_logger().error(f'Error publishing converge signal: {str(e)}')
+    
 def main(args=None):
     rclpy.init(args=args)
     executor = rclpy.executors.MultiThreadedExecutor()
