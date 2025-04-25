@@ -506,17 +506,19 @@ class AutoTest(Node):
             'normalized_deviation': [],
             'path_length': [],
             'linear_smoothness': [],
-            'angular_smoothness': [],
-            'convergence_success_count': [],
-            'convergence_failure_count': [],
-            'convergence_success_rate': []
+            'angular_smoothness': []
         }
+
+        convergence_by_robot = {}
+        iterations_count = len(metrics_list)
 
         for metrics in metrics_list:
             if not metrics or not metrics.metrics:
                 continue
 
             for metric in metrics.metrics:
+                robot_id = metric.robot_id
+
                 if not math.isnan(metric.execution_time):
                     all_metrics['execution_time'].append(metric.execution_time)
                 if not math.isnan(metric.normalized_deviation):
@@ -527,9 +529,17 @@ class AutoTest(Node):
                     all_metrics['linear_smoothness'].append(metric.linear_smoothness)
                 if not math.isnan(metric.angular_smoothness):
                     all_metrics['angular_smoothness'].append(metric.angular_smoothness)
-                all_metrics['convergence_success_count'].append(metric.convergence_success_count)
-                all_metrics['convergence_failure_count'].append(metric.convergence_failure_count)
-                all_metrics['convergence_success_rate'].append(metric.convergence_success_rate)
+
+                if robot_id not in convergence_by_robot:
+                    convergence_by_robot[robot_id] = {
+                        'success': [],
+                        'failure': [],
+                        'rate': []
+                    }
+
+                convergence_by_robot[robot_id]['success'].append(metric.convergence_success_count)
+                convergence_by_robot[robot_id]['failure'].append(metric.convergence_failure_count)
+                convergence_by_robot[robot_id]['rate'].append(metric.convergence_success_rate)
 
         avg_metrics = {}
         for key, values in all_metrics.items():
@@ -537,6 +547,22 @@ class AutoTest(Node):
                 avg_metrics[key] = sum(values) / len(values)
             else:
                 avg_metrics[key] = 'N/A'
+
+        if convergence_by_robot:
+            total_success = sum(sum(robot_data['success']) for robot_data in convergence_by_robot.values())
+            avg_metrics['convergence_success_count'] = total_success / iterations_count
+
+            total_failure = sum(sum(robot_data['failure']) for robot_data in convergence_by_robot.values()) 
+            avg_metrics['convergence_failure_count'] = total_failure / iterations_count
+
+            if total_success + total_failure > 0:
+                avg_metrics['convergence_success_rate'] = total_success / (total_success + total_failure)
+            else:
+                avg_metrics['convergence_success_rate'] = 0.0
+        else:
+            avg_metrics['convergence_success_count'] = 'N/A'
+            avg_metrics['convergence_failure_count'] = 'N/A'
+            avg_metrics['convergence_success_rate'] = 'N/A'
 
         return avg_metrics
     
