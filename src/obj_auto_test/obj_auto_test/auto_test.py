@@ -443,22 +443,23 @@ class AutoTest(Node):
     
     def log_iteration_results(self, latency, iteration, success, metrics=None):
        log_path = os.path.join(self.log_dir, f'latency_{latency}_iteration_{iteration}.csv')
-       
+    
        with open(log_path, 'w', newline='') as f:
            writer = csv.writer(f)
-           
+
            writer.writerow(['Latency', latency])
            writer.writerow(['Iteration', iteration])
            writer.writerow(['Success', success])
            writer.writerow(['Failure Type', self.failure_type if not success else 'None'])
            writer.writerow([])
-           
+
            if metrics and metrics.metrics:
                writer.writerow([
                    'Robot ID', 'Deviation Area', 'Normalized Deviation',
-                   'Execution Time', 'Path Length', 'Linear Smoothness', 'Angular Smoothness'
+                   'Execution Time', 'Path Length', 'Linear Smoothness', 'Angular Smoothness',
+                   'Convergence Success Count', 'Convergence Failure Count', 'Convergence Success Rate'
                ])
-               
+
                for metric in metrics.metrics:
                    writer.writerow([
                        metric.robot_id,
@@ -467,10 +468,13 @@ class AutoTest(Node):
                        metric.execution_time,
                        metric.path_length,
                        metric.linear_smoothness,
-                       metric.angular_smoothness
+                       metric.angular_smoothness,
+                       metric.convergence_success_count,
+                       metric.convergence_failure_count,
+                       metric.convergence_success_rate
                    ])
            self.save_rviz_screenshot(f'latency_{latency}_iteration_{iteration}.png')
-           
+
        self.get_logger().info(f'Iteration results logged to {log_path}')
 
     def log_latency_summary(self, scenario_name, latency, success_rate, timeout_rate, collision_rate, avg_metrics):
@@ -486,7 +490,10 @@ class AutoTest(Node):
                 avg_metrics.get('normalized_deviation', 'N/A'),
                 avg_metrics.get('path_length', 'N/A'),
                 avg_metrics.get('linear_smoothness', 'N/A'),
-                avg_metrics.get('angular_smoothness', 'N/A')
+                avg_metrics.get('angular_smoothness', 'N/A'),
+                avg_metrics.get('convergence_success_count', 'N/A'),
+                avg_metrics.get('convergence_failure_count', 'N/A'),
+                avg_metrics.get('convergence_success_rate', 'N/A')
             ])
     
     def calculate_average_metrics(self, metrics_list):
@@ -499,7 +506,10 @@ class AutoTest(Node):
             'normalized_deviation': [],
             'path_length': [],
             'linear_smoothness': [],
-            'angular_smoothness': []
+            'angular_smoothness': [],
+            'convergence_success_count': [],
+            'convergence_failure_count': [],
+            'convergence_success_rate': []
         }
 
         for metrics in metrics_list:
@@ -517,6 +527,9 @@ class AutoTest(Node):
                     all_metrics['linear_smoothness'].append(metric.linear_smoothness)
                 if not math.isnan(metric.angular_smoothness):
                     all_metrics['angular_smoothness'].append(metric.angular_smoothness)
+                all_metrics['convergence_success_count'].append(metric.convergence_success_count)
+                all_metrics['convergence_failure_count'].append(metric.convergence_failure_count)
+                all_metrics['convergence_success_rate'].append(metric.convergence_success_rate)
 
         avg_metrics = {}
         for key, values in all_metrics.items():
@@ -526,7 +539,6 @@ class AutoTest(Node):
                 avg_metrics[key] = 'N/A'
 
         return avg_metrics
-
     
     def run_tests(self):
         self.get_logger().info(f'Starting automated tests with {len(self.test_scenarios)} scenarios')
@@ -578,9 +590,9 @@ class AutoTest(Node):
                     writer.writerow([
                         'Scenario', 'Latency', 'Success Rate', 'Timeout Rate', 'Collision Rate',
                         'Avg Execution Time', 'Avg Deviation', 'Avg Path Length', 
-                        'Avg Linear Smoothness', 'Avg Angular Smoothness'
+                        'Avg Linear Smoothness', 'Avg Angular Smoothness',
+                        'Avg Convergence Success Count', 'Avg Convergence Failure Count', 'Avg Convergence Success Rate'
                     ])
-
                 self.get_logger().info(f'Log files initialized in {self.log_dir}')
 
                 # Test each latency value for this scenario
