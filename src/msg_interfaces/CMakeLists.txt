@@ -15,6 +15,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/ClusterBetweenRobotHeartBeat.msg"
   "msg/ClusterToManagerState.msg"
   "msg/ClusterToRobotTrajectory.msg"
+  "msg/ClusterToRvizConvergeSignal.msg"
   "msg/ClusterToRvizShortestPath.msg"
   "msg/GazeboToManagerState.msg"
   "msg/ManagerToClusterStart.msg"
