@@ -104,7 +104,7 @@ class PurePursuit:
                         if look_ahead_idx is None:
                             look_ahead_idx = i
             if look_ahead_idx is None:
-                look_ahead_idx = len(trajectory) -1
+                look_ahead_idx = 5
             return trajectory[look_ahead_idx]
         elif self.lookahead_style == 'time':
             
@@ -151,7 +151,7 @@ class PurePursuit:
         lookahead_point = self.find_lookahead_point(trajectory, current_position,current_heading, traj_time, current_time)
         if lookahead_point is None:
             # If no lookahead point is found, return zero control commands.
-            lookahead_point = target_point
+            lookahead_point = trajectory[8]
 
         # Transform the lookahead point into the vehicle's coordinate frame.
         transformed_point = self.transform_to_vehicle_frame(current_position, current_heading, lookahead_point)

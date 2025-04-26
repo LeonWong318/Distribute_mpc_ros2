@@ -45,7 +45,7 @@ test_scenarios:
     world_file: "test_data.world"
     rviz_config_path: "src/obj_robot_visualizer/config/test_data.rviz"
     latency_values: [0.0, 1.0]
-    iterations_per_latency: 1
+    iterations_per_latency: 5
     timeout_seconds: 200.0
 
 

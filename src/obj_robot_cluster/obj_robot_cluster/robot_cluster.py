@@ -97,7 +97,7 @@ class ClusterNode(Node):
         self._last_state_update_time = None
         
         self.current_state_update = NewState(self.lookahead_time, self.config_mpc.ts, self.close_to_target_rate)
-        self.rrt_planner = RRTPlanner(map_json_path = self.map_path, dt = self.config_mpc.ts, step_size=0.5, max_iter=1000, goal_sample_rate=0.2, robot_radius=self.config_robot.vehicle_width/2)
+        self.rrt_planner = RRTPlanner(map_json_path = self.map_path, dt = self.config_mpc.ts, step_size=0.5, max_iter=1000, goal_sample_rate=0.1, robot_radius=0.4)
         
         self.create_pub_and_sub()
     
@@ -640,24 +640,22 @@ class ClusterNode(Node):
                 else:
                     # run controller
                     self.use_ref_path = False
-                    self.rrt_planner.update_environment(self._state, ref_states[-1], other_robot_states_for_RRT)
-                    init_guess = self.rrt_planner.plan()
-                    if init_guess is not None:
-                        init_guess = np.array(init_guess).flatten()
-                        expected_dim = 20 * 3  # 60
-                        if len(init_guess) >= expected_dim:
-                            init_guess = init_guess[:expected_dim]
-                        else:
-                            # padding if too short
-                            last_value = init_guess[-3:]  # last (x,y,theta)
-                            num_missing = expected_dim - len(init_guess)
-                            padding = np.tile(last_value, int(np.ceil(num_missing / 3)))[:num_missing]
-                            init_guess = np.concatenate([init_guess, padding])
-                        self.get_logger().info('Inital guess not None')
+                    # self.rrt_planner.update_environment(self._state, ref_states[-1], other_robot_states_for_RRT)
+                    # init_guess = self.rrt_planner.plan()
+                    # if init_guess is not None:
+                    #     init_guess = np.array(init_guess)[:, :2].flatten()
+                    #     fused_guess = self.rrt_planner.create_fused_initial_guess(rrt_result = init_guess, 
+                    #                                                               previous_solution=self.pred_states,
+                    #                                                               horizon_length=self.config_mpc.N_hor)
+                    #     self.get_logger().info('Using fuesd guess')
+                    # elif self.pred_states is not None:
+                    #     fused_guess = np.array(self.pred_states)[:,:2].flatten()
+                    # else:
+                    #     fused_guess = None
                     self.last_actions, self.pred_states, self.current_refs, self.debug_info, exist_status= self.controller.run_step(
                         static_obstacles=self.static_obstacles,
                         other_robot_states=robot_states_for_control,
-                        inital_guess= init_guess
+                        inital_guess= None
                     )
 
                     end_time = self.get_clock().now()
@@ -666,9 +664,11 @@ class ClusterNode(Node):
 
                     # run step
                     self.controller.set_current_state(self._state)
+                    # exist_status = 'Converged'
                     if exist_status == 'Converged':
                         # publish traj to robot after calculating
                         self.converge_flag = True
+                        # self.pred_states = init_guess
                         self.get_logger().info('Converged')
                         self.publish_trajectory_to_robot()
                         self.publish_converge_signal(self.converge_flag)
