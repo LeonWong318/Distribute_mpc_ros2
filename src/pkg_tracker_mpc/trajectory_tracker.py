@@ -363,7 +363,7 @@ class TrajectoryTracker:
         return self._idle
 
 
-    def run_step(self, static_obstacles: List[List[PathNode]], full_dyn_obstacle_list:Optional[List]=None, other_robot_states:Optional[List]=None, 
+    def run_step(self, static_obstacles: List[List[PathNode]], inital_guess=None, full_dyn_obstacle_list:Optional[List]=None, other_robot_states:Optional[List]=None, 
                  map_updated:bool=True, report_cost:bool=False):
         """Run the trajectory planner for one step given the surrounding environment.
 
@@ -394,7 +394,7 @@ class TrajectoryTracker:
             self._stc_constraints, self._closest_obstacle_list = self.get_stc_constraints(static_obstacles)
             self._map_loaded = True
         dyn_constraints = self.get_dyn_constraints(full_dyn_obstacle_list)
-        actions, pred_states, ref_states, cost, monitored_cost, exist_status= self._run_step(self._stc_constraints, dyn_constraints, other_robot_states, report_cost)
+        actions, pred_states, ref_states, cost, monitored_cost, exist_status= self._run_step(self._stc_constraints, dyn_constraints, inital_guess, other_robot_states, report_cost)
         step_runtime = timer()-step_time_start
         debug_info = DebugInfo(cost=cost, 
                                closest_obstacle_list=self._closest_obstacle_list, 
@@ -402,7 +402,7 @@ class TrajectoryTracker:
                                monitored_cost=monitored_cost)
         return actions, pred_states, ref_states, debug_info, exist_status
 
-    def _run_step(self, stc_constraints: List, dyn_constraints: List, other_robot_states:Optional[List]=None, report_cost:bool=False):
+    def _run_step(self, stc_constraints: List, dyn_constraints: List, initial_guess, other_robot_states:Optional[List]=None, report_cost:bool=False):
         """Run the trajectory planner for one step, wrapped by `run_step`.
 
         Args:
@@ -456,7 +456,7 @@ class TrajectoryTracker:
 
         try:
             # self.solver_debug(stc_constraints) # use to check (visualize) the environment
-            taken_states, pred_states, actions, cost, solver_time, exit_status, u = self.run_solver(params, self.state, self.config.action_steps)
+            taken_states, pred_states, actions, cost, solver_time, exit_status, u = self.run_solver(params, self.state, initial_guess, self.config.action_steps)
             # actions = [x*np.array([1.0-speed_decay, 1.0]) for x in actions]
             if exit_status in self.config.bad_exit_codes and self.vb:
                 print(f"[{self.__class__.__name__}-{self.robot_id}] Bad converge status: {exit_status}")
@@ -481,7 +481,7 @@ class TrajectoryTracker:
 
         return actions, pred_states, ref_states, cost, monitored_costs, exit_status
 
-    def run_solver(self, parameters:List, state: np.ndarray, take_steps:int=1):
+    def run_solver(self, parameters:List, state: np.ndarray, initial_guess, take_steps:int=1):
         """Run the solver for the pre-defined MPC problem.
 
         Args:
@@ -510,7 +510,7 @@ class TrajectoryTracker:
 
             import opengen as og
             # solution:og.opengen.tcp.solver_status.SolverStatus = self.solver.run(parameters)
-            solution:og.opengen.tcp.solver_status.SolverStatus = self.solver.run(parameters)
+            solution:og.opengen.tcp.solver_status.SolverStatus = self.solver.run(parameters,initial_guess=initial_guess)
             u:List[float]       = solution.solution
             cost:float          = solution.cost
             exit_status:str     = solution.exit_status
