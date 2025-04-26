@@ -9,6 +9,7 @@ import numpy as np
 import json
 from shapely.geometry import Polygon, Point, LineString
 import math
+import traceback
 
 from pkg_configs.configs import MpcConfiguration, CircularRobotSpecification
 from basic_motion_model.motion_model import UnicycleModel
@@ -16,6 +17,7 @@ from pkg_motion_plan.local_traj_plan import LocalTrajPlanner
 from pkg_tracker_mpc.trajectory_tracker import TrajectoryTracker
 from pkg_motion_plan.global_path_coordinate import GlobalPathCoordinator
 from .new_state import NewState
+from. RRTPlanner import RRTPlanner
 
 import threading
 
@@ -95,6 +97,7 @@ class ClusterNode(Node):
         self._last_state_update_time = None
         
         self.current_state_update = NewState(self.lookahead_time, self.config_mpc.ts, self.close_to_target_rate)
+        self.rrt_planner = RRTPlanner(map_json_path = self.map_path, dt = self.config_mpc.ts, step_size=0.5, max_iter=1000, goal_sample_rate=0.2, robot_radius=self.config_robot.vehicle_width/2)
         
         self.create_pub_and_sub()
     
@@ -599,6 +602,8 @@ class ClusterNode(Node):
             
             # get other robot states
             received_robot_states = [state for rid, state in self.other_robot_states.items()]
+            other_robot_states_for_RRT = np.array([[state.x, state.y, state.theta] for state in received_robot_states])
+            # self.get_logger().info(f'other robot states:{other_robot_states_for_RRT}')
             if len(received_robot_states) == len(self.expected_robots) - 1:
                 state_dim = 3  # x, y, theta
                 horizon = self.config_mpc.N_hor
@@ -635,9 +640,24 @@ class ClusterNode(Node):
                 else:
                     # run controller
                     self.use_ref_path = False
+                    self.rrt_planner.update_environment(self._state, ref_states[-1], other_robot_states_for_RRT)
+                    init_guess = self.rrt_planner.plan()
+                    if init_guess is not None:
+                        init_guess = np.array(init_guess).flatten()
+                        expected_dim = 20 * 3  # 60
+                        if len(init_guess) >= expected_dim:
+                            init_guess = init_guess[:expected_dim]
+                        else:
+                            # padding if too short
+                            last_value = init_guess[-3:]  # last (x,y,theta)
+                            num_missing = expected_dim - len(init_guess)
+                            padding = np.tile(last_value, int(np.ceil(num_missing / 3)))[:num_missing]
+                            init_guess = np.concatenate([init_guess, padding])
+                        self.get_logger().info('Inital guess not None')
                     self.last_actions, self.pred_states, self.current_refs, self.debug_info, exist_status= self.controller.run_step(
                         static_obstacles=self.static_obstacles,
-                        other_robot_states=robot_states_for_control
+                        other_robot_states=robot_states_for_control,
+                        inital_guess= init_guess
                     )
 
                     end_time = self.get_clock().now()
@@ -666,7 +686,8 @@ class ClusterNode(Node):
                 self.idle = True
 
         except Exception as e:
-            self.get_logger().error(f'Error in control loop: {str(e)}')
+            tb_str = traceback.format_exc()
+            self.get_logger().error(f'Error in control loop: {e}\nTraceback:\n{tb_str}')
 
     def publish_trajectory_to_robot(self):
         try:
