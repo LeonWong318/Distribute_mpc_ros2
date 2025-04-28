@@ -855,6 +855,7 @@ class RobotNode(Node):
                 )
             elif self.controller_type == 'lqr_update':
                 if self.current_trajectory.traj_type == 'mpc':
+                # if False:
                     v, omega, self.target = self.lqr_update_controller.compute_control_commands(
                         current_position,
                         current_heading,

@@ -27,8 +27,8 @@ def load_cbf_config(fname: str) -> CBFconfig:
 if __name__ == "__main__":
     # cfg_fname = "fpmpc_fast.yaml"
     # cfg_fname = "fpmpc_default.yaml"
-    # cfg_fname = "mpc_fast.yaml"
-    cfg_fname = "mpc_default.yaml"
+    cfg_fname = "mpc_fast.yaml"
+    # cfg_fname = "mpc_default.yaml"
 
     # cfg_fname = "fpmpc_fast_softonly.yaml"
     # cfg_fname = "fpmpc_fast_noenlarge.yaml"

@@ -1,11 +1,11 @@
 # data path
 map_path: 'data/test_data/map.json'
 graph_path: 'data/test_data/graph.json'
-robot_start_path: 'data/test_data/robot_start.json'
-robot_spec_path: 'data/test_data/schedule.csv'
+robot_start_path: 'data/test_data/robot_start_single.json'
+robot_spec_path: 'data/test_data/schedule_single.csv'
 
 # config path
-mpc_config_path: 'config/mpc_default.yaml'
+mpc_config_path: 'config/mpc_fast.yaml'
 robot_config_path: 'config/spec_robot.yaml'
 cbf_config_path: 'config/cbf_config.yaml'
 
@@ -62,9 +62,9 @@ lqr_r_omega: 0.01   # Angular velocity control weight
 
 # lqr update parameters:
 lqr_update_q_pos: 1000.0    # Position error weight
-lqr_update_q_theta: 100.0   # Heading error weight
+lqr_update_q_theta: 10.0   # Heading error weight
 lqr_update_r_v: 0.001       # Linear velocity control weight
-lqr_update_r_omega: 0.01    # Angular velocity control weight
+lqr_update_r_omega: 0.1    # Angular velocity control weight
 lqr_lookahead_dist: 0.5     # Lookahead Distance
 lqr_lookahead_time:: 0.5
 lqr_lookahead_style: 'dist' # time or dist

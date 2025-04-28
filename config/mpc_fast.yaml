@@ -3,10 +3,10 @@
 ################################################################################
 
 ### System configuration
-ts: 0.2   # Size of the time-step (sampling time)
+ts: 0.3   # Size of the time-step (sampling time)
 
 ### MPC configuration
-N_hor: 20        # The length of the receding horizon controller
+N_hor: 30        # The length of the receding horizon controller
 action_steps: 1  # How many steps should be taken from each mpc-solution. Range (1 - N_hor)
 # Helper variables (Generally does not have to be changed)
 nu: 2     # Number of control inputs (speed and angular speed)
@@ -22,22 +22,34 @@ ndynobs: 6   # Number of variables per dynamic obstacle
 lin_vel_penalty: 0      # Cost for linear velocity control action (should be 0)
 lin_acc_penalty: 1.0   # Cost for linear acceleration 
 ang_vel_penalty: 0      # Cost angular velocity control action
-ang_acc_penalty: 2.0   # Cost angular acceleration
-qrpd: 10.0             # Cost for reference path deviation
+ang_acc_penalty: 0.5   # Cost angular acceleration
+qrpd: 1.0              # Cost for reference path deviation
 qpos: 0.0               # Cost for position deviation each time step to the reference
-qvel: 5.0              # Cost for speed    deviation each time step to the reference
+qvel: 0.5              # Cost for speed    deviation each time step to the reference
 qtheta: 0.0             # Cost for heading  deviation each time step to the reference
 # Obstacle avoidance weights
-qstcobs: 100.0 # Cost for static obstacle avoidance (soft constraint)
-qdynobs: 100.0 # Cost for dynamic obstacle avoidance (soft constraint)
-  
+qstcobs: 0.0 # Cost for static obstacle avoidance (soft constraint)
+qdynobs: [100.0, 100.0, 100.0, 100.0, 100.0, 
+          80.0, 80.0, 80.0, 80.0, 80.0, 
+          50.0, 50.0, 50.0, 50.0, 20.0, 
+          20.0, 20.0, 20.0, 10.0, 10.0,
+          10.0, 10.0, 5.0, 5.0, 5.0,
+          2.0, 2.0, 2.0, 1.0, 1.0] # Cost for dynamic obstacle avoidance (soft constraint)
+# Fleet coordination
+qorobot: 100 # Cost for other robot
+qpredrobot: 20.0 # Cost for other robot's predicted trajectory
 # Terminal weights
-qpN: 0.0                # Terminal cost; error relative to final reference position         
+qpN: 0.01                # Terminal cost; error relative to final reference position         
 qthetaN: 0.0            # Terminal cost; error relative to final reference heading
+# Building options in the optimizer
+initial_tolerance: 0.0001
+target_tolerance : 0.0001
+max_inner_iterations : 1000 #(given a penalty factor)
+max_outer_iterations : 20  #(increase the penalty factor)
 
 ### Building options in the optimizer
 solver_type: 'PANOC'
-max_solver_time: 100_000        # micros (0.1 sec)
+max_solver_time: 500_0000        # micros (1 sec)
 build_type: 'release'           # Can have 'debug' or 'release'
 build_directory: 'mpc_solver'   # Name of the directory where the build is created
 bad_exit_codes: ["NotConvergedIterations", "NotConvergedOutOfTime"] # Optimizer specific names, otherwise "Converged"

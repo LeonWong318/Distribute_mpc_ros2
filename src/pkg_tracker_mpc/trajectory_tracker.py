@@ -509,8 +509,9 @@ class TrajectoryTracker:
                 return self.run_solver_tcp(parameters, state, take_steps)
 
             import opengen as og
-            # solution:og.opengen.tcp.solver_status.SolverStatus = self.solver.run(parameters)
-            solution:og.opengen.tcp.solver_status.SolverStatus = self.solver.run(parameters,initial_guess=initial_guess)
+            solution:og.opengen.tcp.solver_status.SolverStatus = self.solver.run(parameters)
+            # solution:og.opengen.tcp.solver_status.SolverStatus = self.solver.run(parameters,initial_guess=initial_guess)
+
             u:List[float]       = solution.solution
             cost:float          = solution.cost
             exit_status:str     = solution.exit_status

@@ -22,7 +22,9 @@ class PenaltyTerms(TypedDict):
     acc_penalty: Union[float, ca.SX]
     w_acc_penalty: Union[float, ca.SX]
 
+def w_st_ob():
 
+    return 0.5
 class PanocBuilder:
     """Build the MPC module via OPEN. Define states, inputs, cost, and constraints.
 
@@ -30,8 +32,8 @@ class PanocBuilder:
         load_motion_model: Load the motion model for the MPC problem.
         build: Build the MPC problem and solver.
     """
-    # _large_weight = 1000
-    # _small_weight = 300
+    # _large_weight = 100
+    # _small_weight = 10
 
     def __init__(self, mpc_config: MpcConfiguration, robot_config: CircularRobotSpecification):
         self._cfg = mpc_config
@@ -135,7 +137,7 @@ class PanocBuilder:
             Critical step: Used to allivate the burden of dynamic object avoidance.
             Selected time step: Relative time step in the predictive horizon, which is not the current time step.
         """
-        critical_step = 5 # The critical time step for dynamic object avoidance.
+        critical_step = self.N_hor # The critical time step for dynamic object avoidance.
 
         if not 0<=step_in_horizon<self.N_hor:
             raise ValueError(f"Time step {step_in_horizon} is out of range [0, {self.N_hor-1}].")
