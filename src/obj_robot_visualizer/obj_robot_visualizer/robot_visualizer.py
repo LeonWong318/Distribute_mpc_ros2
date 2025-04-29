@@ -1153,35 +1153,6 @@ class RobotStateVisualizer(Node):
             if robot_id in self.robot_target_points:
                 target_x, target_y, _ = self.robot_target_points[robot_id]
 
-                target_line = Marker()
-                target_line.header.frame_id = "map"
-                target_line.header.stamp = self.get_clock().now().to_msg()
-                target_line.ns = "robot_target_lines"
-                target_line.id = robot_id
-                target_line.type = Marker.LINE_LIST 
-                target_line.action = Marker.ADD
-
-                target_line.scale.x = 0.08 
-
-                target_line.color.r = r
-                target_line.color.g = g
-                target_line.color.b = b
-                target_line.color.a = 1.0
-
-                start_point = Point()
-                start_point.x = robot_x
-                start_point.y = robot_y
-                start_point.z = 0.08
-                target_line.points.append(start_point)
-
-                end_point = Point()
-                end_point.x = target_x
-                end_point.y = target_y
-                end_point.z = 0.08
-                target_line.points.append(end_point)
-
-                marker_array.markers.append(target_line)
-
                 target_marker = Marker()
                 target_marker.header.frame_id = "map"
                 target_marker.header.stamp = self.get_clock().now().to_msg()
