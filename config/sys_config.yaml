@@ -1,8 +1,8 @@
 # data path
-map_path: 'data/test_data/map.json'
-graph_path: 'data/test_data/graph.json'
-robot_start_path: 'data/test_data/robot_start_single.json'
-robot_spec_path: 'data/test_data/schedule_single.csv'
+map_path: 'data/many_AMR/map.json'
+graph_path: 'data/many_AMR/graph.json'
+robot_start_path: 'data/many_AMR/robot_start.json'
+robot_spec_path: 'data/many_AMR/schedule.csv'
 
 # config path
 mpc_config_path: 'config/mpc_fast.yaml'
@@ -10,7 +10,7 @@ robot_config_path: 'config/spec_robot.yaml'
 cbf_config_path: 'config/cbf_config.yaml'
 
 # visualizer config
-rviz_config_path: 'src/obj_robot_visualizer/config/test_data.rviz'
+rviz_config_path: 'src/obj_robot_visualizer/config/default.rviz'
 path_min_distance: 0.1
 
 # manager config
@@ -36,7 +36,7 @@ failure_probability: 0.00
 failure_max_deviation: 0.0
 
 # gazebo simulation config
-map_name: 'test_data.world'
+map_name: 'many_AMR.world'
 
 ## local robot config
 max_velocity: 1.0
