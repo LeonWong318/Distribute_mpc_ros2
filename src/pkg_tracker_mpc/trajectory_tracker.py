@@ -93,7 +93,7 @@ class TrajectoryTracker:
         self.set_work_mode(mode='safe', use_predefined_speed=True)
 
         # Monitor
-        self.monitor_on = False
+        self.monitor_on = True
         self.cost_monitor = CostMonitor(self.config, self.robot_spec, verbose)
         self.cost_monitor.init_params()
 
@@ -400,7 +400,7 @@ class TrajectoryTracker:
                                closest_obstacle_list=self._closest_obstacle_list, 
                                step_runtime=step_runtime, 
                                monitored_cost=monitored_cost)
-        return actions, pred_states, ref_states, debug_info, exist_status
+        return actions, pred_states, ref_states, debug_info, exist_status, monitored_cost
 
     def _run_step(self, stc_constraints: List, dyn_constraints: List, initial_guess, other_robot_states:Optional[List]=None, report_cost:bool=False):
         """Run the trajectory planner for one step, wrapped by `run_step`.
@@ -509,8 +509,8 @@ class TrajectoryTracker:
                 return self.run_solver_tcp(parameters, state, take_steps)
 
             import opengen as og
-            solution:og.opengen.tcp.solver_status.SolverStatus = self.solver.run(parameters)
-            # solution:og.opengen.tcp.solver_status.SolverStatus = self.solver.run(parameters,initial_guess=initial_guess)
+            # solution:og.opengen.tcp.solver_status.SolverStatus = self.solver.run(parameters)
+            solution:og.opengen.tcp.solver_status.SolverStatus = self.solver.run(parameters,initial_guess=self.previous_solution)
 
             u:List[float]       = solution.solution
             cost:float          = solution.cost

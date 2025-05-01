@@ -22,9 +22,7 @@ class PenaltyTerms(TypedDict):
     acc_penalty: Union[float, ca.SX]
     w_acc_penalty: Union[float, ca.SX]
 
-def w_st_ob():
 
-    return 0.5
 class PanocBuilder:
     """Build the MPC module via OPEN. Define states, inputs, cost, and constraints.
 
@@ -300,7 +298,7 @@ class PanocBuilder:
             .with_optimizer_name(self._cfg.optimizer_name)
 
         solver_config = og.config.SolverConfiguration() \
-                    .with_initial_penalty(10) \
+                    .with_initial_penalty(20) \
                     .with_max_duration_micros(self._cfg.max_solver_time) \
                     .with_initial_tolerance(self._cfg.initial_tolerance) \
                     .with_tolerance(self._cfg.target_tolerance) \

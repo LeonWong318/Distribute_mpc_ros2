@@ -1,8 +1,8 @@
 # data path
-map_path: 'data/many_AMR/map.json'
-graph_path: 'data/many_AMR/graph.json'
-robot_start_path: 'data/many_AMR/robot_start.json'
-robot_spec_path: 'data/many_AMR/schedule.csv'
+map_path: 'data/schedule_demo_data/map.json'
+graph_path: 'data/schedule_demo_data/graph.json'
+robot_start_path: 'data/schedule_demo_data/robot_start.json'
+robot_spec_path: 'data/schedule_demo_data/schedule.csv'
 
 # config path
 mpc_config_path: 'config/mpc_fast.yaml'
@@ -10,7 +10,7 @@ robot_config_path: 'config/spec_robot.yaml'
 cbf_config_path: 'config/cbf_config.yaml'
 
 # visualizer config
-rviz_config_path: 'src/obj_robot_visualizer/config/default.rviz'
+rviz_config_path: 'src/obj_robot_visualizer/config/schedule_demo_data.rviz'
 path_min_distance: 0.1
 
 # manager config
@@ -36,7 +36,7 @@ failure_probability: 0.00
 failure_max_deviation: 0.0
 
 # gazebo simulation config
-map_name: 'many_AMR.world'
+map_name: 'schedule_demo_data.world'
 
 ## local robot config
 max_velocity: 1.0
@@ -46,7 +46,7 @@ cluster_wait_timeout: 30.0
 
 # controller selection
 controller_type: 'lqr_update' # choose pure_pursuit/cbf/lqr/lqr_update
-mpc_ts: 0.3 # keep align with ts in mpc_configs
+mpc_ts: 0.1 # keep align with ts in mpc_configs
 
 # Pure Pursuit parameters
 lookahead_distance: 0.5

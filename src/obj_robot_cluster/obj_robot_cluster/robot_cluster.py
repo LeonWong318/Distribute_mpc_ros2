@@ -652,7 +652,7 @@ class ClusterNode(Node):
                     #     fused_guess = np.array(self.pred_states)[:,:2].flatten()
                     # else:
                     #     fused_guess = None
-                    self.last_actions, self.pred_states, self.current_refs, self.debug_info, exist_status= self.controller.run_step(
+                    self.last_actions, self.pred_states, self.current_refs, self.debug_info, exist_status, monitered_cost= self.controller.run_step(
                         static_obstacles=self.static_obstacles,
                         other_robot_states=robot_states_for_control,
                         inital_guess= None
@@ -661,8 +661,9 @@ class ClusterNode(Node):
                     end_time = self.get_clock().now()
                     duration_ms = (end_time.nanoseconds - start_time.nanoseconds) / 1e9
                     self.get_logger().debug(f'Controller run_step() took {duration_ms:.3f} s')
-
+                    total_cost = monitered_cost["total_cost"]
                     # run step
+                    self._state[2] = np.arctan2(np.sin(self._state[2]), np.cos(self._state[2]))
                     self.controller.set_current_state(self._state)
                     # exist_status = 'Converged'
                     if exist_status == 'Converged':
@@ -670,12 +671,14 @@ class ClusterNode(Node):
                         self.converge_flag = True
                         # self.pred_states = init_guess
                         self.get_logger().info('Converged')
+                        self.get_logger().info(f'Cost:{total_cost}')
                         self.publish_trajectory_to_robot()
                         self.publish_converge_signal(self.converge_flag)
                     else:
                         self.converge_flag = False
                         # self.publish_trajectory_to_robot()
                         self.get_logger().info(f'Not converge reason: {exist_status}')
+                        self.get_logger().info(f'Cost:{total_cost}')
                         self.publish_converge_signal(self.converge_flag)
                 
             else:

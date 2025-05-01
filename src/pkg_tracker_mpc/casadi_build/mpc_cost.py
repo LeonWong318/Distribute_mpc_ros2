@@ -93,23 +93,30 @@ def cost_fleet_collision(state: ca.SX, points: ca.SX, safe_distance: float, weig
     assert cost.shape == (1,1)
     return cost
 
-def cost_refpath_deviation(state: ca.SX, line_segments: ca.SX, weight:Union[ca.SX, float]=1.0) -> ca.SX:
-    """Reference deviation cost (weighted squared) penalizes on the deviation from the reference path.
+def cost_refpath_deviation(state: ca.SX, line_segments: ca.SX, weight:Union[ca.SX, float]=1.0, alpha:float=0.2) -> ca.SX:
+    """Reference deviation cost with dynamically adjusted weight.
 
     Args:
         state: The (n*1)-dim point.
         line_segments: The (n*m)-dim var with m n-dim points.
+        weight: The base penalty weight for deviation.
+        alpha: Scaling factor for distance-based weight adaptation.
 
     Returns:
-        The weighted squared distance to the reference path.
+        The adaptively weighted squared distance to the reference path.
     """
     distances_sqrt = ca.SX.ones(1)
     for i in range(line_segments.shape[0]-1):
         distance = dist_to_lineseg(state[:2], line_segments[i:i+2,:2])
-        distances_sqrt = ca.horzcat(distances_sqrt, distance**2)
-    cost:ca.SX = ca.mmin(distances_sqrt[1:]) * weight
+        distances_sqrt = ca.horzcat(distances_sqrt, distance)
+
+    min_distance = ca.mmin(distances_sqrt[1:])
+    adaptive_weight = weight / (1 + alpha * min_distance)
+    cost = (min_distance**2) * adaptive_weight
+
     assert cost.shape == (1,1)
     return cost
+
 
 
 

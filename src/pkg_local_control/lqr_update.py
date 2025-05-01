@@ -138,7 +138,7 @@ class LQR_Update_Controller:
         first_point = trajectory_xy[0]
 
         # Step 2: Get the check trajectory point
-        check_point = trajectory_xy[5]
+        check_point = trajectory_xy[10]
         traj_point = trajectory_xy[-1]
 
         # Step 3: Compute the direction vector from first point to check point
