@@ -93,7 +93,7 @@ def cost_fleet_collision(state: ca.SX, points: ca.SX, safe_distance: float, weig
     assert cost.shape == (1,1)
     return cost
 
-def cost_refpath_deviation(state: ca.SX, line_segments: ca.SX, weight:Union[ca.SX, float]=1.0, alpha:float=0.2) -> ca.SX:
+def cost_refpath_deviation(state: ca.SX, line_segments: ca.SX, weight:Union[ca.SX, float]=1.0, alpha:float=0.5) -> ca.SX:
     """Reference deviation cost with dynamically adjusted weight.
 
     Args:

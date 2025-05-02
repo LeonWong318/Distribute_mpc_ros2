@@ -86,23 +86,24 @@ class PurePursuit:
         look_ahead_idx = None
         path_forward, catch_forward, traj_forward = self.is_forward(current_position=current_position,current_heading=current_heading, trajectory_list=trajectory)
         if self.lookahead_style == 'dist':   
-            if path_forward and (catch_forward or traj_forward):       
-                # Forward condition  
-                for i, point in enumerate(trajectory):
-                    point_state = np.array([point[0], point[1]])
-                    point_angle = math.atan2(point[1]-current_position[1], point[0]-current_position[0])
-                    dist = np.linalg.norm(current_state[:2] - point_state)
-                    if dist < min_dist:
-                        min_dist = dist
-                        closest_idx = i
-                    # Compute the relative angle between the point and the current heading
-                    relative_angle = point_angle - current_heading
-                    # Normalize the angle to the range [-pi, pi]
-                    relative_angle = (relative_angle + math.pi) % (2 * math.pi) - math.pi
-                    # Find the first point that is at least look_ahead_dist away
-                    if dist >= self.lookahead_distance and abs(relative_angle) <= math.pi / 2:
-                        if look_ahead_idx is None:
-                            look_ahead_idx = i
+            # if path_forward and (catch_forward or traj_forward):       
+            # Forward condition  
+            for i, point in enumerate(trajectory):
+                point_state = np.array([point[0], point[1]])
+                point_angle = math.atan2(point[1]-current_position[1], point[0]-current_position[0])
+                dist = np.linalg.norm(current_state[:2] - point_state)
+                if dist < min_dist:
+                    min_dist = dist
+                    closest_idx = i
+                # Compute the relative angle between the point and the current heading
+                relative_angle = point_angle - current_heading
+                # Normalize the angle to the range [-pi, pi]
+                relative_angle = (relative_angle + math.pi) % (2 * math.pi) - math.pi
+                # Find the first point that is at least look_ahead_dist away
+                if dist >= self.lookahead_distance and abs(relative_angle) <= math.pi / 2:
+                    if look_ahead_idx is None:
+                        look_ahead_idx = i
+                        return trajectory[look_ahead_idx]
             if look_ahead_idx is None:
                 look_ahead_idx = 5
             return trajectory[look_ahead_idx]

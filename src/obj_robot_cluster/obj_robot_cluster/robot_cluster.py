@@ -587,12 +587,12 @@ class ClusterNode(Node):
                 gap=0.2
             )
             # Ensure connecting_path has at least 10 points
-            if len(connecting_end_path) < 10:
-                num_to_add = 10 - len(connecting_end_path)
-                last_point = ref_states[-1]
-                padding = np.tile(last_point, (num_to_add, 1))
-                self.get_logger().info(f'Connecting path is:{connecting_end_path}')
-                connecting_end_path = np.vstack((connecting_end_path, padding))
+            # if len(connecting_end_path) < 10:
+            #     num_to_add = 10 - len(connecting_end_path)
+            #     last_point = connecting_end_path[-1]
+            #     padding = np.tile(last_point, (num_to_add, 1))
+            #     self.get_logger().info(f'Connecting path is:{connecting_end_path}')
+            #     connecting_end_path = np.vstack((connecting_end_path, padding))
                     
                                     
             
@@ -627,11 +627,10 @@ class ClusterNode(Node):
                 if  check_static is False and \
                     self.check_dynamic_obstacles(ref_states=ref_states, robot_states_for_control=robot_states_for_control,
                                                  num_others=num_others,state_dim=state_dim,horizon=horizon)==False:
-                    
-                    if path_type == 'first':
-                        self.ref_path = np.vstack((connecting_first_path, ref_states))
-                    else:
-                        self.ref_path = np.vstack((connecting_end_path, ref_states[5:]))
+                    remaining_needed = horizon - len(connecting_end_path)
+                    remaining_ref = ref_states[5:]
+                    remaining_ref = remaining_ref[:remaining_needed]
+                    self.ref_path = np.vstack((connecting_end_path, remaining_ref))
                     self.use_ref_path = True
                     self.converge_flag = True
                     self.pred_states = self.ref_path
