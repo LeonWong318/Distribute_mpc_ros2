@@ -152,7 +152,7 @@ class PanocBuilder:
         cts.cost_input += ca.sum1(ca.vertcat(pts['v'], pts['w']) * action**2) 
 
         ### Fleet collision avoidance
-        safe_distance = 2*self._spec.vehicle_width+self._spec.vehicle_margin
+        safe_distance = 2*(self._spec.vehicle_width+self._spec.vehicle_margin)
         critical_distance = 2*self._spec.vehicle_width
         if kt < critical_step:
             cts.cost_fleet += mc.cost_fleet_collision(state[:2], other_robot_positions, 

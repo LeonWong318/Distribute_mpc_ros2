@@ -464,7 +464,7 @@ class ClusterNode(Node):
         else:
             return True, 'collision'
     
-    def check_dynamic_obstacles(self, ref_states, robot_states_for_control, num_others, state_dim, horizon, radius=3):
+    def check_dynamic_obstacles(self, ref_states, robot_states_for_control, num_others, state_dim, horizon, radius=2):
         """
         Check dynamic obstacles: front zone presence and predicted trajectory cross.
 
@@ -581,11 +581,11 @@ class ClusterNode(Node):
                 end=ref_states[5],
                 gap=0.2  # set your preferred step gap
             )
-            connecting_first_path = self.generate_connecting_path(
-                start=self._state,
-                end=ref_states[0],
-                gap=0.2
-            )
+            # connecting_first_path = self.generate_connecting_path(
+            #     start=self._state,
+            #     end=ref_states[0],
+            #     gap=0.2
+            # )
             # Ensure connecting_path has at least 10 points
             # if len(connecting_end_path) < 10:
             #     num_to_add = 10 - len(connecting_end_path)
