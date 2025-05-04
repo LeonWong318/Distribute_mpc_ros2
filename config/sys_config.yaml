@@ -30,7 +30,7 @@ stddev_delay: 0.1
 command_timeout: 0.5
 converter_state_publish_frequency: 50.0
 min_cmd_interval: 0.01
-enable_noise: true
+enable_noise: false
 gaussian_stddev: 0.1
 failure_probability: 0.00
 failure_max_deviation: 0.0
