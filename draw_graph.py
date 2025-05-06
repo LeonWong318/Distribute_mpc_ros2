@@ -1,141 +1,297 @@
-import re
+import json
+import os
 import numpy as np
-import pandas as pd
 import matplotlib.pyplot as plt
-from scipy.interpolate import interp1d
+from matplotlib.patches import Polygon, Rectangle
+import matplotlib.colors as mcolors
+from matplotlib.collections import LineCollection
+import math
 
-def parse_ros_log(filename):
-    """Parse ROS2 topic echo log file"""
-    data = []
-    current_entry = {}
+def load_json_file(file_path):
+    """Load JSON data from file"""
+    with open(file_path, 'r') as f:
+        return json.load(f)
+
+def draw_map(ax, map_data):
+    """Draw the map boundaries and obstacles"""
+    # Draw boundary
+    boundary = Polygon(map_data['boundary_coords'], fill=False, 
+                       edgecolor='black', linewidth=1.5, zorder=1)
+    ax.add_patch(boundary)
     
-    with open(filename, 'r') as file:
-        for line in file:
-            line = line.strip()
+    # Draw obstacles
+    for obstacle in map_data['obstacle_list']:
+        obs_patch = Polygon(obstacle, 
+                          facecolor='lightgray', 
+                          edgecolor='dimgray',
+                          linewidth=0.8,
+                          alpha=0.7,
+                          zorder=2)
+        ax.add_patch(obs_patch)
+
+def draw_graph(ax, graph_data, robot_data, schedule_path=None):
+    """Draw the graph nodes and edges with paths colored according to robots"""
+    node_dict = graph_data['node_dict']
+    edge_list = graph_data['edge_list']
+    
+    # Extended color palette for up to 10 robots
+    robot_colors = [
+        '#1f77b4',  # blue
+        '#ff7f0e',  # orange
+        '#2ca02c',  # green
+        '#d62728',  # red
+        '#9467bd',  # purple
+        '#8c564b',  # brown
+        '#e377c2',  # pink
+        '#7f7f7f',  # gray
+        '#bcbd22',  # olive
+        '#17becf'   # teal
+    ]
+    
+    robot_color_map = {str(i): robot_colors[i % len(robot_colors)] for i in range(len(robot_data))}
+    
+    # Load schedule from CSV
+    robot_paths = {}
+    try:
+        import csv
+        with open(schedule_path, 'r') as f:
+            reader = csv.DictReader(f)
+            schedule_data = list(reader)
             
-            # Detect message separator
-            if line == '---':
-                if current_entry:
-                    data.append(current_entry)
-                    current_entry = {}
-                continue
+            # Group schedule by robot_id
+            schedule_by_robot = {}
+            for row in schedule_data:
+                robot_id = row['robot_id']
+                if robot_id not in schedule_by_robot:
+                    schedule_by_robot[robot_id] = []
+                schedule_by_robot[robot_id].append({
+                    'node_id': row['node_id'],
+                    'ETA': int(row['ETA'])
+                })
+            
+            # Sort each robot's path by ETA
+            for robot_id, path in schedule_by_robot.items():
+                sorted_path = sorted(path, key=lambda x: x['ETA'])
+                robot_paths[robot_id] = [point['node_id'] for point in sorted_path]
+    except Exception as e:
+        raise Exception(f"Error reading schedule file: {e}")
+    
+    # Draw all nodes as simple dots first (we'll overlay special ones later)
+    all_node_x = [pos[0] for pos in node_dict.values()]
+    all_node_y = [pos[1] for pos in node_dict.values()]
+    ax.scatter(all_node_x, all_node_y, c='lightgray', s=15, zorder=3, alpha=0.5)
+    
+    # Draw all edges as light gray
+    normal_lines = []
+    for edge in edge_list:
+        start_node, end_node = edge
+        if start_node in node_dict and end_node in node_dict:
+            start_pos = node_dict[start_node]
+            end_pos = node_dict[end_node]
+            normal_lines.append([start_pos, end_pos])
+    
+    lc = LineCollection(normal_lines, colors='lightgray', linewidths=0.8, alpha=0.5, zorder=2)
+    ax.add_collection(lc)
+    
+    # Create an edge lookup dictionary for faster access
+    edge_lookup = {}
+    for edge in edge_list:
+        start, end = edge
+        if start not in edge_lookup:
+            edge_lookup[start] = []
+        if end not in edge_lookup:
+            edge_lookup[end] = []
+        edge_lookup[start].append(end)
+        edge_lookup[end].append(start)  # Assuming undirected graph
+    
+    # Now draw robot-specific paths
+    for robot_id, path_nodes in robot_paths.items():
+        if robot_id in robot_color_map:
+            color = robot_color_map[robot_id]
+            
+            # Draw path lines
+            path_lines = []
+            
+            # Function to find shortest path between two nodes using BFS
+            def find_connecting_path(start_node, end_node):
+                if start_node not in node_dict or end_node not in node_dict:
+                    return []
                 
-            # Parse fields
-            if ':' in line:
-                key, value = [part.strip() for part in line.split(':', 1)]
+                # BFS to find shortest path
+                queue = [[start_node]]
+                visited = set([start_node])
                 
-                # Handle timestamp
-                if key == 'sec':
-                    current_entry['sec'] = int(value)
-                elif key == 'nanosec':
-                    current_entry['nanosec'] = int(value)
-                elif key in ['x', 'y', 'theta']:
-                    current_entry[key] = float(value)
-                elif key == 'robot_id':
-                    current_entry[key] = int(value)
-    
-    # Add the last entry
-    if current_entry:
-        data.append(current_entry)
-    
-    # Convert to DataFrame and calculate unified timestamp
-    df = pd.DataFrame(data)
-    if 'sec' in df.columns and 'nanosec' in df.columns:
-        df['timestamp'] = df['sec'] + df['nanosec'] * 1e-9
-    
-    return df
+                while queue:
+                    path = queue.pop(0)
+                    node = path[-1]
+                    
+                    if node == end_node:
+                        return path
+                    
+                    # Check neighbors
+                    if node in edge_lookup:
+                        for neighbor in edge_lookup[node]:
+                            if neighbor not in visited:
+                                new_path = list(path)
+                                new_path.append(neighbor)
+                                queue.append(new_path)
+                                visited.add(neighbor)
+                
+                return []  # No path found
+            
+            # Connect all nodes in the path
+            for i in range(len(path_nodes) - 1):
+                current_node = path_nodes[i]
+                next_node = path_nodes[i + 1]
+                
+                # Find connecting path
+                connection = find_connecting_path(current_node, next_node)
+                
+                # Add all segments of the connecting path
+                if len(connection) > 1:
+                    for j in range(len(connection) - 1):
+                        node1 = connection[j]
+                        node2 = connection[j + 1]
+                        if node1 in node_dict and node2 in node_dict:
+                            start_pos = node_dict[node1]
+                            end_pos = node_dict[node2]
+                            path_lines.append([start_pos, end_pos])
+            
+            # Draw the colored path for this robot
+            if path_lines:
+                lc = LineCollection(path_lines, colors=color, linewidths=1.5, alpha=0.8, zorder=4)
+                ax.add_collection(lc)
+            
+            # Highlight nodes in the path
+            for i, node_id in enumerate(path_nodes):
+                if node_id in node_dict:
+                    node_pos = node_dict[node_id]
+                    
+                    # Start node (first in path)
+                    if i == 0:
+                        ax.scatter(node_pos[0], node_pos[1], c=color, s=50, marker='o', 
+                                 edgecolors='black', linewidth=1.0, zorder=5)
+                    
+                    # End node (last in path)
+                    elif i == len(path_nodes) - 1:
+                        ax.scatter(node_pos[0], node_pos[1], c=color, s=70, marker='D', 
+                                 edgecolors='black', linewidth=1.0, zorder=5)
+                    
+                    # Intermediate nodes
+                    else:
+                        ax.scatter(node_pos[0], node_pos[1], c=color, s=25, marker='o', 
+                                 edgecolors='black', linewidth=0.5, alpha=0.7, zorder=5)
 
-def interpolate_states(df, time_points):
-    """Interpolate states based on time points"""
-    # Ensure data is sorted by time
-    df = df.sort_values('timestamp')
+def draw_robots(ax, robot_data):
+    """Draw robots as rectangles with orientation"""
+    robot_colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd']
+    robot_width = 0.6  # 0.6m wide
+    robot_length = 0.9  # 0.9m long
     
-    # Create interpolation functions for x and y
-    x_interp = interp1d(df['timestamp'], df['x'], kind='linear', bounds_error=False, fill_value='extrapolate')
-    y_interp = interp1d(df['timestamp'], df['y'], kind='linear', bounds_error=False, fill_value='extrapolate')
-    
-    # Interpolate for each time point
-    interp_df = pd.DataFrame({
-        'timestamp': time_points,
-        'x': x_interp(time_points),
-        'y': y_interp(time_points)
-    })
-    
-    return interp_df
+    for i, (robot_id, robot_info) in enumerate(robot_data.items()):
+        x, y, theta = robot_info
+        
+        # Calculate center point for rectangle
+        color = robot_colors[i % len(robot_colors)]
+        
 
-def calculate_euclidean_distance(df1, df2):
-    """Calculate the Euclidean distance between two datasets"""
-    return np.sqrt((df1['x'] - df2['x'])**2 + (df1['y'] - df2['y'])**2)
+        bl_x, bl_y = -robot_length/2, -robot_width/2
+        
+        corners = [
+            (bl_x, bl_y),  # bottom-left
+            (bl_x + robot_length, bl_y),  # bottom-right
+            (bl_x + robot_length, bl_y + robot_width),  # top-right
+            (bl_x, bl_y + robot_width)  # top-left
+        ]
+        
+        # Rotate the corners around the origin by theta
+        rotated_corners = []
+        for corner_x, corner_y in corners:
+            # Apply rotation matrix
+            rotated_x = corner_x * np.cos(theta) - corner_y * np.sin(theta)
+            rotated_y = corner_x * np.sin(theta) + corner_y * np.cos(theta)
+            # Translate to robot position
+            rotated_corners.append((rotated_x + x, rotated_y + y))
+        
+        # Create and add the rotated rectangle as a polygon
+        rect = Polygon(rotated_corners, 
+                     facecolor=color, 
+                     edgecolor='black', 
+                     alpha=0.7, 
+                     zorder=5)
+        ax.add_patch(rect)
+        
+        # Add robot ID with better visibility (text with outline)
+        label_offset_y = 1.5  # Offset in y direction (positive = above)
+        
+        # Create text background for better visibility
+        ax.text(x, y + label_offset_y, f"Robot {robot_id}", fontsize=6,
+               ha='center', va='center', color='black',
+               bbox=dict(facecolor='white', alpha=0.7, edgecolor='black', pad=1.5),
+               weight='bold', zorder=6)
 
-def main():
-    # 1. Read the three log files
-    print("Parsing log files...")
-    before_df = parse_ros_log('robot_0_before_fusion.log')
-    after_df = parse_ros_log('robot_0_after_fusion.log')
-    real_df = parse_ros_log('robot_0_real_state.log')
+def visualize_environment(map_path, graph_path, robot_path, output_path=None, schedule_path=None):
+    """Visualize the complete environment with map, graph, and robots"""
+    # Load data
+    map_data = load_json_file(map_path)
+    graph_data = load_json_file(graph_path)
+    robot_data = load_json_file(robot_path)
     
-    print(f"Parsing complete. Records: before={len(before_df)}, after={len(after_df)}, real={len(real_df)}")
+    # Create figure with academic paper style
+    plt.style.use('default')
+    fig, ax = plt.subplots(figsize=(10, 8), dpi=300)
     
-    # 2. Determine time range
-    start_time = max(before_df['timestamp'].min(), after_df['timestamp'].min(), real_df['timestamp'].min())
-    end_time = min(before_df['timestamp'].max(), after_df['timestamp'].max(), real_df['timestamp'].max())
+    # Draw components
+    draw_map(ax, map_data)
+    draw_graph(ax, graph_data, robot_data, schedule_path)  # Pass schedule_path to draw_graph
+    draw_robots(ax, robot_data)
     
-    print(f"Common time range: {start_time} to {end_time}")
+    # Remove title and axis labels
+    ax.set_xlabel('')
+    ax.set_ylabel('')
+    ax.set_title('')
     
-    # 3. Create common time points (100ms interval)
-    time_points = np.arange(start_time, end_time, 0.1)
+    # Set axis limits based on boundary
+    boundary = map_data['boundary_coords']
+    x_min = min(point[0] for point in boundary) - 1
+    x_max = max(point[0] for point in boundary) + 1
+    y_min = min(point[1] for point in boundary) - 1
+    y_max = max(point[1] for point in boundary) + 1
     
-    # 4. Interpolate each dataset
-    print("Performing time interpolation...")
-    before_interp = interpolate_states(before_df, time_points)
-    after_interp = interpolate_states(after_df, time_points)
-    real_interp = interpolate_states(real_df, time_points)
+    ax.set_xlim(x_min, x_max)
+    ax.set_ylim(y_min, y_max)
     
-    # 5. Calculate errors (Euclidean distance)
-    print("Calculating Euclidean distances...")
-    before_errors = calculate_euclidean_distance(before_interp, real_interp)
-    after_errors = calculate_euclidean_distance(after_interp, real_interp)
+    # Add grid and legend
+    ax.grid(True, linestyle='--', alpha=0.3)
     
-    # 6. Calculate average errors
-    avg_before_error = before_errors.mean()
-    avg_after_error = after_errors.mean()
     
-    print(f"Before fusion average error: {avg_before_error:.6f} meters")
-    print(f"After fusion average error: {avg_after_error:.6f} meters")
-    print(f"Error improvement: {100 * (avg_before_error - avg_after_error) / avg_before_error:.2f}%")
+    # Force equal aspect ratio to ensure correct scaling
+    ax.set_aspect('equal', 'box')
     
-    # 7. Visualize results
-    plt.figure(figsize=(12, 8))
-    
-    # Error over time curve
-    plt.subplot(2, 1, 1)
-    plt.plot(time_points - time_points[0], before_errors, label='Before Fusion Error')
-    plt.plot(time_points - time_points[0], after_errors, label='After Fusion Error')
-    plt.xlabel('Time (seconds)')
-    plt.ylabel('Euclidean Distance (meters)')
-    plt.title('Position Error Before and After State Fusion')
-    plt.legend()
-    plt.grid(True)
-    
-    # Error boxplot
-    plt.subplot(2, 1, 2)
-    plt.boxplot([before_errors, after_errors], labels=['Before Fusion', 'After Fusion'])
-    plt.ylabel('Euclidean Distance (meters)')
-    plt.title('Error Distribution Comparison')
-    plt.grid(True)
-    
+    # Add additional details for academic paper
     plt.tight_layout()
-    plt.savefig('fusion_error_analysis.png', dpi=300)
-    plt.show()
     
-    # 8. Save results to CSV
-    result_df = pd.DataFrame({
-        'timestamp': time_points,
-        'before_fusion_error': before_errors,
-        'after_fusion_error': after_errors
-    })
-    result_df.to_csv('fusion_error_results.csv', index=False)
-    print("Analysis results saved to fusion_error_results.csv and fusion_error_analysis.png")
+    # Save the figure if output path is provided
+    if output_path:
+        plt.savefig(output_path, dpi=300, bbox_inches='tight')
+        print(f"Figure saved to {output_path}")
+    
+    # Display the figure
+    plt.show()
 
 if __name__ == "__main__":
-    main()
+    # Example usage with the provided JSON files
+    file_path = "data/test_data_cross/"
+    map_file = "map.json"
+    graph_file = "graph.json"
+    robot_file = "robot_start.json"
+    schedule_file = "schedule.csv"
+    
+    # Visualize the environment
+    visualize_environment(
+        file_path + map_file, 
+        file_path + graph_file, 
+        file_path + robot_file, 
+        file_path + "environment_visualization.png",
+        file_path + schedule_file
+    )
