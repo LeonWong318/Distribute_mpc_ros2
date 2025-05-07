@@ -2,10 +2,9 @@ import json
 import os
 import numpy as np
 import matplotlib.pyplot as plt
-from matplotlib.patches import Polygon, Rectangle
-import matplotlib.colors as mcolors
+from matplotlib.patches import Polygon
 from matplotlib.collections import LineCollection
-import math
+import colorsys
 
 def load_json_file(file_path):
     """Load JSON data from file"""
@@ -29,26 +28,38 @@ def draw_map(ax, map_data):
                           zorder=2)
         ax.add_patch(obs_patch)
 
+def generate_distinct_colors(n):
+    """Generate n visually distinct colors using HSV color space"""
+    colors = []
+    for i in range(n):
+        # Distribute hues evenly around the color wheel
+        h = i / n
+        # Keep saturation and value high for vibrant, distinct colors
+        s = 0.7 + 0.3 * (i % 3) / 2  # Slight variation in saturation
+        v = 0.8 + 0.2 * (i % 2)      # Slight variation in value
+        
+        # Convert HSV to RGB
+        rgb = colorsys.hsv_to_rgb(h, s, v)
+        
+        # Convert to hex
+        hex_color = '#%02x%02x%02x' % (int(rgb[0]*255), int(rgb[1]*255), int(rgb[2]*255))
+        colors.append(hex_color)
+    
+    return colors
+
 def draw_graph(ax, graph_data, robot_data, schedule_path=None):
     """Draw the graph nodes and edges with paths colored according to robots"""
     node_dict = graph_data['node_dict']
     edge_list = graph_data['edge_list']
     
-    # Extended color palette for up to 10 robots
-    robot_colors = [
-        '#1f77b4',  # blue
-        '#ff7f0e',  # orange
-        '#2ca02c',  # green
-        '#d62728',  # red
-        '#9467bd',  # purple
-        '#8c564b',  # brown
-        '#e377c2',  # pink
-        '#7f7f7f',  # gray
-        '#bcbd22',  # olive
-        '#17becf'   # teal
-    ]
+    # Get robot IDs from the robot_data
+    robot_ids = list(robot_data.keys())
     
-    robot_color_map = {str(i): robot_colors[i % len(robot_colors)] for i in range(len(robot_data))}
+    # Generate distinct colors for all robots
+    robot_colors = generate_distinct_colors(len(robot_ids))
+    
+    # Create a consistent color mapping using actual robot IDs
+    robot_color_map = {robot_id: robot_colors[i] for i, robot_id in enumerate(robot_ids)}
     
     # Load schedule from CSV
     robot_paths = {}
@@ -181,20 +192,21 @@ def draw_graph(ax, graph_data, robot_data, schedule_path=None):
                     else:
                         ax.scatter(node_pos[0], node_pos[1], c=color, s=25, marker='o', 
                                  edgecolors='black', linewidth=0.5, alpha=0.7, zorder=5)
+    
+    # Return the color mapping for use in draw_robots
+    return robot_color_map
 
-def draw_robots(ax, robot_data):
+def draw_robots(ax, robot_data, robot_color_map):
     """Draw robots as rectangles with orientation"""
-    robot_colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd']
     robot_width = 0.6  # 0.6m wide
     robot_length = 0.9  # 0.9m long
     
-    for i, (robot_id, robot_info) in enumerate(robot_data.items()):
+    for robot_id, robot_info in robot_data.items():
         x, y, theta = robot_info
         
-        # Calculate center point for rectangle
-        color = robot_colors[i % len(robot_colors)]
+        # Use the same color mapping from draw_graph
+        color = robot_color_map.get(robot_id, '#000000')  # Default to black if not found
         
-
         bl_x, bl_y = -robot_length/2, -robot_width/2
         
         corners = [
@@ -243,8 +255,8 @@ def visualize_environment(map_path, graph_path, robot_path, output_path=None, sc
     
     # Draw components
     draw_map(ax, map_data)
-    draw_graph(ax, graph_data, robot_data, schedule_path)  # Pass schedule_path to draw_graph
-    draw_robots(ax, robot_data)
+    robot_color_map = draw_graph(ax, graph_data, robot_data, schedule_path)  # Get the color map
+    draw_robots(ax, robot_data, robot_color_map)  # Pass the color map to draw_robots
     
     # Remove title and axis labels
     ax.set_xlabel('')
@@ -264,7 +276,6 @@ def visualize_environment(map_path, graph_path, robot_path, output_path=None, sc
     # Add grid and legend
     ax.grid(True, linestyle='--', alpha=0.3)
     
-    
     # Force equal aspect ratio to ensure correct scaling
     ax.set_aspect('equal', 'box')
     
@@ -281,7 +292,7 @@ def visualize_environment(map_path, graph_path, robot_path, output_path=None, sc
 
 if __name__ == "__main__":
     # Example usage with the provided JSON files
-    file_path = "data/test_data_cross/"
+    file_path = "data/many_AMR/"
     map_file = "map.json"
     graph_file = "graph.json"
     robot_file = "robot_start.json"
