@@ -55,11 +55,6 @@ gnome-terminal --working-directory="$CURRENT_DIR" -- bash -c "echo Message Buffe
 echo "Determining required robot nodes..."
 ROBOT_LAUNCH_COMMANDS=$(python cluster_robot_id.py)
 
-# Launch robot manager and wait for it to initialize
-# echo "Launching robot manager..."
-# gnome-terminal --working-directory="$CURRENT_DIR" -- bash -c "echo Robot Manager; source install/setup.bash; ros2 launch obj_robot_manager obj_robot_manager.launch.py; exec bash"
-
-
 echo "Launching Gazebo Node"
 gnome-terminal --working-directory="$CURRENT_DIR" -- bash -c "echo Robot Visualizer; source install/setup.bash; ros2 launch obj_gazebo_simulation gazebo_simulation.launch.py; exec bash"
 
@@ -70,18 +65,3 @@ sleep 5
 # Launch local robot nodes (will register with manager)
 echo "Launching local robot nodes..."
 eval "$ROBOT_LAUNCH_COMMANDS"
-
-# Wait for robots to register and clusters to be created
-# echo "Waiting for robots to register and cluster nodes to initialize (2 seconds)..."
-# sleep 2
-# echo "Launching listening and logging..."
-
-# nohup bash -c "source install/setup.bash && ros2 topic echo /manager/robot_states > robot_state.log 2>&1" &
-# echo "Started monitoring /manager/robot_states"
-
-# nohup bash -c "source install/setup.bash && ros2 topic echo /robot_0/state > robot_0_state.log 2>&1" &
-# echo "Started monitoring /robot_0/state"
-
-# nohup bash -c "source install/setup.bash && ros2 topic echo /robot_1/state > robot_1_state.log 2>&1" &
-# echo "Started monitoring /robot_1/state"
-

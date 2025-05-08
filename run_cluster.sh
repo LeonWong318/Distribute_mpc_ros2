@@ -54,17 +54,4 @@ gnome-terminal --working-directory="$CURRENT_DIR" -- bash -c "echo Robot Manager
 echo "Waiting for Gazebo to initialize (5 seconds)..."
 sleep 5
 
-# Wait for robots to register and clusters to be created
-# echo "Waiting for robots to register and cluster nodes to initialize (2 seconds)..."
-# sleep 2
-# echo "Launching listening and logging..."
-
-# nohup bash -c "source install/setup.bash && ros2 topic echo /manager/robot_states > robot_state.log 2>&1" &
-# echo "Started monitoring /manager/robot_states"
-
-# nohup bash -c "source install/setup.bash && ros2 topic echo /robot_0/state > robot_0_state.log 2>&1" &
-# echo "Started monitoring /robot_0/state"
-
-# nohup bash -c "source install/setup.bash && ros2 topic echo /robot_1/state > robot_1_state.log 2>&1" &
-# echo "Started monitoring /robot_1/state"
 
