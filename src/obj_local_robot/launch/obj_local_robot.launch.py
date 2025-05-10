@@ -123,8 +123,7 @@ def generate_launch_description():
             'lqr_lookahead_time': config.get('lqr_lookahead_time', 0.5),
             'lqr_lookahead_style': config.get('lqr_lookahead_style', 'time'),
 
-            # --- CBF config ---
-            'cbf_config_path': os.path.join(workspace_root, config.get('cbf_config_path', 'config/cbf_config.yaml')),
+            
             'safty_margin': config.get('safety_margin',0.2),
             'max_obstacle_distance': config.get('max_obstacle_distance', 3.0)
         }],

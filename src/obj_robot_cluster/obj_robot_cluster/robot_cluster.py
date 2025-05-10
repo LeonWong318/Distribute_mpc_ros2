@@ -467,50 +467,68 @@ class ClusterNode(Node):
     def check_dynamic_obstacles(self, ref_states, robot_states_for_control, num_others, state_dim, horizon, radius=2):
         """
         Check dynamic obstacles: front zone presence and predicted trajectory cross.
-
         Parameters:
-            ref_states (np.ndarray): (N, 3) reference path
-            robot_states_for_control (List[float]): Flat list of other robot states and predictions
-            num_others (int): number of other robots
-            state_dim (int): usually 3 (x, y, theta)
-            horizon (int): prediction horizon for each robot
-            radius (float): semi-circular front detection range
-
+        ref_states (np.ndarray): (N, 3) reference path
+        robot_states_for_control (List[float]): Flat list of other robot states and predictions
+        num_others (int): number of other robots
+        state_dim (int): usually 3 (x, y, theta)
+        horizon (int): prediction horizon for each robot
+        radius (float): semi-circular front detection range
         Returns:
-            bool: True if there's a dynamic obstacle concern
+        tuple: (bool, list) - (True if there's a dynamic obstacle concern, list of obstacle indices)
         """
         x0, y0, theta0 = self._state
         my_path = np.vstack((self._state[:2], ref_states[:, :2]))
         my_path_line = LineString(my_path)
-
+        
+        # Create a semi-circular front zone geometry using shapely
+        angles = np.linspace(-np.pi/2 + theta0, np.pi/2 + theta0, 20)
+        semi_circle_points = [(x0 + radius * np.cos(angle), y0 + radius * np.sin(angle)) for angle in angles]
+        # Add center point to create a semi-circle rather than an arc
+        semi_circle_points.append((x0, y0))
+        front_zone = Polygon(semi_circle_points)
+        
+        obstacles_in_region = []  # Track which robots are causing concerns
+        
         # Loop over each robot
         for i in range(num_others):
             base_idx = i * state_dim
             x, y, theta = robot_states_for_control[base_idx : base_idx + 3]
-
-            # --- Check semi-circular front zone ---
+            
+            # --- Check if robot is physically in the semi-circular front zone ---
             dx = x - x0
             dy = y - y0
             dist = np.hypot(dx, dy)
+            
             if dist <= radius:
                 angle_to_robot = math.atan2(dy, dx)
                 angle_diff = self._normalize_angle(angle_to_robot - theta0)
                 if -np.pi/2 <= angle_diff <= np.pi/2:
-                    return True  # Robot in front region
-
-            # --- Check predicted trajectory cross ---
+                    obstacles_in_region.append({"id": i, "type": "robot_in_zone", "distance": dist})
+            
+            # --- Check predicted trajectory cross with our path ---
             pred_idx = (state_dim * num_others) + i * state_dim * horizon
             pred_traj = robot_states_for_control[pred_idx : pred_idx + state_dim * horizon]
             pred_points = [
                 (pred_traj[j], pred_traj[j+1])
                 for j in range(0, len(pred_traj) - state_dim + 1, state_dim)
             ]
+            
             if len(pred_points) >= 2:
                 other_traj_line = LineString(pred_points)
+                
+                # Check if the predicted trajectory crosses our path
                 if my_path_line.intersects(other_traj_line):
-                    return True
-
-        return False
+                    obstacles_in_region.append({"id": i, "type": "trajectory_cross_path", 
+                                               "intersection": my_path_line.intersection(other_traj_line)})
+                
+                # Check if the predicted trajectory passes through our front zone
+                if front_zone.intersects(other_traj_line):
+                    obstacles_in_region.append({"id": i, "type": "trajectory_cross_zone", 
+                                               "intersection": front_zone.intersection(other_traj_line)})
+        
+        # Return whether any obstacles were found and the list of obstacle information
+        return len(obstacles_in_region) > 0
     def _normalize_angle(self, angle):
         """
         Normalize angle to the range (-pi, pi].
@@ -556,6 +574,90 @@ class ClusterNode(Node):
             path.append([x, y, theta])
 
         return np.array(path)
+
+
+    def pack_robot_states_with_filter(self):
+        """
+        Filters and packs robot states for control based on crossing and priority logic.
+
+        Returns:
+            tuple: 
+                - robot_states_for_control (list): Filtered control input [x, y, theta] + predictions.
+                - full_dyn_obstacle_list (list): List of [x, y, theta] for high-priority dynamic obstacles.
+                - unfiltered_robot_states (list): Unfiltered version, same format as robot_states_for_control.
+        """
+        received_robot_states = [state for rid, state in self.other_robot_states.items()]
+        expected_count = len(self.expected_robots)
+        if len(received_robot_states) != expected_count - 1:
+            return None, None, None
+
+        horizon = self.config_mpc.N_hor
+        num_others = self.config_mpc.Nother
+        state_dim = 3
+        vec_len = state_dim * (horizon + 1) * num_others
+
+        # Initialize both filtered and unfiltered vectors
+        robot_states_for_control = [-10.0] * vec_len
+        unfiltered_robot_states = [-10.0] * vec_len
+        full_dyn_obstacle_list = []
+
+        idx_f = 0
+        idx_pred_f = state_dim * num_others
+        idx_u = 0
+        idx_pred_u = state_dim * num_others
+
+        for rid, state in self.other_robot_states.items():
+            other_pose = [state.x, state.y, state.theta]
+            pred = state.pred_states[:state_dim * horizon] if hasattr(state, 'pred_states') else []
+
+            # Fill unfiltered robot states
+            if idx_u + state_dim <= state_dim * num_others:
+                unfiltered_robot_states[idx_u:idx_u + state_dim] = other_pose
+                idx_u += state_dim
+                unfiltered_robot_states[idx_pred_u:idx_pred_u + state_dim * horizon] = pred
+                idx_pred_u += state_dim * horizon
+
+            # Apply crossing/front logic
+            other_id = rid
+            if self.check_crossing_or_front(other_pose):
+                if other_id is not None and other_id <= self.robot_id:
+                    # Build trajectory: current + predicted (horizon steps)
+                    traj = [other_pose]
+                    if hasattr(state, 'pred_states') and len(state.pred_states) >= state_dim * horizon:
+                        for i in range(0, state_dim * horizon, state_dim):
+                            traj.append(state.pred_states[i:i+state_dim])
+                    else:
+                        # Pad with last known pose or dummy if prediction missing
+                        traj += [other_pose] * horizon
+                    
+                    full_dyn_obstacle_list.append(traj)
+
+                    continue  # Exclude from filtered control input
+
+            # Fill filtered robot states
+            if idx_f + state_dim <= state_dim * num_others:
+                robot_states_for_control[idx_f:idx_f + state_dim] = other_pose
+                idx_f += state_dim
+                robot_states_for_control[idx_pred_f:idx_pred_f + state_dim * horizon] = pred
+                idx_pred_f += state_dim * horizon
+
+        return robot_states_for_control, full_dyn_obstacle_list, unfiltered_robot_states
+
+
+    def check_crossing_or_front(self, other_pose, front_radius=2.0, angle_tolerance=math.pi / 3):
+        """
+        Check if the other robot is crossing or in front of self.
+        """
+        sx, sy, stheta = self._state
+        ox, oy, _ = other_pose
+
+        dx = ox - sx
+        dy = oy - sy
+        distance = math.hypot(dx, dy)
+        angle_to_other = math.atan2(dy, dx)
+        angle_diff = abs((angle_to_other - stheta + math.pi) % (2 * math.pi) - math.pi)
+
+        return distance < front_radius and angle_diff < angle_tolerance
     
     def control_loop(self):
         try:
@@ -602,30 +704,18 @@ class ClusterNode(Node):
             
             # get other robot states
             received_robot_states = [state for rid, state in self.other_robot_states.items()]
-            other_robot_states_for_RRT = np.array([[state.x, state.y, state.theta] for state in received_robot_states])
+            # other_robot_states_for_RRT = np.array([[state.x, state.y, state.theta] for state in received_robot_states])
             # self.get_logger().info(f'other robot states:{other_robot_states_for_RRT}')
             if len(received_robot_states) == len(self.expected_robots) - 1:
-                state_dim = 3  # x, y, theta
-                horizon = self.config_mpc.N_hor
-                num_others = self.config_mpc.Nother
-                robot_states_for_control = [-10.0] * state_dim * (horizon + 1) * num_others
-                
-                idx = 0
-                for state in received_robot_states:
-                    robot_states_for_control[idx:idx+state_dim] = [state.x, state.y, state.theta]
-                    idx += state_dim
-                
-                idx_pred = state_dim * num_others
-                for state in received_robot_states:
-                    if hasattr(state, 'pred_states') and len(state.pred_states) >= state_dim * horizon:
-                        robot_states_for_control[idx_pred:idx_pred+state_dim*horizon] = state.pred_states[:state_dim*horizon]
-                    idx_pred += state_dim * horizon
+                robot_states_for_control, full_dyn_obstacle, other_robot_states = self.pack_robot_states_with_filter()
                 
                 start_time = self.get_clock().now()
                 check_static, path_type = self.check_static_obstacles_on_the_way(ref_states=ref_states)
-                
+                horizon = self.config_mpc.N_hor
+                state_dim = 3
+                num_others = self.config_mpc.Nother
                 if  check_static is False and \
-                    self.check_dynamic_obstacles(ref_states=ref_states, robot_states_for_control=robot_states_for_control,
+                    self.check_dynamic_obstacles(ref_states=ref_states, robot_states_for_control=other_robot_states,
                                                  num_others=num_others,state_dim=state_dim,horizon=horizon)==False:
                     remaining_needed = horizon - len(connecting_end_path)
                     remaining_ref = ref_states[5:]
@@ -654,7 +744,8 @@ class ClusterNode(Node):
                     self.last_actions, self.pred_states, self.current_refs, self.debug_info, exist_status, monitered_cost= self.controller.run_step(
                         static_obstacles=self.static_obstacles,
                         other_robot_states=robot_states_for_control,
-                        inital_guess= None
+                        inital_guess= None,
+                        full_dyn_obstacle_list=full_dyn_obstacle
                     )
 
                     end_time = self.get_clock().now()

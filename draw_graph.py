@@ -292,7 +292,7 @@ def visualize_environment(map_path, graph_path, robot_path, output_path=None, sc
 
 if __name__ == "__main__":
     # Example usage with the provided JSON files
-    file_path = "data/many_AMR/"
+    file_path = "data/test_data_cross/"
     map_file = "map.json"
     graph_file = "graph.json"
     robot_file = "robot_start.json"
@@ -303,6 +303,6 @@ if __name__ == "__main__":
         file_path + map_file, 
         file_path + graph_file, 
         file_path + robot_file, 
-        file_path + "environment_visualization.png",
+        file_path + "environment_visualization_unbalance.png",
         file_path + schedule_file
     )
