@@ -597,8 +597,8 @@ class ClusterNode(Node):
         vec_len = state_dim * (horizon + 1) * num_others
 
         # Initialize both filtered and unfiltered vectors
-        robot_states_for_control = [-10.0] * vec_len
-        unfiltered_robot_states = [-10.0] * vec_len
+        robot_states_for_control = [-100.0] * vec_len
+        unfiltered_robot_states = [-100.0] * vec_len
         full_dyn_obstacle_list = []
 
         idx_f = 0
@@ -640,7 +640,8 @@ class ClusterNode(Node):
                 idx_f += state_dim
                 robot_states_for_control[idx_pred_f:idx_pred_f + state_dim * horizon] = pred
                 idx_pred_f += state_dim * horizon
-
+        if full_dyn_obstacle_list == []:
+            full_dyn_obstacle_list =None
         return robot_states_for_control, full_dyn_obstacle_list, unfiltered_robot_states
 
 
