@@ -34,7 +34,7 @@ Visualization Manager:
       Cell Size: 1
       Class: rviz_default_plugins/Grid
       Color: 160; 160; 164
-      Enabled: true
+      Enabled: false
       Line Style:
         Line Width: 0.029999999329447746
         Value: Lines
@@ -47,7 +47,7 @@ Visualization Manager:
       Plane: XY
       Plane Cell Count: 10
       Reference Frame: <Fixed Frame>
-      Value: true
+      Value: false
     - Class: rviz_default_plugins/MarkerArray
       Enabled: true
       Name: MarkerArray
@@ -64,59 +64,19 @@ Visualization Manager:
         Value: /robot_visualization/static_markers
       Value: true
     - Class: rviz_default_plugins/TF
-      Enabled: true
+      Enabled: false
       Frame Timeout: 15
       Frames:
         All Enabled: true
-        base_footprint:
-          Value: true
-        left_wheel_link:
-          Value: true
-        map:
-          Value: true
-        odom:
-          Value: true
-        right_wheel_link:
-          Value: true
-        robot_0:
-          Value: true
-        robot_0/chassis:
-          Value: true
-        robot_1:
-          Value: true
-        robot_1/chassis:
-          Value: true
-        robot_2:
-          Value: true
-        robot_2/chassis:
-          Value: true
-        robot_3:
-          Value: true
-        robot_3/chassis:
-          Value: true
-        robot_4:
-          Value: true
-        robot_4/chassis:
-          Value: true
       Marker Scale: 1
       Name: TF
       Show Arrows: true
       Show Axes: true
       Show Names: false
       Tree:
-        map:
-          robot_0:
-            {}
-          robot_1:
-            {}
-          robot_2:
-            {}
-          robot_3:
-            {}
-          robot_4:
-            {}
+        {}
       Update Interval: 0
-      Value: true
+      Value: false
     - Class: rviz_default_plugins/MarkerArray
       Enabled: true
       Name: MarkerArray
@@ -124,7 +84,6 @@ Visualization Manager:
         robot_ids: true
         robot_radar: true
         robot_size: true
-        robot_target_lines: true
         robot_target_points: true
       Topic:
         Depth: 10
@@ -234,18 +193,18 @@ Visualization Manager:
         Swap Stereo Eyes: false
         Value: false
       Focal Point:
-        X: 26.148622512817383
-        Y: 34.94739532470703
-        Z: 9.339932441711426
+        X: 26.2471923828125
+        Y: 36.48087692260742
+        Z: 9.2955961227417
       Focal Shape Fixed Size: true
       Focal Shape Size: 0.05000000074505806
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 1.3403972387313843
+      Pitch: 1.4403971433639526
       Target Frame: <Fixed Frame>
       Value: Orbit (rviz)
-      Yaw: 4.713577747344971
+      Yaw: 4.7085771560668945
     Saved: ~
 Window Geometry:
   Displays:

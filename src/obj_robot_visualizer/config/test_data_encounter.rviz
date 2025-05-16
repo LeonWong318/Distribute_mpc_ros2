@@ -34,7 +34,7 @@ Visualization Manager:
       Cell Size: 1
       Class: rviz_default_plugins/Grid
       Color: 160; 160; 164
-      Enabled: true
+      Enabled: false
       Line Style:
         Line Width: 0.029999999329447746
         Value: Lines
@@ -47,7 +47,7 @@ Visualization Manager:
       Plane: XY
       Plane Cell Count: 10
       Reference Frame: <Fixed Frame>
-      Value: true
+      Value: false
     - Class: rviz_default_plugins/MarkerArray
       Enabled: true
       Name: MarkerArray
@@ -64,41 +64,19 @@ Visualization Manager:
         Value: /robot_visualization/static_markers
       Value: true
     - Class: rviz_default_plugins/TF
-      Enabled: true
+      Enabled: false
       Frame Timeout: 15
       Frames:
         All Enabled: true
-        base_footprint:
-          Value: true
-        left_wheel_link:
-          Value: true
-        map:
-          Value: true
-        odom:
-          Value: true
-        right_wheel_link:
-          Value: true
-        robot_0:
-          Value: true
-        robot_0/chassis:
-          Value: true
-        robot_1:
-          Value: true
-        robot_1/chassis:
-          Value: true
       Marker Scale: 1
       Name: TF
       Show Arrows: true
       Show Axes: true
       Show Names: false
       Tree:
-        map:
-          robot_0:
-            {}
-          robot_1:
-            {}
+        {}
       Update Interval: 0
-      Value: true
+      Value: false
     - Class: rviz_default_plugins/MarkerArray
       Enabled: true
       Name: MarkerArray
@@ -106,7 +84,6 @@ Visualization Manager:
         robot_ids: true
         robot_radar: true
         robot_size: true
-        robot_target_lines: true
         robot_target_points: true
       Topic:
         Depth: 10
@@ -216,18 +193,18 @@ Visualization Manager:
         Swap Stereo Eyes: false
         Value: false
       Focal Point:
-        X: 0.24253784120082855
-        Y: -0.3651992380619049
-        Z: 1.2063384056091309
+        X: 0.13634400069713593
+        Y: -0.20255446434020996
+        Z: 1.231920838356018
       Focal Shape Fixed Size: true
       Focal Shape Size: 0.05000000074505806
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 1.4153972864151
+      Pitch: 1.5397963523864746
       Target Frame: <Fixed Frame>
       Value: Orbit (rviz)
-      Yaw: 4.718578815460205
+      Yaw: 4.7135796546936035
     Saved: ~
 Window Geometry:
   Displays:
