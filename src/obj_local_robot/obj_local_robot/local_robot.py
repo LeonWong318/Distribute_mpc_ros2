@@ -6,7 +6,7 @@ from rclpy.node import Node
 from rclpy.callback_groups import ReentrantCallbackGroup, MutuallyExclusiveCallbackGroup
 from rclpy.qos import QoSProfile, QoSReliabilityPolicy, QoSHistoryPolicy, QoSDurabilityPolicy
 from basic_motion_model.motion_model import UnicycleModel
-from pkg_configs.configs import CircularRobotSpecification, CBFconfig
+from pkg_configs.configs import CircularRobotSpecification
 
 import numpy as np
 import time
@@ -15,7 +15,7 @@ import asyncio
 from pkg_local_control.pure_pursuit import PurePursuit
 from pkg_local_control.lqr import LQRController
 from pkg_local_control.lqr_update import LQR_Update_Controller
-from pkg_local_control.cbf_lqr import CBF_LQR_Controller
+
 from pkg_local_control.obt_processer import ObstacleProcessor
 
 from msg_interfaces.msg import ClusterToRobotTrajectory, RobotToClusterState, RobotToRvizStatus, ClusterBetweenRobotHeartBeat, RobotToRvizTargetPoint
@@ -102,7 +102,7 @@ class RobotNode(Node):
                 ('lqr_lookahead_dist',1),
                 ('lqr_lookahead_time', .2),
                 ('lqr_lookahead_style', 'time'),
-                ('cbf_config_path',''),
+                
                 ('safety_margin', 0.2),
                 ('max_obstacle_distance', 3.0),
             ]
@@ -146,8 +146,7 @@ class RobotNode(Node):
         self.lqr_lookahead_style = self.get_parameter('lqr_lookahead_style').value
         
         # Get CBF config
-        self.cbf_config_path = self.get_parameter('cbf_config_path').value
-        self.cbf_config = CBFconfig.from_yaml(self.cbf_config_path)
+        
         self.safety_margin = self.get_parameter('safety_margin').value
         self.max_obstacle_distance = self.get_parameter('max_obstacle_distance').value
         self.laser_processor = ObstacleProcessor(self.safety_margin, self.max_obstacle_distance)
@@ -332,8 +331,7 @@ class RobotNode(Node):
             self.mpc_ts
             )
         
-        # Initialize CBF controller
-        self.cbf_controller = CBF_LQR_Controller(self.cbf_config, self.max_velocity, self.ts)
+       
         
         self.get_logger().info(f'Controllers initialized: {self.controller_type}')
 
@@ -875,29 +873,8 @@ class RobotNode(Node):
                     self.target_point
                 )
                 self.publish_target_point(self.target)
+              
                 
-            elif self.controller_type == 'cbf':
-
-                # if self.obstacles is None:
-                #     v, omega = self.lqr_update_controller.compute_control_commands(
-                #         current_position,
-                #         current_heading,
-                #         trajectory_list,
-                #         traj_time,
-                #         current_time
-                #     )
-                #     self.get_logger().info('LQR')
-                # else:
-                #     v, omega = self.cbf_controller.compute_control_commands(
-                #         current_position,
-                #         current_heading,
-                #         trajectory_list,
-                #         self.obstacles
-                #     )
-                #     self.get_logger().debug('CBF')
-                self.get_logger().warn_once(f'Unknown controller type: {self.controller_type}')
-                return
-            
             # Limit control commands
             v = np.clip(v, -self.max_velocity, self.max_velocity)
             omega = np.clip(omega, -self.max_angular_velocity, self.max_angular_velocity)
