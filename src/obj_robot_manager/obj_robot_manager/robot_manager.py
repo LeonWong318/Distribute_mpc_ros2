@@ -3,13 +3,32 @@ from rclpy.node import Node
 from rclpy.executors import MultiThreadedExecutor
 from rclpy.callback_groups import MutuallyExclusiveCallbackGroup, ReentrantCallbackGroup
 from rclpy.qos import QoSProfile, QoSReliabilityPolicy, QoSHistoryPolicy, QoSDurabilityPolicy
-from threading import Lock
+from threading import Lock, Thread
 import subprocess
 import os
 import json
 import threading
-
-from msg_interfaces.msg import ManagerToClusterStateSet, ClusterToManagerState, ManagerToClusterStart, GazeboToManagerState
+import json
+from shapely.geometry import Polygon, Point, LineString
+import math
+import traceback
+import numpy as np
+from pkg_configs.configs import MpcConfiguration, CircularRobotSpecification
+from basic_motion_model.motion_model import UnicycleModel
+from pkg_motion_plan.local_traj_plan import LocalTrajPlanner
+from pkg_tracker_mpc.trajectory_tracker import TrajectoryTracker
+from pkg_motion_plan.global_path_coordinate import GlobalPathCoordinator
+from msg_interfaces.msg import (
+    ManagerToClusterStateSet, 
+    ClusterToManagerState,
+    GazeboToManagerState,
+    ClusterToManagerState, 
+    ClusterToRobotTrajectory, 
+    RobotToClusterState,
+    ClusterBetweenRobotHeartBeat,
+    ClusterToRvizShortestPath,
+    ClusterToRvizConvergeSignal
+    )
 from msg_interfaces.srv import RegisterRobot
 
 
@@ -41,40 +60,70 @@ class RobotManager(Node):
         self.mpc_config_path = self.get_parameter('mpc_config_path').value
         self.robot_config_path = self.get_parameter('robot_config_path').value
 
+        # Load configuration files
+        self.load_config_files()
         
+        # Load MPC and robot configurations
+        self.config_mpc = MpcConfiguration.from_json(self.mpc_config_path)
+        self.config_robot = CircularRobotSpecification.from_json(self.robot_config_path)
+        
+        # Class state variables
+        self.received_first_heartbeat = {}
         self.active_robots = [] 
-        self.cluster_processes = {}  
-        self.cluster_subscribers = {}
         self.robot_states = {}
+        self.idle = {}
+        self.converge_flag = {}
+        self.control_thread = None
+        self.control_stop_event = threading.Event()
+        self.robot_planners = {}
+        self.robot_controllers = {}
         
-        self.converter_states = {}
+        # Timing parameters
+        self.heart_beat_send_period = 0.1
+        self.heart_beat_check_period = 0.1
+        self.control_loop_period = 0.1
+        
+        # Locks
         self._converter_lock = Lock()
-        self.converter_subscribers = {}
-        
         self._lock = Lock()
         self._registration_lock = Lock()
         self._state_lock = Lock()
+        self._control_lock = Lock()
         
+        # State trackers
+        self.converter_states = {}
+        self.converter_subscribers = {}
         self.expected_robots = set()  # Set of expected robots(from config)
-        self.registered_robots = set()  # Set of registrated robots
+        self.registered_robots = set()  # Set of registered robots
+        self.last_heartbeat_time = {}
+        self.cluster_processes = {}
+        
+        # Global path coordinator setup
+        self.gpc = GlobalPathCoordinator.from_csv(self.schedule_path)
+        self.gpc.load_graph_from_json(self.graph_path)
+        self.gpc.load_map_from_json(self.map_path, inflation_margin=self.config_robot.vehicle_width+0.2)
+        self.static_obstacles = self.gpc.inflated_map.obstacle_coords_list
+        
+        # Parse robot starting positions
+        self.parse_robot_start()
+        
+        # Publishers and subscribers
+        self.heartbeat_sub = {}
+        self.heartbeat_pub = {}
+        self.heartbeat_timer = {}
+        self.state_subscribers = {}
+        self.traj_pub = {}
+        self.shortest_path_pub = {}
+        self.converge_signal_pub = {}
         
         # Flag to track if global start signal has been sent
         self._global_start_sent = False
         
-        self.load_config_files()
-        self.parse_robot_start()
+        # Create publishers and subscribers
+        self.create_pub_and_sub()
         
-        # Allow parallel execution
-        self.service_group = ReentrantCallbackGroup()
-        
-        self.reliable_qos = QoSProfile(
-            reliability=QoSReliabilityPolicy.RELIABLE,
-            durability=QoSDurabilityPolicy.TRANSIENT_LOCAL,
-            history=QoSHistoryPolicy.KEEP_LAST,
-            depth=10
-        )
-        
-        # create registration service
+        # Create service for robot registration
+        self.service_group = MutuallyExclusiveCallbackGroup()
         self.register_service = self.create_service(
             RegisterRobot,
             '/register_robot',
@@ -82,33 +131,199 @@ class RobotManager(Node):
             callback_group=self.service_group
         )
         
+        # State publisher
         self.states_publisher = self.create_publisher(
             ManagerToClusterStateSet,
             '/manager/robot_states',
             self.reliable_qos
         )
         
-        self.start_signal_publisher = self.create_publisher(
-            ManagerToClusterStart,
-            '/manager/global_start',
-            self.reliable_qos
-        )
-        
-        self.create_timer(
-            1.0 / self.publish_frequency,
-            self.publish_robot_states,
-            callback_group=MutuallyExclusiveCallbackGroup()
-        )
-        
         self.get_logger().info('Robot manager initialized successfully')
+
+    def create_pub_and_sub(self):
+        self.callback_group = ReentrantCallbackGroup()
+        
+        self.reliable_qos = QoSProfile(
+            reliability=QoSReliabilityPolicy.RELIABLE,
+            history=QoSHistoryPolicy.KEEP_LAST,
+            durability=QoSDurabilityPolicy.TRANSIENT_LOCAL, #using Transient_local to prevent message loss
+            depth=10
+        )
+        
+        self.best_effort_qos = QoSProfile(
+            reliability=QoSReliabilityPolicy.BEST_EFFORT,
+            history=QoSHistoryPolicy.KEEP_LAST,
+            depth=10
+        )
+
+        for robot_id in self.expected_robots:
+            # Initialize tracking dictionaries for this robot
+            self.idle[robot_id] = False
+            self.converge_flag[robot_id] = False
+            
+            # Subscriber: robot's state
+            sub_topic = f'/robot_{robot_id}/state_delayed'
+            sub = self.create_subscription(
+                RobotToClusterState,
+                sub_topic,
+                lambda msg, rid=robot_id: self.from_robot_state_callback(msg, rid),
+                self.reliable_qos,
+                callback_group=self.callback_group
+            )
+            self.state_subscribers[robot_id] = sub
+
+            # Publisher: trajectory command to each robot
+            traj_pub_topic = f'/cluster_{robot_id}/trajectory'
+            traj_pub = self.create_publisher(
+                ClusterToRobotTrajectory,
+                traj_pub_topic,
+                self.reliable_qos
+            )
+            self.traj_pub[robot_id] = traj_pub
+
+            # Publisher: RViz shortest path for each robot
+            shortest_path_topic = f'/robot_{robot_id}/shortest_path'
+            shortest_path_pub = self.create_publisher(
+                ClusterToRvizShortestPath,
+                shortest_path_topic,
+                self.reliable_qos
+            )
+            self.shortest_path_pub[robot_id] = shortest_path_pub
+
+            # Publisher: RViz convergence signal for each robot
+            converge_signal_topic = f'/robot_{robot_id}/converge_signal'
+            converge_signal_pub = self.create_publisher(
+                ClusterToRvizConvergeSignal,
+                converge_signal_topic,
+                self.reliable_qos
+            )
+            self.converge_signal_pub[robot_id] = converge_signal_pub
+            
+            # Setup heartbeat
+            self.start_heart_beat(robot_id)
+            
+    def from_robot_state_callback(self, msg, robot_id):
+        """Callback for receiving robot state messages"""
+        try:
+            with self._state_lock:
+                if robot_id in self.robot_states:
+                    # Check if this is a newer message
+                    existing_stamp = self.robot_states[robot_id].stamp
+                    new_stamp = msg.stamp
+                    
+                    if (new_stamp.sec > existing_stamp.sec or 
+                       (new_stamp.sec == existing_stamp.sec and new_stamp.nanosec > existing_stamp.nanosec)):
+                        self.robot_states[robot_id] = msg
+                        self.get_logger().debug(f'Updated state for robot {robot_id}: x={msg.x}, y={msg.y}, theta={msg.theta}')
+                else:
+                    self.robot_states[robot_id] = msg
+                    self.get_logger().debug(f'Received first state for robot {robot_id}: x={msg.x}, y={msg.y}, theta={msg.theta}')
+        except Exception as e:
+            self.get_logger().error(f'Error in from_robot_state_callback: {str(e)}')
+            
+    def start_heart_beat(self, robot_id):
+        """Initialize heartbeat communication for a specific robot"""
+        self.heartbeat_callback_group = MutuallyExclusiveCallbackGroup()
+        
+        # Create publisher
+        heartbeat_pub = self.create_publisher(
+            ClusterBetweenRobotHeartBeat,
+            f'/cluster_{robot_id}/heartbeat',
+            self.best_effort_qos
+        )
+        self.heartbeat_pub[robot_id] = heartbeat_pub
+        
+        # Create subscriber
+        heartbeat_sub = self.create_subscription(
+            ClusterBetweenRobotHeartBeat,
+            f'/robot_{robot_id}/heartbeat',
+            lambda msg, rid=robot_id: self.heartbeat_callback(msg, rid),
+            self.best_effort_qos,
+            callback_group=self.heartbeat_callback_group
+        )
+        self.heartbeat_sub[robot_id] = heartbeat_sub
+        
+        # Create timer for sending heartbeats
+        heartbeat_timer = self.create_timer(
+            self.heart_beat_send_period,
+            lambda rid=robot_id: self.send_heartbeat(rid),
+            callback_group=self.heartbeat_callback_group
+        )
+        self.heartbeat_timer[robot_id] = heartbeat_timer
+        
+        # Initialize tracker for this robot
+        self.last_heartbeat_time[robot_id] = self.get_clock().now()
+        self.received_first_heartbeat[robot_id] = False
+
+        # Create one global heartbeat check timer if not already created
+        if not hasattr(self, 'heartbeat_check_timer'):
+            self.heartbeat_check_timer = self.create_timer(
+                self.heart_beat_check_period,
+                self.check_heartbeats,
+                callback_group=self.heartbeat_callback_group
+            )
+
+    def heartbeat_callback(self, msg, rid):
+        """Process heartbeat messages from a specific robot"""
+        try:
+            self.last_heartbeat_time[rid] = self.get_clock().now()
+
+            if not self.received_first_heartbeat[rid]:
+                self.received_first_heartbeat[rid] = True
+                self.get_logger().info(f'Received first heartbeat from robot {rid}')
+
+            self.get_logger().debug(f'Received heartbeat from robot {rid}')
+        except Exception as e:
+            self.get_logger().error(f'Error in heartbeat_callback: {str(e)}')
+
+    def send_heartbeat(self, rid):
+        """Send heartbeat to a specific robot"""
+        try:
+            heartbeat_msg = ClusterBetweenRobotHeartBeat()
+            heartbeat_msg.stamp = self.get_clock().now().to_msg()
+
+            self.heartbeat_pub[rid].publish(heartbeat_msg)
+            self.get_logger().debug(f'Sent heartbeat to robot {rid}')
+        except Exception as e:
+            self.get_logger().error(f'Error sending heartbeat to robot {rid}: {str(e)}')
+
+    def check_heartbeats(self):
+        """Check heartbeats for all robots"""
+        try:
+            current_time = self.get_clock().now()
+            
+            for rid in list(self.registered_robots):
+                if not self.received_first_heartbeat.get(rid, False):
+                    continue
+                
+                if rid not in self.last_heartbeat_time:
+                    continue
+                    
+                time_diff = (current_time - self.last_heartbeat_time[rid]).nanoseconds / 1e9
+                self.get_logger().debug(f'Last heartbeat from robot {rid} at {time_diff:.1f} seconds ago')
+                
+                if time_diff > self.heart_beat_check_period * 60.0:
+                    self.get_logger().warn(f'No heartbeat from robot {rid} for {time_diff:.1f} seconds')
+                    self.handle_robot_offline(rid)
+        except Exception as e:
+            self.get_logger().error(f'Error checking heartbeats: {str(e)}')
+
+    def handle_robot_offline(self, rid):
+        """Handle when a robot goes offline"""
+        if rid in self.idle and not self.idle[rid]:
+            self.get_logger().error(f'Robot {rid} appears to be offline, entering idle state')
+            self.idle[rid] = True
     
     def load_config_files(self):
+        """Load configuration files from disk"""
         try:
             for path_name, path in [
                 ('map_path', self.map_path),
                 ('graph_path', self.graph_path),
                 ('schedule_path', self.schedule_path),
-                ('robot_start_path', self.robot_start_path)
+                ('robot_start_path', self.robot_start_path),
+                ('mpc_config_path', self.mpc_config_path),
+                ('robot_config_path', self.robot_config_path)
             ]:
                 if not os.path.exists(path):
                     self.get_logger().error(f'File not found: {path_name} = {path}')
@@ -133,6 +348,7 @@ class RobotManager(Node):
             raise
         
     def parse_robot_start(self):
+        """Parse robot start configurations"""
         try:
             robot_start_data = json.loads(self.robot_start)
             self.expected_robots = set(int(robot_id) for robot_id in robot_start_data.keys())
@@ -142,33 +358,111 @@ class RobotManager(Node):
             raise
     
     def check_all_robots_registered(self):
+        """Check if all expected robots are registered and start control loop if yes"""
         if len(self.registered_robots) == len(self.expected_robots):
-            self.send_global_start_signal()
+            self.get_logger().info('All robots registered, starting control loop')
+            self.start_control_loop()
     
-    def send_global_start_signal(self):
-        # Prevent sending multiple start signals
-        if self._global_start_sent:
+    def start_control_loop(self):
+        """Start the continuous control loop in a separate thread"""
+        if self.control_thread is not None and self.control_thread.is_alive():
+            self.get_logger().warn('Control loop already running')
             return
+            
+        # Reset stop event
+        self.control_stop_event.clear()
+        
+        # Initialize planners and controllers for each robot
+        self.init_planners_and_controllers()
+        
+        # Start the control loop in a separate thread
+        self.control_thread = Thread(target=self.continuous_control_loop)
+        self.control_thread.daemon = True
+        self.control_thread.start()
+        self.get_logger().info('Control loop started')
+        
+    def stop_control_loop(self):
+        """Stop the continuous control loop"""
+        if self.control_thread is not None and self.control_thread.is_alive():
+            self.control_stop_event.set()
+            self.control_thread.join(timeout=5.0)
+            self.get_logger().info('Control loop stopped')
+    
+    def init_planners_and_controllers(self):
+        """Initialize planners and controllers for all robots"""
+        for rid in self.expected_robots:
+            # Create motion model
+            motion_model = UnicycleModel(sampling_time=self.config_mpc.ts)
+            
+            # Create local trajectory planner
+            planner = LocalTrajPlanner(
+                self.config_mpc.ts, 
+                self.config_mpc.N_hor, 
+                self.config_robot.lin_vel_max, 
+                verbose=False
+            )
+            planner.load_map(
+                self.gpc.inflated_map.boundary_coords, 
+                self.gpc.inflated_map.obstacle_coords_list
+            )
+            
+            # Load path info for this robot
+            path_coords, path_times = self.gpc.get_robot_schedule(rid)
+            planner.load_path(
+                path_coords,
+                path_times,
+                nomial_speed=self.config_robot.lin_vel_max, 
+                method="linear"
+            )
+            
+            # Create trajectory tracker (controller)
+            controller = TrajectoryTracker(
+                self.config_mpc, 
+                self.config_robot, 
+                robot_id=rid, 
+                verbose=False
+            )
+            controller.load_motion_model(motion_model)
+            
+            # Store planner and controller
+            self.robot_planners[rid] = planner
+            self.robot_controllers[rid] = controller
+            
+            self.get_logger().info(f'Initialized planner and controller for robot {rid}')
+    
+    def continuous_control_loop(self):
+        """Continuous control loop running in a separate thread"""
+        self.get_logger().info('Continuous control loop started')
         
         try:
-            # Prepare the start signal message
-            start_msg = ManagerToClusterStart()
-            start_msg.stamp = self.get_clock().now().to_msg()
-            
-            # Publish the start signal
-            self.start_signal_publisher.publish(start_msg)
-            
-            # Mark that start signal has been sent
-            self._global_start_sent = True
-            
-            self.get_logger().info(
-                f'Global start signal sent. '
-                f'Total registered robots: {len(self.registered_robots)}'
-            )
-        
+            # Keep running until stop event is set or all robots are idle
+            while not self.control_stop_event.is_set():
+                all_idle = True
+                
+                # Guard with lock to prevent race conditions
+                with self._control_lock:
+                    # Run trajectory planning and control for each active robot
+                    for rid in list(self.registered_robots):
+                        if rid in self.idle and not self.idle[rid]:
+                            all_idle = False
+                            self.traj_plan(rid)
+                
+                # If all robots are idle, we're done
+                if all_idle and all(self.idle.get(rid, False) for rid in self.registered_robots):
+                    self.get_logger().info('All robots are idle, control loop terminating')
+                    break
+                    
+                # Sleep to avoid consuming too many resources
+                # Using the event with a timeout allows for clean shutdowns
+                self.control_stop_event.wait(self.control_loop_period)
+                
         except Exception as e:
-            self.get_logger().error(f'Error sending global start signal: {str(e)}')
+            self.get_logger().error(f'Error in continuous_control_loop: {str(e)}')
+            self.get_logger().error(traceback.format_exc())
+        
+        self.get_logger().info('Continuous control loop ended')
     
+      
     def handle_register_robot(self, request, response):
         robot_id = request.robot_id
         
@@ -190,17 +484,6 @@ class RobotManager(Node):
                 response.message = f"Robot {robot_id} already registered"
                 return response
             
-            # create cluster node
-            # success = self.create_cluster_node(robot_id)
-            success = self.create_cluster_node_with_terminal(robot_id)
-            if not success:
-                response.success = False
-                response.message = f"Failed to create cluster node for robot {robot_id}"
-                return response
-            
-            # Create Subscriber for cluster status
-            self.create_cluster_subscriber(robot_id)
-            
             self.create_converter_subscriber(robot_id)
             
             with self._registration_lock:
@@ -221,17 +504,7 @@ class RobotManager(Node):
             response.message = f"Registration error: {str(e)}"
             return response
     
-    def create_cluster_subscriber(self, robot_id):
-        subscriber = self.create_subscription(
-            ClusterToManagerState,
-            f'/cluster_{robot_id}/state',
-            lambda msg: self.cluster_state_callback(msg, robot_id),
-            self.reliable_qos,
-            callback_group=self.service_group
-        )
-        
-        self.cluster_subscribers[robot_id] = subscriber
-        self.get_logger().info(f'Created subscriber for cluster {robot_id} state')
+    
     
     def create_converter_subscriber(self, robot_id):
         subscriber = self.create_subscription(
@@ -245,14 +518,6 @@ class RobotManager(Node):
         self.converter_subscribers[robot_id] = subscriber
         self.get_logger().info(f'Created subscriber for converter {robot_id} state')
     
-    def cluster_state_callback(self, msg, robot_id):
-        with self._state_lock:
-            if msg.robot_id != robot_id:
-                self.get_logger().warn(f'Received state with mismatched robot_id: expected {robot_id}, got {msg.robot_id}')
-                return
-            
-            self.robot_states[robot_id] = msg
-            self.get_logger().debug(f'Updated state for robot {robot_id}: x={msg.x}, y={msg.y}, theta={msg.theta}, idle={msg.idle}')
     
     def converter_state_callback(self, msg, robot_id):
         with self._converter_lock:
@@ -275,12 +540,10 @@ class RobotManager(Node):
                 self.get_logger().debug(f'Received first converter state for robot {robot_id}: x={msg.x}, y={msg.y}, theta={msg.theta}')
     
     
-    def publish_robot_states(self):
+    def update_robot_states(self):
         try:
             # get locks of cluster and converter
             with self._state_lock, self._converter_lock:
-                msg = ManagerToClusterStateSet()
-                msg.stamp = self.get_clock().now().to_msg()
                 for robot_id in self.registered_robots:
                     cluster_state = self.robot_states.get(robot_id)
                     converter_state = self.converter_states.get(robot_id)
@@ -288,192 +551,201 @@ class RobotManager(Node):
                     if cluster_state is not None and converter_state is not None:
                         self.get_logger().debug(f'Robot {robot_id}: Both cluster and converter states available')
 
-                        # get the latest state
+                        # Compare timestamps
                         cluster_stamp = cluster_state.stamp
                         converter_stamp = converter_state.stamp
-                        merged_state = ClusterToManagerState()
-                        merged_state.robot_id = robot_id
 
-                        # Log timestamp information for debugging
-                        self.get_logger().debug(f'Robot {robot_id}: Cluster stamp: {cluster_stamp.sec}.{cluster_stamp.nanosec}, Converter stamp: {converter_stamp.sec}.{converter_stamp.nanosec}')
+                        self.get_logger().debug(
+                            f'Robot {robot_id}: Cluster stamp: {cluster_stamp.sec}.{cluster_stamp.nanosec}, '
+                            f'Converter stamp: {converter_stamp.sec}.{converter_stamp.nanosec}'
+                        )
 
                         if (converter_stamp.sec > cluster_stamp.sec or
                             (converter_stamp.sec == cluster_stamp.sec and converter_stamp.nanosec > cluster_stamp.nanosec)):
-                            # using state from converter
                             self.get_logger().debug(f'Robot {robot_id}: Using CONVERTER state (newer timestamp)')
-                            merged_state.x = converter_state.x
-                            merged_state.y = converter_state.y
-                            merged_state.theta = converter_state.theta
-                            merged_state.stamp = converter_stamp
+                            x = converter_state.x
+                            y = converter_state.y
+                            theta = converter_state.theta
+                            stamp = converter_stamp
+                            pred_states = cluster_state.pred_states
+                            idle = cluster_state.idle
                         else:
-                            # using state from cluster
                             self.get_logger().debug(f'Robot {robot_id}: Using CLUSTER state (newer or equal timestamp)')
-                            merged_state.x = cluster_state.x
-                            merged_state.y = cluster_state.y
-                            merged_state.theta = cluster_state.theta
-                            merged_state.stamp = cluster_stamp
+                            x = cluster_state.x
+                            y = cluster_state.y
+                            theta = cluster_state.theta
+                            stamp = cluster_stamp
+                            pred_states = cluster_state.pred_states
+                            idle = cluster_state.idle
 
-                        merged_state.pred_states = cluster_state.pred_states
-                        merged_state.idle = cluster_state.idle
-
-                        msg.robot_states.append(merged_state)
+                        self.robot_states[robot_id] = (x, y, theta, stamp, pred_states, idle)
 
                     elif cluster_state is not None:
-                        # Only cluster state is available
                         self.get_logger().debug(f'Robot {robot_id}: Only CLUSTER state available, using it directly')
-                        msg.robot_states.append(cluster_state)
+                        self.robot_states[robot_id] = (
+                            cluster_state.x,
+                            cluster_state.y,
+                            cluster_state.theta,
+                            cluster_state.stamp,
+                            cluster_state.pred_states,
+                            cluster_state.idle
+                        )
 
                     elif converter_state is not None:
-                        # Only converter state is available
-                        self.get_logger().debug(f'Robot {robot_id}: Only CONVERTER state available, creating new state from it')
-                        new_state = ClusterToManagerState()
-                        new_state.robot_id = robot_id
-                        new_state.x = converter_state.x
-                        new_state.y = converter_state.y
-                        new_state.theta = converter_state.theta
-                        new_state.stamp = converter_state.stamp
-                        new_state.pred_states = []
-                        new_state.idle = False
-                        msg.robot_states.append(new_state)
+                        self.get_logger().debug(f'Robot {robot_id}: Only CONVERTER state available, using it directly')
+                        self.robot_states[robot_id] = (
+                            converter_state.x,
+                            converter_state.y,
+                            converter_state.theta,
+                            converter_state.stamp,
+                            [],
+                            False
+                        )
 
                     else:
-                        # Neither state is available
                         self.get_logger().warn(f'Robot {robot_id}: Neither cluster nor converter state available')
 
-                # Publish the merged states
-                if msg.robot_states:
-                    self.states_publisher.publish(msg)
-                    self.get_logger().debug(f'Published merged states for {len(msg.robot_states)} robots')
-                else:
-                    self.get_logger().warn('No robot states to publish')
-
         except Exception as e:
-            self.get_logger().error(f'Error publishing robot states: {str(e)}')
+            self.get_logger().error(f'Error updating robot states: {str(e)}')
             import traceback
             self.get_logger().error(traceback.format_exc())
-    
-    def create_cluster_node(self, robot_id):
-        try:
-            cmd = [
-                'ros2', 'launch',
-                self.cluster_package,
-                'obj_robot_cluster.launch.py',
-                f'robot_id:={robot_id}',
-                f'map_path:={self.map_path}',
-                f'graph_path:={self.graph_path}',
-                f'schedule_path:={self.schedule_path}',
-                f'robot_start_path:={self.robot_start_path}',
-            ]
 
-            env = os.environ.copy()
-            conda_prefix = os.environ.get('CONDA_PREFIX', '')
-            if conda_prefix:
-                pythonpath = os.environ.get('PYTHONPATH', '')
-                env['PYTHONPATH'] = f"{conda_prefix}/lib/python3.8/site-packages:{pythonpath}"
-
-            process = subprocess.Popen(
-                cmd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
-                env=env
-            )
-
-            self.cluster_processes[robot_id] = process
-
-            def monitor_output(process, robot_id):
-                for line in process.stdout:
-                    self.get_logger().info(f'Cluster[{robot_id}]: {line.strip()}')
-                for line in process.stderr:
-                    self.get_logger().error(f'Cluster[{robot_id}]: {line.strip()}')
-
-            log_thread = threading.Thread(
-                target=monitor_output,
-                args=(process, robot_id),
-                daemon=True
-            )
-            log_thread.start()
-
-            returncode = process.poll()
-            if returncode is not None and returncode != 0:
-                stderr = process.stderr.read()
-                self.get_logger().error(f'Failed to start cluster for robot {robot_id}: {stderr}')
-                return False
-
-            self.get_logger().info(f'Cluster node for robot {robot_id} started using launch file')
-            return True
-
-        except Exception as e:
-            self.get_logger().error(f'Error creating cluster node: {str(e)}')
-            import traceback
-            self.get_logger().error(traceback.format_exc())
-            return False
+    def traj_plan(self, rid):
+        motion_model = UnicycleModel(sampling_time=self.config_mpc.ts)
+        planner = LocalTrajPlanner(self.config_mpc.ts, self.config_mpc.N_hor, self.config_robot.lin_vel_max, verbose=False)
+        planner.load_map(self.gpc.inflated_map.boundary_coords, self.gpc.inflated_map.obstacle_coords_list)
         
-    def create_cluster_node_with_terminal(self, robot_id):
-        try:
-            cmd = [
-                'ros2', 'launch',
-                self.cluster_package,
-                'obj_robot_cluster.launch.py',
-                f'robot_id:={robot_id}',
-                f'map_path:={self.map_path}',
-                f'graph_path:={self.graph_path}',
-                f'schedule_path:={self.schedule_path}',
-                f'robot_start_path:={self.robot_start_path}',
-            ]
-
-            env = os.environ.copy()
-            conda_prefix = os.environ.get('CONDA_PREFIX', '')
-            if conda_prefix:
-                pythonpath = os.environ.get('PYTHONPATH', '')
-                env['PYTHONPATH'] = f"{conda_prefix}/lib/python3.8/site-packages:{pythonpath}"
-
-            terminal_cmd = [
-                'gnome-terminal',
-                '--',
-                'bash', '-c',
-                f'{" ".join(cmd)}; exec bash'
-            ]
-
-            process = subprocess.Popen(
-                terminal_cmd,
-                env=env,
-                shell=False
+        controller = TrajectoryTracker(self.config_mpc, self.config_robot, robot_id=rid, verbose=False)
+        controller.load_motion_model(UnicycleModel(sampling_time=self.config_mpc.ts))
+        path_coords, path_times = self.gpc.get_robot_schedule(rid)
+        planner.load_path(path_coords,path_times,nomial_speed=self.config_robot.lin_vel_max, method="linear")
+        current_pos = (self.robot_states[rid].x,self.robot_states[rid].y)
+        current_time = self.get_clock().now().seconds_nanoseconds()
+        current_time = current_time[0] + current_time[1] * 1e-9
+        ref_states, ref_speed, done = self.planner.get_local_ref(
+                current_time=current_time,
+                current_pos=current_pos,
+                idx_check_range=10
             )
+        current_states = np.asarray(self.robot_states[rid].x,self.robot_states[rid].y,self.robot_states[rid].theta)
+        connecting_end_path = self.generate_connecting_path(
+                start=current_states,
+                end=ref_states[5],
+                gap=0.2  # set your preferred step gap
+            )
+        controller.set_ref_states(ref_states, ref_speed=ref_speed)
+        other_robot_states = [state for robot_id, state in self.robot_states.items() if robot_id != rid]
+        if len(other_robot_states) == len(self.expected_robots) - 1:
+            state_dim = 3  # x, y, theta
+            horizon = self.config_mpc.N_hor
+            num_others = self.config_mpc.Nother
+            robot_states_for_control = [-10.0] * state_dim * (horizon + 1) * num_others
+            
+            idx = 0
+            for state in other_robot_states:
+                robot_states_for_control[idx:idx+state_dim] = [state.x, state.y, state.theta]
+                idx += state_dim
+            
+            idx_pred = state_dim * num_others
+            for state in other_robot_states:
+                if hasattr(state, 'pred_states') and len(state.pred_states) >= state_dim * horizon:
+                    robot_states_for_control[idx_pred:idx_pred+state_dim*horizon] = state.pred_states[:state_dim*horizon]
+                idx_pred += state_dim * horizon
+            
+            start_time = self.get_clock().now()
+            check_static, path_type = self.check_static_obstacles_on_the_way(ref_states=ref_states)
+            
+            if  check_static is False and \
+                self.check_dynamic_obstacles(ref_states=ref_states, robot_states_for_control=robot_states_for_control,
+                                             num_others=num_others,state_dim=state_dim,horizon=horizon)==False:
+                remaining_needed = horizon - len(connecting_end_path)
+                remaining_ref = ref_states[5:]
+                remaining_ref = remaining_ref[:remaining_needed]
+                ref_path = np.vstack((connecting_end_path, remaining_ref))
+                use_ref_path = True
+                self.converge_flag = True
+                pred_states = ref_path
+                self.publish_trajectory_to_robot(rid, pred_states, use_ref_path)
+                self.get_logger().debug('Using ref path')
+            else:
+                # run controller
+                use_ref_path = False
+                
+                last_actions, pred_states, current_refs, debug_info, exist_status, monitered_cost= controller.run_step(
+                    static_obstacles=self.static_obstacles,
+                    other_robot_states=robot_states_for_control,
+                    inital_guess= None
+                )
+                end_time = self.get_clock().now()
+                duration_ms = (end_time.nanoseconds - start_time.nanoseconds) / 1e9
+                self.get_logger().debug(f'Controller run_step() took {duration_ms:.3f} s')
+                total_cost = monitered_cost["total_cost"]
+                                   
+                # exist_status = 'Converged'
+                if exist_status == 'Converged':
+                    # publish traj to robot after calculating
+                    converge_flag = True
+                    # self.pred_states = init_guess
+                    self.get_logger().info(f'Robot {rid} Converged')
+                    self.get_logger().info(f'Robot {rid} Cost:{total_cost}')
+                    self.publish_trajectory_to_robot(rid,pred_states, use_ref_path)
+                    self.publish_converge_signal(converge_flag)
+                else:
+                    converge_flag = False
+                    # self.publish_trajectory_to_robot()
+                    self.get_logger().info(f'Robot {rid} Not converge reason: {exist_status}')
+                    self.get_logger().info(f'Robot {rid} Cost:{total_cost}')
+                    self.publish_converge_signal(converge_flag)
+                
+        else:
+            self.get_logger().debug('Not enough other robot states, skip this control loop')
+            
+        if controller.check_termination_condition(external_check=planner.idle):
+            self.get_logger().info('Arrived goal and entered idle state')
+            self.idle = True
+    def publish_trajectory_to_robot(self, rid, pred_states, use_ref_path):
+        try:
+            if pred_states is None:
+                return
+            if use_ref_path:
+                traj_msg = ClusterToRobotTrajectory()
+                traj_msg.stamp = self.get_clock().now().to_msg()
 
-            self.cluster_processes[robot_id] = process
-            self.get_logger().info(f'Cluster node for robot {robot_id} started in new terminal using launch file')
-            return True
+                traj_msg.x = []
+                traj_msg.y = []
+                traj_msg.theta = []
+                traj_msg.traj_type = 'ref'
+                for state in pred_states:
+                    if isinstance(state, np.ndarray):
+                        traj_msg.x.append(float(state[0]))
+                        traj_msg.y.append(float(state[1]))
+                        traj_msg.theta.append(float(state[2]))
+
+                self.traj_pub[rid].publish(traj_msg)
+                return
+            
+            traj_msg = ClusterToRobotTrajectory()
+            traj_msg.stamp = self.get_clock().now().to_msg()
+
+            traj_msg.x = []
+            traj_msg.y = []
+            traj_msg.theta = []
+            traj_msg.traj_type = 'mpc'
+            for state in pred_states:
+                if isinstance(state, np.ndarray):
+                    traj_msg.x.append(float(state[0]))
+                    traj_msg.y.append(float(state[1]))
+                    traj_msg.theta.append(float(state[2]))
+
+            self.traj_pub[rid].publish(traj_msg)
 
         except Exception as e:
-            self.get_logger().error(f'Error creating cluster node: {str(e)}')
-            import traceback
-            self.get_logger().error(traceback.format_exc())
-            return False
-    
+            self.get_logger().error(f'Error publishing Robot {rid} trajectory: {str(e)}')
+
     def unregister_robot(self, robot_id):
         if robot_id not in self.registered_robots:
             return
 
-        # close cluster process
-        if robot_id in self.cluster_processes:
-            try:
-                process = self.cluster_processes[robot_id]
-                process.terminate()
-                try:
-                    process.wait(timeout=5)
-                except subprocess.TimeoutExpired:
-                    process.kill()
-                    
-                del self.cluster_processes[robot_id]
-                self.get_logger().info(f'Cluster process for robot {robot_id} terminated')
-            except Exception as e:
-                self.get_logger().error(f'Error terminating cluster process: {str(e)}')
-
-        if robot_id in self.cluster_subscribers:
-            self.destroy_subscription(self.cluster_subscribers[robot_id])
-            del self.cluster_subscribers[robot_id]
-            
         if robot_id in self.converter_subscribers:
             self.destroy_subscription(self.converter_subscribers[robot_id])
             del self.converter_subscribers[robot_id]
@@ -492,17 +764,158 @@ class RobotManager(Node):
 
         self.get_logger().info(f'Robot {robot_id} unregistered')
     
-    def __del__(self):
-        for robot_id, process in list(self.cluster_processes.items()):
-            try:
-                self.get_logger().info(f'Terminating cluster process for robot {robot_id}')
-                process.terminate()
-                try:
-                    process.wait(timeout=2)
-                except subprocess.TimeoutExpired:
-                    process.kill()
-            except Exception as e:
-                self.get_logger().error(f'Error terminating process: {str(e)}')
+    def check_static_obstacles_on_the_way(self, ref_states, step_size=0.1):
+        """
+        Check if there are any static obstacles from current position to start of ref_states,
+        and along the entire reference trajectory.
+
+        Parameters:
+            ref_states (np.ndarray): (N, 3) array of reference states
+            step_size (float): step size for interpolation from current state to ref start
+
+        Returns:
+            
+        """
+        if ref_states.shape[0] == 0:
+            return False, 'end' # Nothing to check
+
+        # Convert obstacles to polygons
+        obstacle_polygons = [Polygon(ob) for ob in self.static_obstacles]
+
+        # Helper function to check a point against all obstacles
+        def is_colliding(x, y):
+            point = Point(x, y)
+            return any(poly.contains(point) for poly in obstacle_polygons)
+        
+        connecting_end_check = True
+        connecting_first_check = True
+        ref_check = True
+        # 1. Check path from current state to end of ref_states
+        x0, y0 = self._state[:2]
+        x1, y1 = ref_states[5, :2]
+        line = LineString([(x0, y0), (x1, y1)])
+        length = line.length
+        num_steps = max(2, int(length / step_size))
+        for i in range(num_steps):
+            pt = line.interpolate(i / (num_steps - 1), normalized=True)
+            if is_colliding(pt.x, pt.y):
+                connecting_end_check = False
+        # 2. check path from current state to first of ref_states
+        x2, y2 = ref_states[0,:2]
+        line_1 = LineString([(x0, y0), (x2, y2)])
+        length_1 = line_1.length
+        num_steps_1 = max(2, int(length_1 / step_size))
+        for i in range(num_steps_1):
+            pt = line_1.interpolate(i / (num_steps_1 - 1), normalized=True)
+            if is_colliding(pt.x, pt.y):
+                connecting_first_check = False
+        # 3. Check each point in ref_states
+        for x, y, _ in ref_states:
+            if is_colliding(x, y):
+                ref_check = False
+        ref_states_5 = ref_states[5:]
+        for x, y, _ in ref_states_5:
+            if is_colliding(x, y):
+                connecting_end_check = False
+        if connecting_end_check:
+            return False, 'end'
+        elif connecting_first_check and ref_check:
+            return False, 'first'
+        else:
+            return True, 'collision'
+    
+    def check_dynamic_obstacles(self, ref_states, robot_states_for_control, num_others, state_dim, horizon, radius=2):
+        """
+        Check dynamic obstacles: front zone presence and predicted trajectory cross.
+
+        Parameters:
+            ref_states (np.ndarray): (N, 3) reference path
+            robot_states_for_control (List[float]): Flat list of other robot states and predictions
+            num_others (int): number of other robots
+            state_dim (int): usually 3 (x, y, theta)
+            horizon (int): prediction horizon for each robot
+            radius (float): semi-circular front detection range
+
+        Returns:
+            bool: True if there's a dynamic obstacle concern
+        """
+        x0, y0, theta0 = self._state
+        my_path = np.vstack((self._state[:2], ref_states[:, :2]))
+        my_path_line = LineString(my_path)
+
+        # Loop over each robot
+        for i in range(num_others):
+            base_idx = i * state_dim
+            x, y, theta = robot_states_for_control[base_idx : base_idx + 3]
+
+            # --- Check semi-circular front zone ---
+            dx = x - x0
+            dy = y - y0
+            dist = np.hypot(dx, dy)
+            if dist <= radius:
+                angle_to_robot = math.atan2(dy, dx)
+                angle_diff = self._normalize_angle(angle_to_robot - theta0)
+                if -np.pi/2 <= angle_diff <= np.pi/2:
+                    return True  # Robot in front region
+
+            # --- Check predicted trajectory cross ---
+            pred_idx = (state_dim * num_others) + i * state_dim * horizon
+            pred_traj = robot_states_for_control[pred_idx : pred_idx + state_dim * horizon]
+            pred_points = [
+                (pred_traj[j], pred_traj[j+1])
+                for j in range(0, len(pred_traj) - state_dim + 1, state_dim)
+            ]
+            if len(pred_points) >= 2:
+                other_traj_line = LineString(pred_points)
+                if my_path_line.intersects(other_traj_line):
+                    return True
+
+        return False
+    def _normalize_angle(self, angle):
+        """
+        Normalize angle to the range (-pi, pi].
+    
+        Parameters:
+            angle (float): angle in radians
+    
+        Returns:
+            float: normalized angle
+        """
+        return (angle + np.pi) % (2 * np.pi) - np.pi
+
+    
+    @staticmethod
+    def generate_connecting_path(start, end, gap):
+        """
+        Generate points from `start` to `end` using fixed step size `gap`.
+
+        Args:
+            start (np.ndarray): shape (3,), current state [x, y, theta]
+            end (np.ndarray): shape (3,), target state [x, y, theta]
+            gap (float): distance between sampled points
+
+        Returns:
+            np.ndarray: (N, 3), each row is [x, y, theta]
+        """
+        start = np.array(start)
+        end = np.array(end)
+
+        vec = end[:2] - start[:2]
+        dist = np.linalg.norm(vec)
+        if dist < 1e-4:
+            return np.empty((0, 3))  # Already at the point
+
+        direction = vec / dist
+        num_steps = int(dist // gap)
+
+        path = [start]
+        for i in range(1, num_steps + 1):
+            x = start[0] + i * gap * direction[0]
+            y = start[1] + i * gap * direction[1]
+            theta = start[2] + (end[2] - start[2]) * (i / num_steps)
+            path.append([x, y, theta])
+
+        return np.array(path)
 
 def main(args=None):
     rclpy.init(args=args)
