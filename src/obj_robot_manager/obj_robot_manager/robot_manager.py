@@ -1,18 +1,20 @@
+import sys
+sys.path.append('src')
 import rclpy
 from rclpy.node import Node
-from rclpy.executors import MultiThreadedExecutor
+
 from rclpy.callback_groups import MutuallyExclusiveCallbackGroup, ReentrantCallbackGroup
 from rclpy.qos import QoSProfile, QoSReliabilityPolicy, QoSHistoryPolicy, QoSDurabilityPolicy
-from threading import Lock, Thread
-import subprocess
-import os
 import json
-import threading
-import json
+
+import numpy as np
 from shapely.geometry import Polygon, Point, LineString
 import math
+from rclpy.executors import MultiThreadedExecutor
+import subprocess
+import os
 import traceback
-import numpy as np
+from threading import Lock, Thread, Event
 from pkg_configs.configs import MpcConfiguration, CircularRobotSpecification
 from basic_motion_model.motion_model import UnicycleModel
 from pkg_motion_plan.local_traj_plan import LocalTrajPlanner
@@ -20,9 +22,7 @@ from pkg_tracker_mpc.trajectory_tracker import TrajectoryTracker
 from pkg_motion_plan.global_path_coordinate import GlobalPathCoordinator
 from msg_interfaces.msg import (
     ManagerToClusterStateSet, 
-    ClusterToManagerState,
     GazeboToManagerState,
-    ClusterToManagerState, 
     ClusterToRobotTrajectory, 
     RobotToClusterState,
     ClusterBetweenRobotHeartBeat,
@@ -64,8 +64,8 @@ class RobotManager(Node):
         self.load_config_files()
         
         # Load MPC and robot configurations
-        self.config_mpc = MpcConfiguration.from_json(self.mpc_config_path)
-        self.config_robot = CircularRobotSpecification.from_json(self.robot_config_path)
+        self.config_mpc = MpcConfiguration.from_yaml(self.mpc_config_path)
+        self.config_robot = CircularRobotSpecification.from_yaml(self.robot_config_path)
         
         # Class state variables
         self.received_first_heartbeat = {}
@@ -74,7 +74,7 @@ class RobotManager(Node):
         self.idle = {}
         self.converge_flag = {}
         self.control_thread = None
-        self.control_stop_event = threading.Event()
+        self.control_stop_event = Event()
         self.robot_planners = {}
         self.robot_controllers = {}
         
@@ -611,7 +611,7 @@ class RobotManager(Node):
             self.get_logger().error(traceback.format_exc())
 
     def traj_plan(self, rid):
-        motion_model = UnicycleModel(sampling_time=self.config_mpc.ts)
+        
         planner = LocalTrajPlanner(self.config_mpc.ts, self.config_mpc.N_hor, self.config_robot.lin_vel_max, verbose=False)
         planner.load_map(self.gpc.inflated_map.boundary_coords, self.gpc.inflated_map.obstacle_coords_list)
         

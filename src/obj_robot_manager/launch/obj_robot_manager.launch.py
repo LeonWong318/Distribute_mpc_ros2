@@ -1,5 +1,5 @@
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument
+from launch.actions import DeclareLaunchArgument, SetEnvironmentVariable
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 import os
@@ -97,8 +97,11 @@ def generate_launch_description():
         }],
         output='screen'
     )
-    
-    return LaunchDescription([
+    pythonpath_cmd = SetEnvironmentVariable(
+        name='PYTHONPATH',
+        value=os.getenv('CONDA_PREFIX', '') + '/lib/python3.8/site-packages:' + os.getenv('PYTHONPATH', '')
+    )
+    return LaunchDescription([pythonpath_cmd]+[
         map_path_arg,
         graph_path_arg,
         schedule_path_arg,
