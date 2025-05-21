@@ -359,7 +359,8 @@ class RobotManager(Node):
                 self.schedule_json = f.read()
                 
             with open(self.robot_start_path, 'r') as f:
-                self.robot_start = f.read()
+                robot_start_data = f.read()
+                self.robot_start = json.loads(robot_start_data)
                 
             self.get_logger().info('Config files loaded successfully')
         
@@ -370,7 +371,7 @@ class RobotManager(Node):
     def parse_robot_start(self):
         """Parse robot start configurations"""
         try:
-            robot_start_data = json.loads(self.robot_start)
+            robot_start_data = self.robot_start
             self.expected_robots = set(int(robot_id) for robot_id in robot_start_data.keys())
             self.get_logger().info(f'Expected robots: {self.expected_robots}')
         except Exception as e:
@@ -449,8 +450,9 @@ class RobotManager(Node):
                 verbose=False
             )
             controller.load_motion_model(motion_model)
-            _state = np.asarray(self.robot_start[str(rid)])
-            controller.load_init_states(_state, goal_state)
+            init_state = np.asarray(self.robot_start[str(rid)])
+            self.get_logger().info(f'Robot {rid} init state is {init_state}')
+            controller.load_init_states(init_state, goal_state)
             # Store planner and controller
             self.robot_planners[rid] = planner
             self.robot_controllers[rid] = controller
@@ -527,6 +529,7 @@ class RobotManager(Node):
 
         except Exception as e:
             self.get_logger().error(f'Error handling registration request: {str(e)}')
+            self.get_logger().error(traceback.format_exc())
             response.success = False
             response.message = f"Registration error: {str(e)}"
             return response
@@ -678,7 +681,7 @@ class RobotManager(Node):
             current_x, current_y, current_theta = self.processed_states[rid][0:3]
 
             # Store current state for use in checking obstacles
-            self._state = np.array([current_x, current_y, current_theta])
+            current_state = np.array([current_x, current_y, current_theta])
 
             # Get current time and position
             current_pos = (current_x, current_y)
@@ -694,7 +697,7 @@ class RobotManager(Node):
 
             # Generate connecting path
             connecting_end_path = self.generate_connecting_path(
-                start=self._state,
+                start=current_state,
                 end=ref_states[5],
                 gap=0.2  # set your preferred step gap
             )
@@ -707,7 +710,7 @@ class RobotManager(Node):
             for robot_id, state in self.processed_states.items():
                 if robot_id != rid and state is not None:
                     other_robot_states.append(state)
-            self.get_logger().info(f'Robot {rid} other_robot_states:{other_robot_states}')
+            self.get_logger().debug(f'Robot {rid} other_robot_states:{other_robot_states}')
             # Check if we have enough information about other robots
             if len(other_robot_states) == len(self.expected_robots) - 1:
                 state_dim = 3  # x, y, theta
@@ -717,7 +720,7 @@ class RobotManager(Node):
 
                 idx = 0
                 for state in other_robot_states:
-                    robot_states_for_control[idx:idx+state_dim] = [state[0], state[1], state[3]]
+                    robot_states_for_control[idx:idx+state_dim] = [state[0], state[1], state[2]]
                     idx += state_dim
 
                 idx_pred = state_dim * num_others
@@ -726,11 +729,12 @@ class RobotManager(Node):
                         robot_states_for_control[idx_pred:idx_pred+state_dim*horizon] = state[4][:state_dim*horizon]
                     idx_pred += state_dim * horizon
                 start_time = self.get_clock().now()
-                check_static, path_type = self.check_static_obstacles_on_the_way(ref_states=ref_states)
+                
+                check_static, path_type = self.check_static_obstacles_on_the_way(ref_states=ref_states, current_state=current_state)
 
                 if check_static is False and \
                    self.check_dynamic_obstacles(ref_states=ref_states, robot_states_for_control=robot_states_for_control,
-                                             num_others=num_others, state_dim=state_dim, horizon=horizon) is False:
+                                             num_others=num_others, state_dim=state_dim, horizon=horizon, current_state=current_state) is False:
                     remaining_needed = horizon - len(connecting_end_path)
                     remaining_ref = ref_states[5:]
                     remaining_ref = remaining_ref[:remaining_needed]
@@ -771,7 +775,7 @@ class RobotManager(Node):
                         self.get_logger().info(f'Robot {rid} Cost:{total_cost}')
                         self.publish_trajectory_to_robot(rid, pred_states, use_ref_path)
                         self.publish_converge_signal(rid, self.converge_flag[rid])
-
+                self.robot_states[rid][4] = pred_states
             else:
                 self.get_logger().debug('Not enough other robot states, skip this control loop')
 
@@ -820,7 +824,8 @@ class RobotManager(Node):
 
         except Exception as e:
             self.get_logger().error(f'Error publishing Robot {rid} trajectory: {str(e)}')
-
+    def publish_trajectory_to_RViz(self,):
+        return
     def unregister_robot(self, robot_id):
         if robot_id not in self.registered_robots:
             return
@@ -851,7 +856,7 @@ class RobotManager(Node):
             self.converge_signal_pub[rid].publish(msg)
         except Exception as e:
             self.get_logger().error(f'Error publishing converge signal for robot {rid}: {str(e)}')
-    def check_static_obstacles_on_the_way(self, ref_states, step_size=0.1):
+    def check_static_obstacles_on_the_way(self, ref_states, current_state, step_size=0.1):
         """
         Check if there are any static obstacles from current position to start of ref_states,
         and along the entire reference trajectory.
@@ -878,7 +883,7 @@ class RobotManager(Node):
         connecting_first_check = True
         ref_check = True
         # 1. Check path from current state to end of ref_states
-        x0, y0 = self._state[:2]
+        x0, y0 = current_state[:2]
         x1, y1 = ref_states[5, :2]
         line = LineString([(x0, y0), (x1, y1)])
         length = line.length
@@ -911,7 +916,7 @@ class RobotManager(Node):
         else:
             return True, 'collision'
     
-    def check_dynamic_obstacles(self, ref_states, robot_states_for_control, num_others, state_dim, horizon, radius=2):
+    def check_dynamic_obstacles(self, ref_states, robot_states_for_control, num_others, state_dim, horizon, current_state, radius=2):
         """
         Check dynamic obstacles: front zone presence and predicted trajectory cross.
 
@@ -926,8 +931,8 @@ class RobotManager(Node):
         Returns:
             bool: True if there's a dynamic obstacle concern
         """
-        x0, y0, theta0 = self._state
-        my_path = np.vstack((self._state[:2], ref_states[:, :2]))
+        x0, y0, theta0 = current_state
+        my_path = np.vstack((current_state[:2], ref_states[:, :2]))
         my_path_line = LineString(my_path)
 
         # Loop over each robot
