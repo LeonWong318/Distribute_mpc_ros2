@@ -209,7 +209,7 @@ class RobotManager(Node):
             with self._state_lock:
                 if robot_id in self.robot_states:
                     # Check if this is a newer message
-                    existing_stamp = self.robot_states[robot_id].stamp
+                    existing_stamp = self.robot_states[robot_id][3]
                     new_stamp = msg.stamp
 
                     if (new_stamp.sec > existing_stamp.sec or 
@@ -440,7 +440,7 @@ class RobotManager(Node):
             goal_state = np.array([*goal_coord, goal_heading])
 
             
-            !controller.load_init_states(self._state, goal_state)
+            
             # Create trajectory tracker (controller)
             controller = TrajectoryTracker(
                 self.config_mpc, 
@@ -449,7 +449,8 @@ class RobotManager(Node):
                 verbose=False
             )
             controller.load_motion_model(motion_model)
-            
+            _state = np.asarray(self.robot_start[str(rid)])
+            controller.load_init_states(_state, goal_state)
             # Store planner and controller
             self.robot_planners[rid] = planner
             self.robot_controllers[rid] = controller
