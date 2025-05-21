@@ -27,7 +27,8 @@ from msg_interfaces.msg import (
     RobotToClusterState,
     ClusterBetweenRobotHeartBeat,
     ClusterToRvizShortestPath,
-    ClusterToRvizConvergeSignal
+    ClusterToRvizConvergeSignal,
+    ClusterToManagerState
     )
 from msg_interfaces.srv import RegisterRobot
 
@@ -90,6 +91,7 @@ class RobotManager(Node):
         self._registration_lock = Lock()
         self._state_lock = Lock()
         self._control_lock = Lock()
+        self._processState_lock = Lock()
         
         # State trackers
         self.converter_states = {}
@@ -202,7 +204,46 @@ class RobotManager(Node):
             
             # Setup heartbeat
             self.start_heart_beat(robot_id)
-            
+    def publish_shortest_path(self, rid, path_coords):
+        try:
+            path_msg = ClusterToRvizShortestPath()
+            path_msg.robot_id = rid
+
+            path_msg.x = [float(coord[0]) for coord in path_coords]
+            path_msg.y = [float(coord[1]) for coord in path_coords]
+
+            self.shortest_path_pub[rid].publish(path_msg)
+            self.get_logger().debug(f'Published shortest path for robot {rid} with {len(path_coords)} points')
+
+        except Exception as e:
+            self.get_logger().error(f'Error publishing shortest path: {str(e)}')     
+    def publish_robot_states(self):
+        try:
+            with self._processState_lock:
+                if self.processed_states is not None:
+                    msg = ManagerToClusterStateSet()
+                    msg.stamp = self.get_clock().now().to_msg()
+                    for rid in self.expected_robots:
+                        new_msg = ClusterToManagerState()
+                        new_msg.robot_id = rid
+                        new_msg.x = self.processed_states[rid][0]
+                        new_msg.y = self.processed_states[rid][1]
+                        new_msg.theta = self.processed_states[rid][2]
+                        new_msg.stamp = self.processed_states[rid][3]
+                        new_msg.pred_states = self.processed_states[rid][4]
+                        new_msg.idle = self.processed_states[rid][5]
+                        msg.robot_states.append(new_msg)
+                    # Publish the merged states
+                if msg.robot_states:
+                    self.states_publisher.publish(msg)
+                    self.get_logger().debug(f'Published merged states for {len(msg.robot_states)} robots')
+                else:
+                    self.get_logger().warn('No robot states to publish')
+
+        except Exception as e:
+            self.get_logger().error(f'Error publishing robot states: {str(e)}')
+            self.get_logger().error(traceback.format_exc())
+
     def from_robot_state_callback(self, msg, robot_id):
         """Callback for receiving robot state messages"""
         try:
@@ -214,7 +255,12 @@ class RobotManager(Node):
 
                     if (new_stamp.sec > existing_stamp.sec or 
                        (new_stamp.sec == existing_stamp.sec and new_stamp.nanosec > existing_stamp.nanosec)):
-                        self.robot_states[robot_id] = msg
+                        self.robot_states[robot_id][0] = msg.x
+                        self.robot_states[robot_id][1] = msg.y
+                        self.robot_states[robot_id][2] = msg.theta
+                        self.robot_states[robot_id][3] = msg.stamp
+                        
+                        self.robot_states[robot_id][5] = msg.idle
                         # Also update the processed state
                         self.processed_states[robot_id] = (
                             msg.x, 
@@ -382,6 +428,7 @@ class RobotManager(Node):
         """Check if all expected robots are registered and start control loop if yes"""
         if len(self.registered_robots) == len(self.expected_robots):
             self.get_logger().info('All robots registered, starting control loop')
+            
             self.start_control_loop()
     
     def start_control_loop(self):
@@ -401,7 +448,11 @@ class RobotManager(Node):
         self.control_thread.daemon = True
         self.control_thread.start()
         self.get_logger().info('Control loop started')
-        
+        self.create_timer(
+                1.0 / self.publish_frequency,
+                self.publish_robot_states,
+                callback_group=MutuallyExclusiveCallbackGroup()
+            )
     def stop_control_loop(self):
         """Stop the continuous control loop"""
         if self.control_thread is not None and self.control_thread.is_alive():
@@ -453,10 +504,18 @@ class RobotManager(Node):
             init_state = np.asarray(self.robot_start[str(rid)])
             self.get_logger().info(f'Robot {rid} init state is {init_state}')
             controller.load_init_states(init_state, goal_state)
+            self.robot_states[rid] = [
+                init_state[0],
+                init_state[1],
+                init_state[2],
+                self.get_clock().now().to_msg(),  # ros2 builtin_interfaces.msg.Time
+                [],  # list of predicted states
+                False     # boolean flag
+            ]
             # Store planner and controller
             self.robot_planners[rid] = planner
             self.robot_controllers[rid] = controller
-            
+            self.publish_shortest_path(rid,path_coords=path_coords)
             self.get_logger().info(f'Initialized planner and controller for robot {rid}')
     
     def continuous_control_loop(self):
@@ -600,7 +659,7 @@ class RobotManager(Node):
     def update_robot_states(self):
         try:
             # get locks of cluster and converter
-            with self._state_lock, self._converter_lock:
+            with self._state_lock, self._converter_lock, self._processState_lock:
                 for robot_id in self.registered_robots:
                     cluster_state = self.robot_states.get(robot_id)
                     converter_state = self.converter_states.get(robot_id)
@@ -740,10 +799,11 @@ class RobotManager(Node):
                     remaining_ref = remaining_ref[:remaining_needed]
                     ref_path = np.vstack((connecting_end_path, remaining_ref))
                     use_ref_path = True
-                    self.converge_flag[rid] = True
+                    
                     pred_states = ref_path
+                    
                     self.publish_trajectory_to_robot(rid, pred_states, use_ref_path)
-                    self.publish_converge_signal(rid, self.converge_flag[rid])
+                    
                     self.get_logger().debug('Using ref path')
                 else:
                     # run controller
@@ -758,7 +818,8 @@ class RobotManager(Node):
                     duration_ms = (end_time.nanoseconds - start_time.nanoseconds) / 1e9
                     self.get_logger().debug(f'Controller run_step() took {duration_ms:.3f} s')
                     total_cost = monitored_cost["total_cost"]
-
+                    current_state[2] = np.arctan2(np.sin(current_state[2]), np.cos(current_state[2]))
+                    controller.set_current_state(current_state)
                     # exist_status = 'Converged'
                     if exist_status == 'Converged':
                         # publish traj to robot after calculating
@@ -773,9 +834,10 @@ class RobotManager(Node):
                         # self.publish_trajectory_to_robot()
                         self.get_logger().info(f'Robot {rid} Not converge reason: {exist_status}')
                         self.get_logger().info(f'Robot {rid} Cost:{total_cost}')
-                        self.publish_trajectory_to_robot(rid, pred_states, use_ref_path)
+                        #self.publish_trajectory_to_robot(rid, pred_states, use_ref_path)
                         self.publish_converge_signal(rid, self.converge_flag[rid])
                 self.robot_states[rid][4] = pred_states
+                self.robot_states[rid][3] = self.get_clock().now().to_msg()
             else:
                 self.get_logger().debug('Not enough other robot states, skip this control loop')
 
@@ -851,7 +913,7 @@ class RobotManager(Node):
         try:
             msg = ClusterToRvizConvergeSignal()
             msg.stamp = self.get_clock().now().to_msg()
-            msg.converged = converged
+            msg.is_converge = converged
 
             self.converge_signal_pub[rid].publish(msg)
         except Exception as e:
