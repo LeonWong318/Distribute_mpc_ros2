@@ -70,7 +70,8 @@ class RobotManager(Node):
         # Class state variables
         self.received_first_heartbeat = {}
         self.active_robots = [] 
-        self.robot_states = {}
+        self.robot_states = {}  # Will store the latest RobotToClusterState messages
+        self.processed_states = {}  # Will store processed (x, y, theta, stamp, pred_states, idle) tuples
         self.idle = {}
         self.converge_flag = {}
         self.control_thread = None
@@ -210,16 +211,35 @@ class RobotManager(Node):
                     # Check if this is a newer message
                     existing_stamp = self.robot_states[robot_id].stamp
                     new_stamp = msg.stamp
-                    
+
                     if (new_stamp.sec > existing_stamp.sec or 
                        (new_stamp.sec == existing_stamp.sec and new_stamp.nanosec > existing_stamp.nanosec)):
                         self.robot_states[robot_id] = msg
+                        # Also update the processed state
+                        self.processed_states[robot_id] = (
+                            msg.x, 
+                            msg.y, 
+                            msg.theta, 
+                            msg.stamp, 
+                            msg.pred_states if hasattr(msg, 'pred_states') else [], 
+                            msg.idle if hasattr(msg, 'idle') else False
+                        )
                         self.get_logger().debug(f'Updated state for robot {robot_id}: x={msg.x}, y={msg.y}, theta={msg.theta}')
                 else:
                     self.robot_states[robot_id] = msg
+                    # Initialize the processed state
+                    self.processed_states[robot_id] = (
+                        msg.x, 
+                        msg.y, 
+                        msg.theta, 
+                        msg.stamp, 
+                        msg.pred_states if hasattr(msg, 'pred_states') else [], 
+                        msg.idle if hasattr(msg, 'idle') else False
+                    )
                     self.get_logger().debug(f'Received first state for robot {robot_id}: x={msg.x}, y={msg.y}, theta={msg.theta}')
         except Exception as e:
             self.get_logger().error(f'Error in from_robot_state_callback: {str(e)}')
+            self.get_logger().error(traceback.format_exc())
             
     def start_heart_beat(self, robot_id):
         """Initialize heartbeat communication for a specific robot"""
@@ -414,7 +434,13 @@ class RobotManager(Node):
                 nomial_speed=self.config_robot.lin_vel_max, 
                 method="linear"
             )
+            goal_coord = path_coords[-1]
+            goal_coord_prev = path_coords[-2]
+            goal_heading = np.arctan2(goal_coord[1]-goal_coord_prev[1], goal_coord[0]-goal_coord_prev[0])
+            goal_state = np.array([*goal_coord, goal_heading])
+
             
+            !controller.load_init_states(self._state, goal_state)
             # Create trajectory tracker (controller)
             controller = TrajectoryTracker(
                 self.config_mpc, 
@@ -465,39 +491,39 @@ class RobotManager(Node):
       
     def handle_register_robot(self, request, response):
         robot_id = request.robot_id
-        
-        
+
         try:
             self.get_logger().info(f'Received registration request from robot {robot_id}')
-            
+
             # check if matches the expected list
             if robot_id not in self.expected_robots:
                 self.get_logger().warn(f'Robot {robot_id} not in expected robots list, registration rejected')
                 response.success = False
                 response.message = f"Robot {robot_id} not in expected robot list"
                 return response
-                
+
             # check if already registered
             if robot_id in self.registered_robots:
                 self.get_logger().warn(f'Robot {robot_id} already registered')
                 response.success = True
                 response.message = f"Robot {robot_id} already registered"
                 return response
-            
+
             self.create_converter_subscriber(robot_id)
-            
+
             with self._registration_lock:
                 self.registered_robots.add(robot_id)
                 self.active_robots.append(robot_id)
                 with self._state_lock:
                     self.robot_states[robot_id] = None
-            
+                    self.processed_states[robot_id] = None
+
             response.success = True
             response.message = f"Robot {robot_id} registered successfully"
             self.get_logger().info(f'Robot {robot_id} registered successfully')
             self.check_all_robots_registered()
             return response
-                
+
         except Exception as e:
             self.get_logger().error(f'Error handling registration request: {str(e)}')
             response.success = False
@@ -534,9 +560,36 @@ class RobotManager(Node):
                 if (new_stamp.sec > existing_stamp.sec or 
                    (new_stamp.sec == existing_stamp.sec and new_stamp.nanosec > existing_stamp.nanosec)):
                     self.converter_states[robot_id] = msg
+
+                    # Also update processed states if this is newer than what we have
+                    if robot_id in self.processed_states and self.processed_states[robot_id] is not None:
+                        current_stamp = self.processed_states[robot_id][3]
+                        if (new_stamp.sec > current_stamp.sec or 
+                           (new_stamp.sec == current_stamp.sec and new_stamp.nanosec > current_stamp.nanosec)):
+                            self.processed_states[robot_id] = (
+                                msg.x, 
+                                msg.y, 
+                                msg.theta, 
+                                msg.stamp, 
+                                self.processed_states[robot_id][4],  # Keep existing pred_states
+                                self.processed_states[robot_id][5]   # Keep existing idle state
+                            )
+
                     self.get_logger().debug(f'Updated converter state for robot {robot_id}: x={msg.x}, y={msg.y}, theta={msg.theta}')
             else:
                 self.converter_states[robot_id] = msg
+
+                # Initialize processed state if not yet available
+                if robot_id not in self.processed_states or self.processed_states[robot_id] is None:
+                    self.processed_states[robot_id] = (
+                        msg.x,
+                        msg.y,
+                        msg.theta,
+                        msg.stamp,
+                        [],  # No predicted states from converter
+                        False  # Not idle by default
+                    )
+
                 self.get_logger().debug(f'Received first converter state for robot {robot_id}: x={msg.x}, y={msg.y}, theta={msg.theta}')
     
     
@@ -567,39 +620,39 @@ class RobotManager(Node):
                             y = converter_state.y
                             theta = converter_state.theta
                             stamp = converter_stamp
-                            pred_states = cluster_state.pred_states
-                            idle = cluster_state.idle
+                            pred_states = cluster_state.pred_states if hasattr(cluster_state, 'pred_states') else []
+                            idle = cluster_state.idle if hasattr(cluster_state, 'idle') else False
                         else:
                             self.get_logger().debug(f'Robot {robot_id}: Using CLUSTER state (newer or equal timestamp)')
                             x = cluster_state.x
                             y = cluster_state.y
                             theta = cluster_state.theta
                             stamp = cluster_stamp
-                            pred_states = cluster_state.pred_states
-                            idle = cluster_state.idle
+                            pred_states = cluster_state.pred_states if hasattr(cluster_state, 'pred_states') else []
+                            idle = cluster_state.idle if hasattr(cluster_state, 'idle') else False
 
-                        self.robot_states[robot_id] = (x, y, theta, stamp, pred_states, idle)
+                        self.processed_states[robot_id] = (x, y, theta, stamp, pred_states, idle)
 
                     elif cluster_state is not None:
                         self.get_logger().debug(f'Robot {robot_id}: Only CLUSTER state available, using it directly')
-                        self.robot_states[robot_id] = (
+                        self.processed_states[robot_id] = (
                             cluster_state.x,
                             cluster_state.y,
                             cluster_state.theta,
                             cluster_state.stamp,
-                            cluster_state.pred_states,
-                            cluster_state.idle
+                            cluster_state.pred_states if hasattr(cluster_state, 'pred_states') else [],
+                            cluster_state.idle if hasattr(cluster_state, 'idle') else False
                         )
 
                     elif converter_state is not None:
                         self.get_logger().debug(f'Robot {robot_id}: Only CONVERTER state available, using it directly')
-                        self.robot_states[robot_id] = (
+                        self.processed_states[robot_id] = (
                             converter_state.x,
                             converter_state.y,
                             converter_state.theta,
                             converter_state.stamp,
-                            [],
-                            False
+                            [],  # No predicted states from converter
+                            False  # Not idle by default
                         )
 
                     else:
@@ -607,102 +660,127 @@ class RobotManager(Node):
 
         except Exception as e:
             self.get_logger().error(f'Error updating robot states: {str(e)}')
-            import traceback
             self.get_logger().error(traceback.format_exc())
 
     def traj_plan(self, rid):
-        
-        planner = LocalTrajPlanner(self.config_mpc.ts, self.config_mpc.N_hor, self.config_robot.lin_vel_max, verbose=False)
-        planner.load_map(self.gpc.inflated_map.boundary_coords, self.gpc.inflated_map.obstacle_coords_list)
-        
-        controller = TrajectoryTracker(self.config_mpc, self.config_robot, robot_id=rid, verbose=False)
-        controller.load_motion_model(UnicycleModel(sampling_time=self.config_mpc.ts))
-        path_coords, path_times = self.gpc.get_robot_schedule(rid)
-        planner.load_path(path_coords,path_times,nomial_speed=self.config_robot.lin_vel_max, method="linear")
-        current_pos = (self.robot_states[rid].x,self.robot_states[rid].y)
-        current_time = self.get_clock().now().seconds_nanoseconds()
-        current_time = current_time[0] + current_time[1] * 1e-9
-        ref_states, ref_speed, done = self.planner.get_local_ref(
+        try:
+            # Skip if robot state isn't available
+            if rid not in self.processed_states or self.processed_states[rid] is None:
+                self.get_logger().warn(f"Skipping trajectory planning for robot {rid} - state not available")
+                return
+
+            # Get the planner and controller previously initialized
+            planner = self.robot_planners[rid]
+            controller = self.robot_controllers[rid]
+
+            # Get current robot state from processed_states
+            current_x, current_y, current_theta = self.processed_states[rid][0:3]
+
+            # Store current state for use in checking obstacles
+            self._state = np.array([current_x, current_y, current_theta])
+
+            # Get current time and position
+            current_pos = (current_x, current_y)
+            current_time = self.get_clock().now().seconds_nanoseconds()
+            current_time = current_time[0] + current_time[1] * 1e-9
+
+            # Get reference trajectory
+            ref_states, ref_speed, done = planner.get_local_ref(
                 current_time=current_time,
                 current_pos=current_pos,
                 idx_check_range=10
             )
-        current_states = np.asarray(self.robot_states[rid].x,self.robot_states[rid].y,self.robot_states[rid].theta)
-        connecting_end_path = self.generate_connecting_path(
-                start=current_states,
+
+            # Generate connecting path
+            connecting_end_path = self.generate_connecting_path(
+                start=self._state,
                 end=ref_states[5],
                 gap=0.2  # set your preferred step gap
             )
-        controller.set_ref_states(ref_states, ref_speed=ref_speed)
-        other_robot_states = [state for robot_id, state in self.robot_states.items() if robot_id != rid]
-        if len(other_robot_states) == len(self.expected_robots) - 1:
-            state_dim = 3  # x, y, theta
-            horizon = self.config_mpc.N_hor
-            num_others = self.config_mpc.Nother
-            robot_states_for_control = [-10.0] * state_dim * (horizon + 1) * num_others
-            
-            idx = 0
-            for state in other_robot_states:
-                robot_states_for_control[idx:idx+state_dim] = [state.x, state.y, state.theta]
-                idx += state_dim
-            
-            idx_pred = state_dim * num_others
-            for state in other_robot_states:
-                if hasattr(state, 'pred_states') and len(state.pred_states) >= state_dim * horizon:
-                    robot_states_for_control[idx_pred:idx_pred+state_dim*horizon] = state.pred_states[:state_dim*horizon]
-                idx_pred += state_dim * horizon
-            
-            start_time = self.get_clock().now()
-            check_static, path_type = self.check_static_obstacles_on_the_way(ref_states=ref_states)
-            
-            if  check_static is False and \
-                self.check_dynamic_obstacles(ref_states=ref_states, robot_states_for_control=robot_states_for_control,
-                                             num_others=num_others,state_dim=state_dim,horizon=horizon)==False:
-                remaining_needed = horizon - len(connecting_end_path)
-                remaining_ref = ref_states[5:]
-                remaining_ref = remaining_ref[:remaining_needed]
-                ref_path = np.vstack((connecting_end_path, remaining_ref))
-                use_ref_path = True
-                self.converge_flag = True
-                pred_states = ref_path
-                self.publish_trajectory_to_robot(rid, pred_states, use_ref_path)
-                self.get_logger().debug('Using ref path')
-            else:
-                # run controller
-                use_ref_path = False
-                
-                last_actions, pred_states, current_refs, debug_info, exist_status, monitered_cost= controller.run_step(
-                    static_obstacles=self.static_obstacles,
-                    other_robot_states=robot_states_for_control,
-                    inital_guess= None
-                )
-                end_time = self.get_clock().now()
-                duration_ms = (end_time.nanoseconds - start_time.nanoseconds) / 1e9
-                self.get_logger().debug(f'Controller run_step() took {duration_ms:.3f} s')
-                total_cost = monitered_cost["total_cost"]
-                                   
-                # exist_status = 'Converged'
-                if exist_status == 'Converged':
-                    # publish traj to robot after calculating
-                    converge_flag = True
-                    # self.pred_states = init_guess
-                    self.get_logger().info(f'Robot {rid} Converged')
-                    self.get_logger().info(f'Robot {rid} Cost:{total_cost}')
-                    self.publish_trajectory_to_robot(rid,pred_states, use_ref_path)
-                    self.publish_converge_signal(converge_flag)
+
+            # Set reference states for controller
+            controller.set_ref_states(ref_states, ref_speed=ref_speed)
+
+            # Get other robot states
+            other_robot_states = []
+            for robot_id, state in self.processed_states.items():
+                if robot_id != rid and state is not None:
+                    other_robot_states.append(state)
+            self.get_logger().info(f'Robot {rid} other_robot_states:{other_robot_states}')
+            # Check if we have enough information about other robots
+            if len(other_robot_states) == len(self.expected_robots) - 1:
+                state_dim = 3  # x, y, theta
+                horizon = self.config_mpc.N_hor
+                num_others = self.config_mpc.Nother
+                robot_states_for_control = [-10.0] * state_dim * (horizon + 1) * num_others
+
+                idx = 0
+                for state in other_robot_states:
+                    robot_states_for_control[idx:idx+state_dim] = [state[0], state[1], state[3]]
+                    idx += state_dim
+
+                idx_pred = state_dim * num_others
+                for state in other_robot_states:
+                    if state[4]!=[] and len(state[4]) >= state_dim * horizon:
+                        robot_states_for_control[idx_pred:idx_pred+state_dim*horizon] = state[4][:state_dim*horizon]
+                    idx_pred += state_dim * horizon
+                start_time = self.get_clock().now()
+                check_static, path_type = self.check_static_obstacles_on_the_way(ref_states=ref_states)
+
+                if check_static is False and \
+                   self.check_dynamic_obstacles(ref_states=ref_states, robot_states_for_control=robot_states_for_control,
+                                             num_others=num_others, state_dim=state_dim, horizon=horizon) is False:
+                    remaining_needed = horizon - len(connecting_end_path)
+                    remaining_ref = ref_states[5:]
+                    remaining_ref = remaining_ref[:remaining_needed]
+                    ref_path = np.vstack((connecting_end_path, remaining_ref))
+                    use_ref_path = True
+                    self.converge_flag[rid] = True
+                    pred_states = ref_path
+                    self.publish_trajectory_to_robot(rid, pred_states, use_ref_path)
+                    self.publish_converge_signal(rid, self.converge_flag[rid])
+                    self.get_logger().debug('Using ref path')
                 else:
-                    converge_flag = False
-                    # self.publish_trajectory_to_robot()
-                    self.get_logger().info(f'Robot {rid} Not converge reason: {exist_status}')
-                    self.get_logger().info(f'Robot {rid} Cost:{total_cost}')
-                    self.publish_converge_signal(converge_flag)
-                
-        else:
-            self.get_logger().debug('Not enough other robot states, skip this control loop')
-            
-        if controller.check_termination_condition(external_check=planner.idle):
-            self.get_logger().info('Arrived goal and entered idle state')
-            self.idle = True
+                    # run controller
+                    use_ref_path = False
+
+                    last_actions, pred_states, current_refs, debug_info, exist_status, monitored_cost = controller.run_step(
+                        static_obstacles=self.static_obstacles,
+                        other_robot_states=robot_states_for_control,
+                        inital_guess=None
+                    )
+                    end_time = self.get_clock().now()
+                    duration_ms = (end_time.nanoseconds - start_time.nanoseconds) / 1e9
+                    self.get_logger().debug(f'Controller run_step() took {duration_ms:.3f} s')
+                    total_cost = monitored_cost["total_cost"]
+
+                    # exist_status = 'Converged'
+                    if exist_status == 'Converged':
+                        # publish traj to robot after calculating
+                        self.converge_flag[rid] = True
+                        # self.pred_states = init_guess
+                        self.get_logger().info(f'Robot {rid} Converged')
+                        self.get_logger().info(f'Robot {rid} Cost:{total_cost}')
+                        self.publish_trajectory_to_robot(rid, pred_states, use_ref_path)
+                        self.publish_converge_signal(rid, self.converge_flag[rid])
+                    else:
+                        self.converge_flag[rid] = False
+                        # self.publish_trajectory_to_robot()
+                        self.get_logger().info(f'Robot {rid} Not converge reason: {exist_status}')
+                        self.get_logger().info(f'Robot {rid} Cost:{total_cost}')
+                        self.publish_trajectory_to_robot(rid, pred_states, use_ref_path)
+                        self.publish_converge_signal(rid, self.converge_flag[rid])
+
+            else:
+                self.get_logger().debug('Not enough other robot states, skip this control loop')
+
+            if controller.check_termination_condition(external_check=planner.idle):
+                self.get_logger().info(f'Robot {rid} arrived at goal and entered idle state')
+                self.idle[rid] = True
+
+        except Exception as e:
+            self.get_logger().error(f'Error in trajectory planning for robot {rid}: {str(e)}')
+            self.get_logger().error(traceback.format_exc())
     def publish_trajectory_to_robot(self, rid, pred_states, use_ref_path):
         try:
             if pred_states is None:
@@ -763,7 +841,15 @@ class RobotManager(Node):
                     del self.converter_states[robot_id]
 
         self.get_logger().info(f'Robot {robot_id} unregistered')
-    
+    def publish_converge_signal(self, rid, converged):
+        try:
+            msg = ClusterToRvizConvergeSignal()
+            msg.stamp = self.get_clock().now().to_msg()
+            msg.converged = converged
+
+            self.converge_signal_pub[rid].publish(msg)
+        except Exception as e:
+            self.get_logger().error(f'Error publishing converge signal for robot {rid}: {str(e)}')
     def check_static_obstacles_on_the_way(self, ref_states, step_size=0.1):
         """
         Check if there are any static obstacles from current position to start of ref_states,
