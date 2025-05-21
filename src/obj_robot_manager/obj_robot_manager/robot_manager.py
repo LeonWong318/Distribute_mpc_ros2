@@ -236,7 +236,7 @@ class RobotManager(Node):
                     # Publish the merged states
                 if msg.robot_states:
                     self.states_publisher.publish(msg)
-                    self.get_logger().debug(f'Published merged states for {len(msg.robot_states)} robots')
+                    self.get_logger().info(f'Published merged states for {len(msg.robot_states)} robots')
                 else:
                     self.get_logger().warn('No robot states to publish')
 
@@ -267,19 +267,24 @@ class RobotManager(Node):
                             msg.y, 
                             msg.theta, 
                             msg.stamp, 
-                            msg.pred_states if hasattr(msg, 'pred_states') else [], 
+                            self.robot_states[robot_id][4],
                             msg.idle if hasattr(msg, 'idle') else False
                         )
                         self.get_logger().debug(f'Updated state for robot {robot_id}: x={msg.x}, y={msg.y}, theta={msg.theta}')
                 else:
-                    self.robot_states[robot_id] = msg
+                    self.robot_states[robot_id][0] = msg.x
+                    self.robot_states[robot_id][1] = msg.y
+                    self.robot_states[robot_id][2] = msg.theta
+                    self.robot_states[robot_id][3] = msg.stamp
+                        
+                    self.robot_states[robot_id][5] = msg.idle
                     # Initialize the processed state
                     self.processed_states[robot_id] = (
                         msg.x, 
                         msg.y, 
                         msg.theta, 
                         msg.stamp, 
-                        msg.pred_states if hasattr(msg, 'pred_states') else [], 
+                        self.robot_states[robot_id][4], 
                         msg.idle if hasattr(msg, 'idle') else False
                     )
                     self.get_logger().debug(f'Received first state for robot {robot_id}: x={msg.x}, y={msg.y}, theta={msg.theta}')
@@ -449,10 +454,10 @@ class RobotManager(Node):
         self.control_thread.start()
         self.get_logger().info('Control loop started')
         self.create_timer(
-                1.0 / self.publish_frequency,
-                self.publish_robot_states,
-                callback_group=MutuallyExclusiveCallbackGroup()
-            )
+            1.0 / self.publish_frequency,
+            self.publish_robot_states,
+            callback_group=MutuallyExclusiveCallbackGroup()
+        )
     def stop_control_loop(self):
         """Stop the continuous control loop"""
         if self.control_thread is not None and self.control_thread.is_alive():
@@ -661,14 +666,14 @@ class RobotManager(Node):
             # get locks of cluster and converter
             with self._state_lock, self._converter_lock, self._processState_lock:
                 for robot_id in self.registered_robots:
-                    cluster_state = self.robot_states.get(robot_id)
+                    cluster_state = self.robot_states[robot_id]
                     converter_state = self.converter_states.get(robot_id)
 
                     if cluster_state is not None and converter_state is not None:
-                        self.get_logger().debug(f'Robot {robot_id}: Both cluster and converter states available')
+                        self.get_logger().info(f'Robot {robot_id}: Both cluster and converter states available')
 
                         # Compare timestamps
-                        cluster_stamp = cluster_state.stamp
+                        cluster_stamp = cluster_state[3]
                         converter_stamp = converter_state.stamp
 
                         self.get_logger().debug(
@@ -683,40 +688,30 @@ class RobotManager(Node):
                             y = converter_state.y
                             theta = converter_state.theta
                             stamp = converter_stamp
-                            pred_states = cluster_state.pred_states if hasattr(cluster_state, 'pred_states') else []
-                            idle = cluster_state.idle if hasattr(cluster_state, 'idle') else False
+                            pred_states = cluster_state[4]
+                            idle = cluster_state[5]
                         else:
                             self.get_logger().debug(f'Robot {robot_id}: Using CLUSTER state (newer or equal timestamp)')
-                            x = cluster_state.x
-                            y = cluster_state.y
-                            theta = cluster_state.theta
+                            x = cluster_state[0]
+                            y = cluster_state[1]
+                            theta = cluster_state[2]
                             stamp = cluster_stamp
-                            pred_states = cluster_state.pred_states if hasattr(cluster_state, 'pred_states') else []
-                            idle = cluster_state.idle if hasattr(cluster_state, 'idle') else False
+                            pred_states = cluster_state[4]
+                            idle = cluster_state[5]
 
                         self.processed_states[robot_id] = (x, y, theta, stamp, pred_states, idle)
 
                     elif cluster_state is not None:
-                        self.get_logger().debug(f'Robot {robot_id}: Only CLUSTER state available, using it directly')
-                        self.processed_states[robot_id] = (
-                            cluster_state.x,
-                            cluster_state.y,
-                            cluster_state.theta,
-                            cluster_state.stamp,
-                            cluster_state.pred_states if hasattr(cluster_state, 'pred_states') else [],
-                            cluster_state.idle if hasattr(cluster_state, 'idle') else False
-                        )
+                        self.get_logger().info(f'Robot {robot_id}: Only CLUSTER state available, using it directly')
+                        self.processed_states[robot_id] = cluster_state
 
                     elif converter_state is not None:
-                        self.get_logger().debug(f'Robot {robot_id}: Only CONVERTER state available, using it directly')
-                        self.processed_states[robot_id] = (
-                            converter_state.x,
-                            converter_state.y,
-                            converter_state.theta,
-                            converter_state.stamp,
-                            [],  # No predicted states from converter
-                            False  # Not idle by default
-                        )
+                        self.get_logger().info(f'Robot {robot_id}: Only CONVERTER state available, using it directly')
+                        self.processed_states[robot_id][0] =  converter_state.x
+                        self.processed_states[robot_id][1] = converter_state.y
+                        self.processed_states[robot_id][2] = converter_state.theta
+                        self.processed_states[robot_id][3] = converter_state.stamp
+                            
 
                     else:
                         self.get_logger().warn(f'Robot {robot_id}: Neither cluster nor converter state available')
@@ -731,7 +726,7 @@ class RobotManager(Node):
             if rid not in self.processed_states or self.processed_states[rid] is None:
                 self.get_logger().warn(f"Skipping trajectory planning for robot {rid} - state not available")
                 return
-
+            self.update_robot_states()
             # Get the planner and controller previously initialized
             planner = self.robot_planners[rid]
             controller = self.robot_controllers[rid]
@@ -784,7 +779,8 @@ class RobotManager(Node):
 
                 idx_pred = state_dim * num_others
                 for state in other_robot_states:
-                    if state[4]!=[] and len(state[4]) >= state_dim * horizon:
+                    if state[4]!=[] and len(state[4]) >= state_dim:
+                        self.get_logger().info(f'Robot {rid} other robot states is {state[4]}')
                         robot_states_for_control[idx_pred:idx_pred+state_dim*horizon] = state[4][:state_dim*horizon]
                     idx_pred += state_dim * horizon
                 start_time = self.get_clock().now()
@@ -808,7 +804,7 @@ class RobotManager(Node):
                 else:
                     # run controller
                     use_ref_path = False
-
+                    
                     last_actions, pred_states, current_refs, debug_info, exist_status, monitored_cost = controller.run_step(
                         static_obstacles=self.static_obstacles,
                         other_robot_states=robot_states_for_control,
@@ -825,19 +821,21 @@ class RobotManager(Node):
                         # publish traj to robot after calculating
                         self.converge_flag[rid] = True
                         # self.pred_states = init_guess
-                        self.get_logger().info(f'Robot {rid} Converged')
-                        self.get_logger().info(f'Robot {rid} Cost:{total_cost}')
+                        self.get_logger().debug(f'Robot {rid} Converged')
+                        self.get_logger().debug(f'Robot {rid} Cost:{total_cost}')
                         self.publish_trajectory_to_robot(rid, pred_states, use_ref_path)
                         self.publish_converge_signal(rid, self.converge_flag[rid])
                     else:
                         self.converge_flag[rid] = False
                         # self.publish_trajectory_to_robot()
-                        self.get_logger().info(f'Robot {rid} Not converge reason: {exist_status}')
-                        self.get_logger().info(f'Robot {rid} Cost:{total_cost}')
+                        self.get_logger().debug(f'Robot {rid} Not converge reason: {exist_status}')
+                        self.get_logger().debug(f'Robot {rid} Cost:{total_cost}')
                         #self.publish_trajectory_to_robot(rid, pred_states, use_ref_path)
                         self.publish_converge_signal(rid, self.converge_flag[rid])
-                self.robot_states[rid][4] = pred_states
-                self.robot_states[rid][3] = self.get_clock().now().to_msg()
+                # self.robot_states[rid][4] = pred_states
+                # self.get_logger().info(f'Robot {rid} pred_states:{self.robot_states[rid][4]}')
+                self.update_pred_states(rid,pred_states)
+                
             else:
                 self.get_logger().debug('Not enough other robot states, skip this control loop')
 
@@ -848,6 +846,11 @@ class RobotManager(Node):
         except Exception as e:
             self.get_logger().error(f'Error in trajectory planning for robot {rid}: {str(e)}')
             self.get_logger().error(traceback.format_exc())
+
+    def update_pred_states(self,rid, pred_states):
+        flat_list = [value for row in pred_states for value in row]
+        self.robot_states[rid][4]=flat_list
+        
     def publish_trajectory_to_robot(self, rid, pred_states, use_ref_path):
         try:
             if pred_states is None:

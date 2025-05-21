@@ -315,7 +315,7 @@ class RobotStateVisualizer(Node):
         # Extract and store planned trajectories from the message
         for robot_state in msg.robot_states:
             robot_id = robot_state.robot_id
-            
+            self.get_logger().info(f'Robot {robot_id} trajectory is {robot_state.pred_states}')
             # If there are predicted states, convert them to trajectory points
             if len(robot_state.pred_states) > 0:
                 trajectory_points = []
@@ -330,7 +330,7 @@ class RobotStateVisualizer(Node):
                         trajectory_points.append((x, y))
                 self.robot_trajectories[robot_id] = None
                 self.robot_trajectories[robot_id] = trajectory_points
-    
+                self.get_logger().info(f'Robot {robot_id} trajectory is {trajectory_points}')
     def robot_real_state_callback(self, msg, robot_id):
         """Callback for individual robot real state messages"""
         # Store the real state
@@ -1242,7 +1242,7 @@ class RobotStateVisualizer(Node):
         marker_id = 0
         
         for robot_id, positions in self.non_converged_positions.items():
-            self.get_logger().error(f'draw')
+            self.get_logger().debug(f'draw')
             for pos_idx, position in enumerate(positions):
                 marker = Marker()
                 marker.header.frame_id = "map"
