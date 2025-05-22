@@ -236,7 +236,7 @@ class RobotManager(Node):
                     # Publish the merged states
                 if msg.robot_states:
                     self.states_publisher.publish(msg)
-                    self.get_logger().info(f'Published merged states for {len(msg.robot_states)} robots')
+                    self.get_logger().debug(f'Published merged states for {len(msg.robot_states)} robots')
                 else:
                     self.get_logger().warn('No robot states to publish')
 
@@ -670,7 +670,7 @@ class RobotManager(Node):
                     converter_state = self.converter_states.get(robot_id)
                     
                     if cluster_state is not None and converter_state is not None:
-                        self.get_logger().info(f'Robot {robot_id}: Both cluster and converter states available')
+                        self.get_logger().debug(f'Robot {robot_id}: Both cluster and converter states available')
 
                         # Compare timestamps
                         cluster_stamp = cluster_state[3]
@@ -767,7 +767,7 @@ class RobotManager(Node):
 
             # Set reference states for controller
             controller.set_ref_states(ref_states, ref_speed=ref_speed)
-
+            controller.set_current_state(current_state)
             # Get other robot states
             other_robot_states = []
             for robot_id, state in self.processed_states.items():
@@ -788,7 +788,7 @@ class RobotManager(Node):
 
                 idx_pred = state_dim * num_others
                 for state in other_robot_states:
-                    if state[4]!=[] and len(state[4]) >= state_dim:
+                    if state[4]!=[] and len(state[4]) >= state_dim*horizon:
                         self.get_logger().debug(f'Robot {rid} other robot states is {state[4]}')
                         robot_states_for_control[idx_pred:idx_pred+state_dim*horizon] = state[4][:state_dim*horizon]
                     idx_pred += state_dim * horizon
@@ -809,7 +809,7 @@ class RobotManager(Node):
                     
                     self.publish_trajectory_to_robot(rid, pred_states, use_ref_path)
                     
-                    self.get_logger().debug('Using ref path')
+                    self.get_logger().info(f'Robot {rid} using ref path')
                 else:
                     # run controller
                     use_ref_path = False
@@ -824,21 +824,21 @@ class RobotManager(Node):
                     self.get_logger().debug(f'Controller run_step() took {duration_ms:.3f} s')
                     total_cost = monitored_cost["total_cost"]
                     current_state[2] = np.arctan2(np.sin(current_state[2]), np.cos(current_state[2]))
-                    controller.set_current_state(current_state)
+                    
                     # exist_status = 'Converged'
                     if exist_status == 'Converged':
                         # publish traj to robot after calculating
                         self.converge_flag[rid] = True
                         # self.pred_states = init_guess
-                        self.get_logger().debug(f'Robot {rid} Converged')
-                        self.get_logger().debug(f'Robot {rid} Cost:{total_cost}')
+                        self.get_logger().info(f'Robot {rid} Converged')
+                        self.get_logger().info(f'Robot {rid} Cost:{total_cost}')
                         self.publish_trajectory_to_robot(rid, pred_states, use_ref_path)
                         self.publish_converge_signal(rid, self.converge_flag[rid])
                     else:
                         self.converge_flag[rid] = False
                         # self.publish_trajectory_to_robot()
-                        self.get_logger().debug(f'Robot {rid} Not converge reason: {exist_status}')
-                        self.get_logger().debug(f'Robot {rid} Cost:{total_cost}')
+                        self.get_logger().info(f'Robot {rid} Not converge reason: {exist_status}')
+                        self.get_logger().info(f'Robot {rid} Cost:{total_cost}')
                         #self.publish_trajectory_to_robot(rid, pred_states, use_ref_path)
                         self.publish_converge_signal(rid, self.converge_flag[rid])
                 # self.robot_states[rid][4] = pred_states
