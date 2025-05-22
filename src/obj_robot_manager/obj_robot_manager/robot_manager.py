@@ -808,7 +808,7 @@ class RobotManager(Node):
                     pred_states = ref_path
                     
                     self.publish_trajectory_to_robot(rid, pred_states, use_ref_path)
-                    
+                    self.update_pred_states(rid,pred_states)
                     self.get_logger().info(f'Robot {rid} using ref path')
                 else:
                     # run controller
@@ -834,6 +834,7 @@ class RobotManager(Node):
                         self.get_logger().info(f'Robot {rid} Cost:{total_cost}')
                         self.publish_trajectory_to_robot(rid, pred_states, use_ref_path)
                         self.publish_converge_signal(rid, self.converge_flag[rid])
+                        self.update_pred_states(rid,pred_states)
                     else:
                         self.converge_flag[rid] = False
                         # self.publish_trajectory_to_robot()
@@ -843,7 +844,7 @@ class RobotManager(Node):
                         self.publish_converge_signal(rid, self.converge_flag[rid])
                 # self.robot_states[rid][4] = pred_states
                 # self.get_logger().info(f'Robot {rid} pred_states:{self.robot_states[rid][4]}')
-                self.update_pred_states(rid,pred_states)
+                
                 
             else:
                 self.get_logger().debug('Not enough other robot states, skip this control loop')
