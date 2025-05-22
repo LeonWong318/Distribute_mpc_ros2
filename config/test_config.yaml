@@ -22,7 +22,7 @@ test_scenarios:
     robot_spec_path: "data/test_data_cross/schedule.csv"
     world_file: "test_data_cross.world"
     rviz_config_path: "src/obj_robot_visualizer/config/test_data_cross.rviz"
-    latency_values: [0.0]
+    latency_values: [0.0, 1.0]
     iterations_per_latency: 20
     timeout_seconds: 150.0
   
@@ -34,7 +34,7 @@ test_scenarios:
   #   world_file: "test_data.world"
   #   rviz_config_path: "src/obj_robot_visualizer/config/test_data.rviz"
   #   latency_values: [0.0, 1.0]
-  #   iterations_per_latency: 1
+  #   iterations_per_latency: 20
   #   timeout_seconds: 200.0
 
   # - name: "test_data"

@@ -668,7 +668,7 @@ class RobotManager(Node):
                 for robot_id in self.registered_robots:
                     cluster_state = self.robot_states[robot_id]
                     converter_state = self.converter_states.get(robot_id)
-
+                    
                     if cluster_state is not None and converter_state is not None:
                         self.get_logger().info(f'Robot {robot_id}: Both cluster and converter states available')
 
@@ -680,8 +680,14 @@ class RobotManager(Node):
                             f'Robot {robot_id}: Cluster stamp: {cluster_stamp.sec}.{cluster_stamp.nanosec}, '
                             f'Converter stamp: {converter_stamp.sec}.{converter_stamp.nanosec}'
                         )
-
-                        if (converter_stamp.sec > cluster_stamp.sec or
+                        if cluster_state[5]:
+                            x = cluster_state[0]
+                            y = cluster_state[1]
+                            theta = cluster_state[2]
+                            stamp = cluster_stamp
+                            pred_states = []
+                            idle = cluster_state[5]
+                        elif (converter_stamp.sec > cluster_stamp.sec or
                             (converter_stamp.sec == cluster_stamp.sec and converter_stamp.nanosec > cluster_stamp.nanosec)):
                             self.get_logger().debug(f'Robot {robot_id}: Using CONVERTER state (newer timestamp)')
                             x = converter_state.x
@@ -704,6 +710,8 @@ class RobotManager(Node):
                     elif cluster_state is not None:
                         self.get_logger().info(f'Robot {robot_id}: Only CLUSTER state available, using it directly')
                         self.processed_states[robot_id] = cluster_state
+                        if cluster_state[5]:
+                            self.processed_states[robot_id][4] = []
 
                     elif converter_state is not None:
                         self.get_logger().info(f'Robot {robot_id}: Only CONVERTER state available, using it directly')
@@ -727,6 +735,7 @@ class RobotManager(Node):
                 self.get_logger().warn(f"Skipping trajectory planning for robot {rid} - state not available")
                 return
             self.update_robot_states()
+            
             # Get the planner and controller previously initialized
             planner = self.robot_planners[rid]
             controller = self.robot_controllers[rid]
@@ -780,7 +789,7 @@ class RobotManager(Node):
                 idx_pred = state_dim * num_others
                 for state in other_robot_states:
                     if state[4]!=[] and len(state[4]) >= state_dim:
-                        self.get_logger().info(f'Robot {rid} other robot states is {state[4]}')
+                        self.get_logger().debug(f'Robot {rid} other robot states is {state[4]}')
                         robot_states_for_control[idx_pred:idx_pred+state_dim*horizon] = state[4][:state_dim*horizon]
                     idx_pred += state_dim * horizon
                 start_time = self.get_clock().now()
@@ -850,7 +859,7 @@ class RobotManager(Node):
     def update_pred_states(self,rid, pred_states):
         flat_list = [value for row in pred_states for value in row]
         self.robot_states[rid][4]=flat_list
-        
+
     def publish_trajectory_to_robot(self, rid, pred_states, use_ref_path):
         try:
             if pred_states is None:
