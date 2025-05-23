@@ -47,7 +47,8 @@ class RobotManager(Node):
                 ('cluster_package', ''),
                 ('mpc_config_path', ''),
                 ('robot_config_path', ''),
-                ('publish_frequency', 10.0)
+                ('publish_frequency', 10.0),
+                ('enable_traj_sharing', True)
             ]
         )
         
@@ -60,6 +61,7 @@ class RobotManager(Node):
         self.publish_frequency = self.get_parameter('publish_frequency').value
         self.mpc_config_path = self.get_parameter('mpc_config_path').value
         self.robot_config_path = self.get_parameter('robot_config_path').value
+        self.enable_traj_sharing = self.get_parameter('enable_traj_sharing').value
 
         # Load configuration files
         self.load_config_files()
@@ -787,11 +789,12 @@ class RobotManager(Node):
                     idx += state_dim
 
                 idx_pred = state_dim * num_others
-                for state in other_robot_states:
-                    if state[4]!=[] and len(state[4]) >= state_dim*horizon:
-                        self.get_logger().debug(f'Robot {rid} other robot states is {state[4]}')
-                        robot_states_for_control[idx_pred:idx_pred+state_dim*horizon] = state[4][:state_dim*horizon]
-                    idx_pred += state_dim * horizon
+                if self.enable_traj_sharing:
+                    for state in other_robot_states:
+                        if state[4]!=[] and len(state[4]) >= state_dim*horizon:
+                            self.get_logger().debug(f'Robot {rid} other robot states is {state[4]}')
+                            robot_states_for_control[idx_pred:idx_pred+state_dim*horizon] = state[4][:state_dim*horizon]
+                        idx_pred += state_dim * horizon
                 start_time = self.get_clock().now()
                 
                 check_static, path_type = self.check_static_obstacles_on_the_way(ref_states=ref_states, current_state=current_state)

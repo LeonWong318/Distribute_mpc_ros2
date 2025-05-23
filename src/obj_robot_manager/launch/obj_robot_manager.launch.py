@@ -93,7 +93,8 @@ def generate_launch_description():
             'mpc_config_path': LaunchConfiguration('mpc_config_path'),
             'robot_config_path': LaunchConfiguration('robot_config_path'),
             'cluster_package': 'obj_robot_cluster',
-            'publish_frequency': config.get('manager_publish_frequency', 10.0)
+            'publish_frequency': config.get('manager_publish_frequency', 10.0),
+            'enable_traj_sharing': config.get('enable_traj_sharing', True)
         }],
         output='screen'
     )
