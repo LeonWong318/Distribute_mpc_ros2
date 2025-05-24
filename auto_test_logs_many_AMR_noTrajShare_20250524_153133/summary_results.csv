@@ -1,0 +1,3 @@
+Scenario,Latency,Success Rate,Timeout Rate,Collision Rate,Avg Execution Time,Avg Deviation,Avg Path Length,Avg Linear Smoothness,Avg Angular Smoothness,Avg Convergence Success Count,Avg Convergence Failure Count,Avg Convergence Success Rate
+many_AMR_noTrajShare,0.0,1.0,0.0,0.0,68.90132788000001,48.13606298731328,12.0,0.035659744988329335,0.0002536292966952852,46.0,0.45,0.9903121636167922
+many_AMR_noTrajShare,1.0,0.95,0.05,0.0,73.94406686315791,48.11999759765521,12.0,0.03622011386701092,0.00029848239007740737,60.421052631578945,0.9473684210526315,0.9845626072041166
