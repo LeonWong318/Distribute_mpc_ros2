@@ -457,10 +457,14 @@ class AutoTest(Node):
                writer.writerow([
                    'Robot ID', 'Deviation Area', 'Normalized Deviation',
                    'Execution Time', 'Path Length', 'Linear Smoothness', 'Angular Smoothness',
-                   'Convergence Success Count', 'Convergence Failure Count', 'Convergence Success Rate'
+                   'Convergence Success Count', 'Convergence Failure Count', 'Convergence Success Rate', 'Avg Solver Computing Time'
                ])
-
+                
                for metric in metrics.metrics:
+                   if metric.convergence_success_count+metric.convergence_failure_count != 0:
+                        average_computing_time = metric.computing_time/(metric.convergence_success_count+metric.convergence_failure_count)
+                   else:
+                        average_computing_time = metric.computing_time
                    writer.writerow([
                        metric.robot_id,
                        metric.deviation_area,
@@ -471,7 +475,8 @@ class AutoTest(Node):
                        metric.angular_smoothness,
                        metric.convergence_success_count,
                        metric.convergence_failure_count,
-                       metric.convergence_success_rate
+                       metric.convergence_success_rate,
+                       average_computing_time
                    ])
            self.save_rviz_screenshot(f'latency_{latency}_iteration_{iteration}.png')
 
@@ -493,7 +498,8 @@ class AutoTest(Node):
                 avg_metrics.get('angular_smoothness', 'N/A'),
                 avg_metrics.get('convergence_success_count', 'N/A'),
                 avg_metrics.get('convergence_failure_count', 'N/A'),
-                avg_metrics.get('convergence_success_rate', 'N/A')
+                avg_metrics.get('convergence_success_rate', 'N/A'),
+                avg_metrics.get('computing_time','N/A')
             ])
     
     def calculate_average_metrics(self, metrics_list):
@@ -534,12 +540,14 @@ class AutoTest(Node):
                     convergence_by_robot[robot_id] = {
                         'success': [],
                         'failure': [],
-                        'rate': []
+                        'rate': [],
+                        'computing_time': []
                     }
 
                 convergence_by_robot[robot_id]['success'].append(metric.convergence_success_count)
                 convergence_by_robot[robot_id]['failure'].append(metric.convergence_failure_count)
                 convergence_by_robot[robot_id]['rate'].append(metric.convergence_success_rate)
+                convergence_by_robot[robot_id]['computing_time'].append(metric.computing_time)
 
         avg_metrics = {}
         for key, values in all_metrics.items():
@@ -554,9 +562,10 @@ class AutoTest(Node):
 
             total_failure = sum(sum(robot_data['failure']) for robot_data in convergence_by_robot.values()) 
             avg_metrics['convergence_failure_count'] = total_failure / iterations_count
-
+            total_computing = sum(sum(robot_data['computing_time']) for robot_data in convergence_by_robot.values())
             if total_success + total_failure > 0:
                 avg_metrics['convergence_success_rate'] = total_success / (total_success + total_failure)
+                avg_metrics['computing_time'] = total_computing/(total_success + total_failure)
             else:
                 avg_metrics['convergence_success_rate'] = 0.0
         else:
@@ -617,7 +626,7 @@ class AutoTest(Node):
                         'Scenario', 'Latency', 'Success Rate', 'Timeout Rate', 'Collision Rate',
                         'Avg Execution Time', 'Avg Deviation', 'Avg Path Length', 
                         'Avg Linear Smoothness', 'Avg Angular Smoothness',
-                        'Avg Convergence Success Count', 'Avg Convergence Failure Count', 'Avg Convergence Success Rate'
+                        'Avg Convergence Success Count', 'Avg Convergence Failure Count', 'Avg Convergence Success Rate', 'Avg Computing Time'
                     ])
                 self.get_logger().info(f'Log files initialized in {self.log_dir}')
 

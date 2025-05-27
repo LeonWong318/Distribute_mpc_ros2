@@ -1,3 +1,4 @@
 int32 robot_id
 bool is_converge
+float64 computing_time
 builtin_interfaces/Time stamp

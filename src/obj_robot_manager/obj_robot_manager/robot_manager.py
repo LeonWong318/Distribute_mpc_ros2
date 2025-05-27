@@ -801,7 +801,8 @@ class RobotManager(Node):
 
                 if check_static is False and \
                    self.check_dynamic_obstacles(ref_states=ref_states, robot_states_for_control=robot_states_for_control,
-                                             num_others=num_others, state_dim=state_dim, horizon=horizon, current_state=current_state) is False:
+                                             num_others=num_others, state_dim=state_dim, horizon=horizon, current_state = current_state,
+                                             robot_width=self.config_robot.vehicle_width) is False:
                     remaining_needed = horizon - len(connecting_end_path)
                     remaining_ref = ref_states[5:]
                     remaining_ref = remaining_ref[:remaining_needed]
@@ -836,7 +837,7 @@ class RobotManager(Node):
                         self.get_logger().info(f'Robot {rid} Converged')
                         self.get_logger().info(f'Robot {rid} Cost:{total_cost}')
                         self.publish_trajectory_to_robot(rid, pred_states, use_ref_path)
-                        self.publish_converge_signal(rid, self.converge_flag[rid])
+                        self.publish_converge_signal(rid, self.converge_flag[rid], duration_ms)
                         self.update_pred_states(rid,pred_states)
                     else:
                         self.converge_flag[rid] = False
@@ -844,7 +845,7 @@ class RobotManager(Node):
                         self.get_logger().info(f'Robot {rid} Not converge reason: {exist_status}')
                         self.get_logger().info(f'Robot {rid} Cost:{total_cost}')
                         #self.publish_trajectory_to_robot(rid, pred_states, use_ref_path)
-                        self.publish_converge_signal(rid, self.converge_flag[rid])
+                        self.publish_converge_signal(rid, self.converge_flag[rid], duration_ms)
                 # self.robot_states[rid][4] = pred_states
                 # self.get_logger().info(f'Robot {rid} pred_states:{self.robot_states[rid][4]}')
                 
@@ -925,12 +926,12 @@ class RobotManager(Node):
                     del self.converter_states[robot_id]
 
         self.get_logger().info(f'Robot {robot_id} unregistered')
-    def publish_converge_signal(self, rid, converged):
+    def publish_converge_signal(self, rid, converged, computing_time):
         try:
             msg = ClusterToRvizConvergeSignal()
             msg.stamp = self.get_clock().now().to_msg()
             msg.is_converge = converged
-
+            msg.computing_time = computing_time
             self.converge_signal_pub[rid].publish(msg)
         except Exception as e:
             self.get_logger().error(f'Error publishing converge signal for robot {rid}: {str(e)}')
@@ -994,51 +995,63 @@ class RobotManager(Node):
         else:
             return True, 'collision'
     
-    def check_dynamic_obstacles(self, ref_states, robot_states_for_control, num_others, state_dim, horizon, current_state, radius=2):
+    def check_dynamic_obstacles(
+        self,
+        ref_states,
+        robot_states_for_control,
+        num_others,
+        state_dim,
+        horizon,
+        current_state,
+        robot_width,
+        radius: float = 2.0
+    ) -> bool:
         """
-        Check dynamic obstacles: front zone presence and predicted trajectory cross.
+        Check dynamic obstacles using:
+        - Front-zone (semi-circular area in front of robot)
+        - Per-timestep trajectory proximity
 
         Parameters:
-            ref_states (np.ndarray): (N, 3) reference path
-            robot_states_for_control (List[float]): Flat list of other robot states and predictions
+            ref_states (np.ndarray): shape (H, 3), reference trajectory
+            robot_states_for_control (List[float]): flattened list of all other robot states and predictions
             num_others (int): number of other robots
-            state_dim (int): usually 3 (x, y, theta)
-            horizon (int): prediction horizon for each robot
-            radius (float): semi-circular front detection range
+            state_dim (int): typically 3 (x, y, theta)
+            horizon (int): prediction horizon
+            robot_width (float): width of a robot
+            radius (float): radius for semi-circular front detection
 
         Returns:
-            bool: True if there's a dynamic obstacle concern
+            bool: True if interaction detected
         """
         x0, y0, theta0 = current_state
-        my_path = np.vstack((current_state[:2], ref_states[:, :2]))
-        my_path_line = LineString(my_path)
+        my_traj = np.vstack((current_state[:2], ref_states[:, :2]))  # (H+1, 2)
 
-        # Loop over each robot
         for i in range(num_others):
             base_idx = i * state_dim
             x, y, theta = robot_states_for_control[base_idx : base_idx + 3]
 
-            # --- Check semi-circular front zone ---
-            dx = x - x0
-            dy = y - y0
+            # --- 1. Semi-circular front zone check ---
+            dx, dy = x - x0, y - y0
             dist = np.hypot(dx, dy)
             if dist <= radius:
                 angle_to_robot = math.atan2(dy, dx)
                 angle_diff = self._normalize_angle(angle_to_robot - theta0)
-                if -np.pi/2 <= angle_diff <= np.pi/2:
-                    return True  # Robot in front region
+                if -np.pi / 2 <= angle_diff <= np.pi / 2:
+                    return True  # robot in front zone
 
-            # --- Check predicted trajectory cross ---
+            # --- 2. Per-timestep proximity check ---
             pred_idx = (state_dim * num_others) + i * state_dim * horizon
-            pred_traj = robot_states_for_control[pred_idx : pred_idx + state_dim * horizon]
-            pred_points = [
-                (pred_traj[j], pred_traj[j+1])
-                for j in range(0, len(pred_traj) - state_dim + 1, state_dim)
-            ]
-            if len(pred_points) >= 2:
-                other_traj_line = LineString(pred_points)
-                if my_path_line.intersects(other_traj_line):
-                    return True
+            pred_traj_flat = robot_states_for_control[pred_idx : pred_idx + state_dim * horizon]
+            other_traj = np.array([
+                pred_traj_flat[j:j+2]
+                for j in range(0, len(pred_traj_flat), state_dim)
+            ])  # (horizon, 2)
+
+            for t in range(min(horizon, len(my_traj) - 1)):
+                my_pos = my_traj[t + 1]  # skip current state
+                other_pos = other_traj[t]
+                if np.linalg.norm(my_pos - other_pos) <= 2 * robot_width:
+                    return True  # interaction at timestep
 
         return False
     def _normalize_angle(self, angle):

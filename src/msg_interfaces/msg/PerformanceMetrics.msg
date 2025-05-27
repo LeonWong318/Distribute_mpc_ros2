@@ -8,3 +8,4 @@ float64 angular_smoothness
 uint32 convergence_success_count
 uint32 convergence_failure_count
 float64 convergence_success_rate
+float64 computing_time

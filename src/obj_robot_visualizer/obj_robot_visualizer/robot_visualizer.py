@@ -221,7 +221,7 @@ class RobotStateVisualizer(Node):
         self.convergence_success_counts = {}
         self.convergence_failure_counts = {}
         self.non_converged_positions = {}
-        
+        self.computing_time = {}
         # Init Path evaluator
         self.path_evaluator = PathEvaluator(self.get_logger())
         self.evaluation_timer = self.create_timer(0.2, self.check_and_evaluate)
@@ -298,6 +298,7 @@ class RobotStateVisualizer(Node):
                 self.converge_signal_subscriptions[robot_id] = converge_signal_sub
                 self.convergence_success_counts[robot_id] = 0
                 self.convergence_failure_counts[robot_id] = 0
+                self.computing_time[robot_id] = 0
                 self.non_converged_positions[robot_id] = []
                 
                 # Initialize with default status (Initializing)
@@ -315,7 +316,7 @@ class RobotStateVisualizer(Node):
         # Extract and store planned trajectories from the message
         for robot_state in msg.robot_states:
             robot_id = robot_state.robot_id
-            self.get_logger().info(f'Robot {robot_id} trajectory is {robot_state.pred_states}')
+            
             # If there are predicted states, convert them to trajectory points
             if len(robot_state.pred_states) > 0:
                 trajectory_points = []
@@ -330,7 +331,7 @@ class RobotStateVisualizer(Node):
                         trajectory_points.append((x, y))
                 self.robot_trajectories[robot_id] = None
                 self.robot_trajectories[robot_id] = trajectory_points
-                self.get_logger().info(f'Robot {robot_id} trajectory is {trajectory_points}')
+    
     def robot_real_state_callback(self, msg, robot_id):
         """Callback for individual robot real state messages"""
         # Store the real state
@@ -1224,9 +1225,11 @@ class RobotStateVisualizer(Node):
         try:
             if msg.is_converge:
                 self.convergence_success_counts[robot_id] += 1
+                self.computing_time[robot_id] += msg.computing_time
                 self.get_logger().debug(f'Robot {robot_id} converged successfully. Total success count: {self.convergence_success_counts[robot_id]}')
             else:
                 self.convergence_failure_counts[robot_id] += 1
+                self.computing_time[robot_id] += msg.computing_time
                 self.get_logger().debug(f'Robot {robot_id} failed to converge. Total failure count: {self.convergence_failure_counts[robot_id]}')
                 
                 if robot_id in self.robot_real_states:
@@ -1242,7 +1245,7 @@ class RobotStateVisualizer(Node):
         marker_id = 0
         
         for robot_id, positions in self.non_converged_positions.items():
-            self.get_logger().debug(f'draw')
+            self.get_logger().error(f'draw')
             for pos_idx, position in enumerate(positions):
                 marker = Marker()
                 marker.header.frame_id = "map"
@@ -1303,7 +1306,7 @@ class RobotStateVisualizer(Node):
             success_count = self.convergence_success_counts.get(robot_id, 0)
             failure_count = self.convergence_failure_counts.get(robot_id, 0)
             total_count = success_count + failure_count
-
+            metric_msg.computing_time = float(self.computing_time.get(robot_id,0))
             metric_msg.convergence_success_count = success_count
             metric_msg.convergence_failure_count = failure_count
 
@@ -1311,6 +1314,7 @@ class RobotStateVisualizer(Node):
                 metric_msg.convergence_success_rate = float(success_count) / total_count
             else:
                 metric_msg.convergence_success_rate = 0.0
+                metric_msg.computing_time = 0.0
             
             metrics_array_msg.metrics.append(metric_msg)
         

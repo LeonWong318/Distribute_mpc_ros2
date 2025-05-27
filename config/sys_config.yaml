@@ -15,7 +15,7 @@ path_min_distance: 0.1
 
 # manager config
 manager_publish_frequency: 1.0
-enable_traj_sharing: False
+enable_traj_sharing: True
 # cluster config
 cluster_control_frequency: 1.0
 close_to_target_rate: 0.5
