@@ -73,11 +73,8 @@ class ClusterNode(Node):
         self.load_config_files()
         
         self.motion_model = UnicycleModel(sampling_time=self.config_mpc.ts)
-        self.planner = LocalTrajPlanner(
-            self.config_mpc.ts,
-            self.config_mpc.N_hor,
-            self.config_robot.lin_vel_max
-        )
+        
+        
         
         self.heart_beat_send_period = 0.1
         self.heart_beat_check_period = 0.1
@@ -100,9 +97,37 @@ class ClusterNode(Node):
         
         self.current_state_update = NewState(self.lookahead_time, self.config_mpc.ts, self.close_to_target_rate)
         self.rrt_planner = RRTPlanner(map_json_path = self.map_path, dt = self.config_mpc.ts, step_size=0.5, max_iter=1000, goal_sample_rate=0.1, robot_radius=0.4)
+        self.planners = {}
         
         self.create_pub_and_sub()
-    
+    def planners_init(self):
+        
+        for rid in self.expected_robots:
+            
+            # Create local trajectory planner
+            planner = LocalTrajPlanner(
+                self.config_mpc.ts, 
+                self.config_mpc.N_hor, 
+                self.config_robot.lin_vel_max, 
+                verbose=False
+            )
+            planner.load_map(
+                self.gpc.inflated_map.boundary_coords, 
+                self.gpc.inflated_map.obstacle_coords_list
+            )
+            
+            # Load path info for this robot
+            path_coords, path_times = self.gpc.get_robot_schedule(rid)
+            planner.load_path(
+                path_coords,
+                path_times,
+                nomial_speed=self.config_robot.lin_vel_max, 
+                method="linear"
+            )
+            
+            self.planners[rid] = planner
+            
+            
     def create_pub_and_sub(self):
         self.callback_group = ReentrantCallbackGroup()
         
@@ -235,7 +260,7 @@ class ClusterNode(Node):
             raise
     
     def setup_control_components(self):        
-        self.planner.load_map(self.gpc.inflated_map.boundary_coords, self.gpc.inflated_map.obstacle_coords_list)
+        
         
         self.controller = TrajectoryTracker(
             self.config_mpc,
@@ -245,8 +270,7 @@ class ClusterNode(Node):
         self.controller.load_motion_model(self.motion_model)
     
     def add_schedule(self):
-        self.planner.load_path(self.path_coords,self.path_times,nomial_speed=self.config_robot.lin_vel_max, method="linear")
-        self.get_logger().info(f"path_coords at scheduling: {self.path_coords}")
+        
         goal_coord = self.path_coords[-1]
         goal_coord_prev = self.path_coords[-2]
         goal_heading = np.arctan2(goal_coord[1]-goal_coord_prev[1], goal_coord[0]-goal_coord_prev[0])
@@ -348,6 +372,7 @@ class ClusterNode(Node):
     
     def initialize_cluster_components(self):
         try:
+            
             # Initialize GPC
             self.gpc = GlobalPathCoordinator.from_csv_string(self.schedule_json)
 
@@ -361,7 +386,7 @@ class ClusterNode(Node):
             self.path_coords, self.path_times = self.gpc.get_robot_schedule(self.robot_id)
             self.expected_robots = set(int(robot_id) for robot_id in self.robot_start.keys())
             self.get_logger().debug(f'static obstacles{self.static_obstacles}')
-            
+            self.planners_init()
             # setup control
             self.setup_control_components()
                         
@@ -466,53 +491,65 @@ class ClusterNode(Node):
         else:
             return True, 'collision'
     
-    def check_dynamic_obstacles(self, ref_states, robot_states_for_control, num_others, state_dim, horizon, radius=2):
+    def check_dynamic_obstacles(
+        self,
+        ref_states,
+        robot_states_for_control,
+        num_others,
+        state_dim,
+        horizon,
+        robot_width,
+        radius: float = 2.0
+    ) -> bool:
         """
-        Check dynamic obstacles: front zone presence and predicted trajectory cross.
+        Check dynamic obstacles using:
+        - Front-zone (semi-circular area in front of robot)
+        - Per-timestep trajectory proximity
 
         Parameters:
-            ref_states (np.ndarray): (N, 3) reference path
-            robot_states_for_control (List[float]): Flat list of other robot states and predictions
+            ref_states (np.ndarray): shape (H, 3), reference trajectory
+            robot_states_for_control (List[float]): flattened list of all other robot states and predictions
             num_others (int): number of other robots
-            state_dim (int): usually 3 (x, y, theta)
-            horizon (int): prediction horizon for each robot
-            radius (float): semi-circular front detection range
+            state_dim (int): typically 3 (x, y, theta)
+            horizon (int): prediction horizon
+            robot_width (float): width of a robot
+            radius (float): radius for semi-circular front detection
 
         Returns:
-            bool: True if there's a dynamic obstacle concern
+            bool: True if interaction detected
         """
         x0, y0, theta0 = self._state
-        my_path = np.vstack((self._state[:2], ref_states[:, :2]))
-        my_path_line = LineString(my_path)
+        my_traj = np.vstack((self._state[:2], ref_states[:, :2]))  # (H+1, 2)
 
-        # Loop over each robot
         for i in range(num_others):
             base_idx = i * state_dim
             x, y, theta = robot_states_for_control[base_idx : base_idx + 3]
 
-            # --- Check semi-circular front zone ---
-            dx = x - x0
-            dy = y - y0
+            # --- 1. Semi-circular front zone check ---
+            dx, dy = x - x0, y - y0
             dist = np.hypot(dx, dy)
             if dist <= radius:
                 angle_to_robot = math.atan2(dy, dx)
                 angle_diff = self._normalize_angle(angle_to_robot - theta0)
-                if -np.pi/2 <= angle_diff <= np.pi/2:
-                    return True  # Robot in front region
+                if -np.pi / 2 <= angle_diff <= np.pi / 2:
+                    return True  # robot in front zone
 
-            # --- Check predicted trajectory cross ---
+            # --- 2. Per-timestep proximity check ---
             pred_idx = (state_dim * num_others) + i * state_dim * horizon
-            pred_traj = robot_states_for_control[pred_idx : pred_idx + state_dim * horizon]
-            pred_points = [
-                (pred_traj[j], pred_traj[j+1])
-                for j in range(0, len(pred_traj) - state_dim + 1, state_dim)
-            ]
-            if len(pred_points) >= 2:
-                other_traj_line = LineString(pred_points)
-                if my_path_line.intersects(other_traj_line):
-                    return True
+            pred_traj_flat = robot_states_for_control[pred_idx : pred_idx + state_dim * horizon]
+            other_traj = np.array([
+                pred_traj_flat[j:j+2]
+                for j in range(0, len(pred_traj_flat), state_dim)
+            ])  # (horizon, 2)
+
+            for t in range(min(horizon, len(my_traj) - 1)):
+                my_pos = my_traj[t + 1]  # skip current state
+                other_pos = other_traj[t]
+                if np.linalg.norm(my_pos - other_pos) <= 2 * robot_width:
+                    return True  # interaction at timestep
 
         return False
+
     def _normalize_angle(self, angle):
         """
         Normalize angle to the range (-pi, pi].
@@ -573,7 +610,7 @@ class ClusterNode(Node):
             # Get local ref and set ref states
             current_pos = (self._state[0], self._state[1])
             current_pos = self.get_current_state(current_time, current_pos, traj_time)
-            ref_states, ref_speed, done = self.planner.get_local_ref(
+            ref_states, ref_speed, done = self.planners[self.robot_id].get_local_ref(
                 current_time=current_time,
                 current_pos=current_pos,
                 idx_check_range=10
@@ -604,7 +641,7 @@ class ClusterNode(Node):
             
             # get other robot states
             received_robot_states = [state for rid, state in self.other_robot_states.items()]
-            other_robot_states_for_RRT = np.array([[state.x, state.y, state.theta] for state in received_robot_states])
+            # other_robot_states_for_RRT = np.array([[state.x, state.y, state.theta] for state in received_robot_states])
             # self.get_logger().info(f'other robot states:{other_robot_states_for_RRT}')
             if len(received_robot_states) == len(self.expected_robots) - 1:
                 state_dim = 3  # x, y, theta
@@ -623,13 +660,25 @@ class ClusterNode(Node):
                         if hasattr(state, 'pred_states') and len(state.pred_states) >= state_dim * horizon:
                             robot_states_for_control[idx_pred:idx_pred+state_dim*horizon] = state.pred_states[:state_dim*horizon]
                         idx_pred += state_dim * horizon
-                
+                else:
+                    for rid in self.expected_robots:
+                        cur_states = next(state for _rid, state in self.other_robot_states.items() if _rid == rid)
+                        cur_pos = (cur_states.x, cur_states.y)
+                        traj, _,_ = self.planners[rid].get_local_ref(
+                            current_time=current_time,
+                            current_pos=cur_pos,
+                            idx_check_range=10
+                        )
+                        flat_traj = traj[:horizon].flatten().tolist()
+                        robot_states_for_control[idx_pred:idx_pred+state_dim*horizon] = flat_traj
+                        idx_pred += state_dim*horizon
                 start_time = self.get_clock().now()
                 check_static, path_type = self.check_static_obstacles_on_the_way(ref_states=ref_states)
                 
                 if  check_static is False and \
                     self.check_dynamic_obstacles(ref_states=ref_states, robot_states_for_control=robot_states_for_control,
-                                                 num_others=num_others,state_dim=state_dim,horizon=horizon)==False:
+                                                 num_others=num_others,state_dim=state_dim,horizon=horizon, 
+                                                 robot_width=self.config_robot.vehicle_width)==False:
                     remaining_needed = horizon - len(connecting_end_path)
                     remaining_ref = ref_states[5:]
                     remaining_ref = remaining_ref[:remaining_needed]
@@ -675,18 +724,18 @@ class ClusterNode(Node):
                         self.get_logger().info('Converged')
                         self.get_logger().info(f'Cost:{total_cost}')
                         self.publish_trajectory_to_robot()
-                        self.publish_converge_signal(self.converge_flag)
+                        self.publish_converge_signal(self.converge_flag,duration_ms)
                     else:
                         self.converge_flag = False
                         # self.publish_trajectory_to_robot()
                         self.get_logger().info(f'Not converge reason: {exist_status}')
                         self.get_logger().info(f'Cost:{total_cost}')
-                        self.publish_converge_signal(self.converge_flag)
+                        self.publish_converge_signal(self.converge_flag, duration_ms)
                 
             else:
                 self.get_logger().debug('Not enough other robot states, skip this control loop')
             
-            if self.controller.check_termination_condition(external_check=self.planner.idle):
+            if self.controller.check_termination_condition(external_check=self.planners[self.robot_id].idle):
                 self.get_logger().info('Arrived goal and entered idle state')
                 self.idle = True
 
@@ -776,11 +825,12 @@ class ClusterNode(Node):
         except Exception as e:
             self.get_logger().error(f'Error publishing shortest path: {str(e)}')
 
-    def publish_converge_signal(self,is_converge):
+    def publish_converge_signal(self,is_converge,computing_time):
         try:
             converge_msg = ClusterToRvizConvergeSignal()
             converge_msg.robot_id = self.robot_id
             converge_msg.is_converge = is_converge
+            converge_msg.computing_time = computing_time
             converge_msg.stamp = self.get_clock().now().to_msg()
             
             self.converge_signal_pub.publish(converge_msg)

@@ -221,7 +221,7 @@ class RobotStateVisualizer(Node):
         self.convergence_success_counts = {}
         self.convergence_failure_counts = {}
         self.non_converged_positions = {}
-        
+        self.computing_time = {}
         # Init Path evaluator
         self.path_evaluator = PathEvaluator(self.get_logger())
         self.evaluation_timer = self.create_timer(0.2, self.check_and_evaluate)
@@ -298,6 +298,7 @@ class RobotStateVisualizer(Node):
                 self.converge_signal_subscriptions[robot_id] = converge_signal_sub
                 self.convergence_success_counts[robot_id] = 0
                 self.convergence_failure_counts[robot_id] = 0
+                self.computing_time[robot_id] = 0
                 self.non_converged_positions[robot_id] = []
                 
                 # Initialize with default status (Initializing)
@@ -1224,9 +1225,11 @@ class RobotStateVisualizer(Node):
         try:
             if msg.is_converge:
                 self.convergence_success_counts[robot_id] += 1
+                self.computing_time[robot_id] += msg.computing_time
                 self.get_logger().debug(f'Robot {robot_id} converged successfully. Total success count: {self.convergence_success_counts[robot_id]}')
             else:
                 self.convergence_failure_counts[robot_id] += 1
+                self.computing_time[robot_id] += msg.computing_time
                 self.get_logger().debug(f'Robot {robot_id} failed to converge. Total failure count: {self.convergence_failure_counts[robot_id]}')
                 
                 if robot_id in self.robot_real_states:
@@ -1303,7 +1306,7 @@ class RobotStateVisualizer(Node):
             success_count = self.convergence_success_counts.get(robot_id, 0)
             failure_count = self.convergence_failure_counts.get(robot_id, 0)
             total_count = success_count + failure_count
-
+            metric_msg.computing_time = float(self.computing_time.get(robot_id,0))
             metric_msg.convergence_success_count = success_count
             metric_msg.convergence_failure_count = failure_count
 
@@ -1311,6 +1314,7 @@ class RobotStateVisualizer(Node):
                 metric_msg.convergence_success_rate = float(success_count) / total_count
             else:
                 metric_msg.convergence_success_rate = 0.0
+                metric_msg.computing_time = 0.0
             
             metrics_array_msg.metrics.append(metric_msg)
         
