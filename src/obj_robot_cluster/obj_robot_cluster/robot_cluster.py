@@ -648,10 +648,11 @@ class ClusterNode(Node):
                 horizon = self.config_mpc.N_hor
                 num_others = self.config_mpc.Nother
                 robot_states_for_control = [-10.0] * state_dim * (horizon + 1) * num_others
-                
+                robot_states_for_switch = [-10.0] * state_dim * (horizon + 1) * num_others
                 idx = 0
                 for state in received_robot_states:
                     robot_states_for_control[idx:idx+state_dim] = [state.x, state.y, state.theta]
+                    robot_states_for_switch[idx:idx+state_dim] = [state.x, state.y, state.theta]
                     idx += state_dim
                 
                 idx_pred = state_dim * num_others
@@ -660,23 +661,25 @@ class ClusterNode(Node):
                         if hasattr(state, 'pred_states') and len(state.pred_states) >= state_dim * horizon:
                             robot_states_for_control[idx_pred:idx_pred+state_dim*horizon] = state.pred_states[:state_dim*horizon]
                         idx_pred += state_dim * horizon
+                    robot_states_for_switch = robot_states_for_control
                 else:
                     for rid in self.expected_robots:
-                        cur_states = next(state for _rid, state in self.other_robot_states.items() if _rid == rid)
-                        cur_pos = (cur_states.x, cur_states.y)
-                        traj, _,_ = self.planners[rid].get_local_ref(
-                            current_time=current_time,
-                            current_pos=cur_pos,
-                            idx_check_range=10
-                        )
-                        flat_traj = traj[:horizon].flatten().tolist()
-                        robot_states_for_control[idx_pred:idx_pred+state_dim*horizon] = flat_traj
-                        idx_pred += state_dim*horizon
+                        if rid!=self.robot_id:
+                            cur_states = next(state for _rid, state in self.other_robot_states.items() if _rid == rid)
+                            cur_pos = (cur_states.x, cur_states.y)
+                            traj, _,_ = self.planners[rid].get_local_ref(
+                                current_time=current_time,
+                                current_pos=cur_pos,
+                                idx_check_range=10
+                            )
+                            flat_traj = traj[:horizon].flatten().tolist()
+                            robot_states_for_switch[idx_pred:idx_pred+state_dim*horizon] = flat_traj
+                            idx_pred += state_dim*horizon
                 start_time = self.get_clock().now()
                 check_static, path_type = self.check_static_obstacles_on_the_way(ref_states=ref_states)
                 
                 if  check_static is False and \
-                    self.check_dynamic_obstacles(ref_states=ref_states, robot_states_for_control=robot_states_for_control,
+                    self.check_dynamic_obstacles(ref_states=ref_states, robot_states_for_control=robot_states_for_switch,
                                                  num_others=num_others,state_dim=state_dim,horizon=horizon, 
                                                  robot_width=self.config_robot.vehicle_width)==False:
                     remaining_needed = horizon - len(connecting_end_path)

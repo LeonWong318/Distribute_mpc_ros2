@@ -1,8 +1,8 @@
 # data path
 map_path: 'data/test_data_cross/map.json'
-graph_path: 'data/test_data_cross/graph.json'
-robot_start_path: 'data/test_data_cross/robot_start.json'
-robot_spec_path: 'data/test_data_cross/schedule.csv'
+graph_path: 'data/test_data_cross/graph_balance.json'
+robot_start_path: 'data/test_data_cross/robot_start_balance.json'
+robot_spec_path: 'data/test_data_cross/schedule_balance.csv'
 
 # config path
 mpc_config_path: 'config/mpc_fast.yaml'
@@ -20,7 +20,7 @@ manager_publish_frequency: 20.0
 cluster_control_frequency: 1.0
 close_to_target_rate: 0.5
 mpc_method: 'state_origin' #choose from state_fusion and state_origin
-enable_traj_share: True
+enable_traj_share: False
 # msg buffer config
 enable_gui: true
 mean_delay: 0.0
