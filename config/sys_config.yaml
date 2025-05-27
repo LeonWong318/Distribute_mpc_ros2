@@ -1,8 +1,8 @@
 # data path
 map_path: 'data/test_data_cross/map.json'
-graph_path: 'data/test_data_cross/graph_balance.json'
-robot_start_path: 'data/test_data_cross/robot_start_balance.json'
-robot_spec_path: 'data/test_data_cross/schedule_balance.csv'
+graph_path: 'data/test_data_cross/graph.json'
+robot_start_path: 'data/test_data_cross/robot_start.json'
+robot_spec_path: 'data/test_data_cross/schedule.csv'
 
 # config path
 mpc_config_path: 'config/mpc_fast.yaml'
@@ -15,7 +15,7 @@ path_min_distance: 0.1
 
 # manager config
 manager_publish_frequency: 1.0
-enable_traj_sharing: True
+enable_traj_sharing: False
 # cluster config
 cluster_control_frequency: 1.0
 close_to_target_rate: 0.5

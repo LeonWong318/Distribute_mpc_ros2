@@ -1,3 +1,0 @@
-Scenario,Latency,Success Rate,Timeout Rate,Collision Rate,Avg Execution Time,Avg Deviation,Avg Path Length,Avg Linear Smoothness,Avg Angular Smoothness,Avg Convergence Success Count,Avg Convergence Failure Count,Avg Convergence Success Rate
-test_data_cross_noTrajShare,0.0,0.9,0.0,0.1,35.56064530555555,0.25538602428595086,10.0,0.00038483670084970477,0.0007269228549116481,28.38888888888889,4.222222222222222,0.8705281090289608
-test_data_cross_noTrajShare,1.0,0.9,0.0,0.1,40.63726872222222,0.2818613703844399,10.0,0.0004624991150964122,0.0009943168098065845,31.88888888888889,2.3333333333333335,0.9318181818181818
