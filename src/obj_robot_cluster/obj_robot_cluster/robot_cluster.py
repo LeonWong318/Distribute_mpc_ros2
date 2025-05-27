@@ -49,7 +49,8 @@ class ClusterNode(Node):
                 ('graph_path', ''),
                 ('schedule_path', ''),
                 ('robot_start_path', ''),
-                ('mpc_method','')
+                ('mpc_method',''),
+                ('enable_traj_share', True)
             ]
         )
         
@@ -65,6 +66,7 @@ class ClusterNode(Node):
         self.robot_start_path = self.get_parameter('robot_start_path').value
         self.mpc_method = self.get_parameter('mpc_method').value
         self.converge_flag = False
+        self.enable_traj_share = self.get_parameter('enable_traj_share').value
 
         self.get_logger().info(f'Initializing cluster node for robot {self.robot_id}')
                 
@@ -616,10 +618,11 @@ class ClusterNode(Node):
                     idx += state_dim
                 
                 idx_pred = state_dim * num_others
-                for state in received_robot_states:
-                    if hasattr(state, 'pred_states') and len(state.pred_states) >= state_dim * horizon:
-                        robot_states_for_control[idx_pred:idx_pred+state_dim*horizon] = state.pred_states[:state_dim*horizon]
-                    idx_pred += state_dim * horizon
+                if self.enable_traj_share:
+                    for state in received_robot_states:
+                        if hasattr(state, 'pred_states') and len(state.pred_states) >= state_dim * horizon:
+                            robot_states_for_control[idx_pred:idx_pred+state_dim*horizon] = state.pred_states[:state_dim*horizon]
+                        idx_pred += state_dim * horizon
                 
                 start_time = self.get_clock().now()
                 check_static, path_type = self.check_static_obstacles_on_the_way(ref_states=ref_states)

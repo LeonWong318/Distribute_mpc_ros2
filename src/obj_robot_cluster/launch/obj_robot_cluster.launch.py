@@ -40,6 +40,7 @@ def generate_launch_description():
     default_mpc_config_path = config.get('mpc_config_path', 'config/mpc_default.yaml')
     default_robot_config_path = config.get('robot_config_path', 'config/spec_robot.yaml')
     default_mpc_method = config.get('mpc_method', 'state_fusion')
+    
 
     declare_args = [
         DeclareLaunchArgument('robot_id', default_value=default_robot_id, description='Robot ID'),
@@ -76,7 +77,8 @@ def generate_launch_description():
             'graph_path': LaunchConfiguration('graph_path'),
             'schedule_path': LaunchConfiguration('schedule_path'),
             'robot_start_path': LaunchConfiguration('robot_start_path'),
-            'mpc_method': LaunchConfiguration('mpc_method')
+            'mpc_method': LaunchConfiguration('mpc_method'),
+            'enable_traj_share': config.get('enable_traj_share', True)
         }],
         output='screen'
     )
