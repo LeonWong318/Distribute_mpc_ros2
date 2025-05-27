@@ -782,10 +782,11 @@ class RobotManager(Node):
                 horizon = self.config_mpc.N_hor
                 num_others = self.config_mpc.Nother
                 robot_states_for_control = [-10.0] * state_dim * (horizon + 1) * num_others
-
+                robot_states_for_switch = [-10.0] * state_dim * (horizon + 1) * num_others
                 idx = 0
                 for state in other_robot_states:
                     robot_states_for_control[idx:idx+state_dim] = [state[0], state[1], state[2]]
+                    robot_states_for_switch[idx:idx+state_dim] = [state[0], state[1], state[2]]
                     idx += state_dim
 
                 idx_pred = state_dim * num_others
@@ -795,12 +796,26 @@ class RobotManager(Node):
                             self.get_logger().debug(f'Robot {rid} other robot states is {state[4]}')
                             robot_states_for_control[idx_pred:idx_pred+state_dim*horizon] = state[4][:state_dim*horizon]
                         idx_pred += state_dim * horizon
+                    robot_states_for_switch = robot_states_for_control
+                else:
+                    for __rid in self.expected_robots:
+                        if __rid != rid:
+                            cur_states = next(state for _rid, state in self.processed_states.items() if _rid == __rid)
+                            cur_pos = (cur_states[0], cur_states[1])
+                            traj, _,_ = self.robot_planners[__rid].get_local_ref(
+                                current_time=current_time,
+                                current_pos=cur_pos,
+                                idx_check_range=10
+                            )
+                            flat_traj = traj[:horizon].flatten().tolist()
+                            robot_states_for_switch[idx_pred:idx_pred+state_dim*horizon] = flat_traj
+                            idx_pred += state_dim*horizon
                 start_time = self.get_clock().now()
                 
                 check_static, path_type = self.check_static_obstacles_on_the_way(ref_states=ref_states, current_state=current_state)
 
                 if check_static is False and \
-                   self.check_dynamic_obstacles(ref_states=ref_states, robot_states_for_control=robot_states_for_control,
+                   self.check_dynamic_obstacles(ref_states=ref_states, robot_states_for_control=robot_states_for_switch,
                                              num_others=num_others, state_dim=state_dim, horizon=horizon, current_state = current_state,
                                              robot_width=self.config_robot.vehicle_width) is False:
                     remaining_needed = horizon - len(connecting_end_path)
