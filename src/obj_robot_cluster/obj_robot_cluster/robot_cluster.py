@@ -500,26 +500,20 @@ class ClusterNode(Node):
         horizon,
         robot_width,
         radius: float = 2.0
-    ) -> bool:
+    ):
         """
-        Check dynamic obstacles using:
-        - Front-zone (semi-circular area in front of robot)
-        - Per-timestep trajectory proximity
-
-        Parameters:
-            ref_states (np.ndarray): shape (H, 3), reference trajectory
-            robot_states_for_control (List[float]): flattened list of all other robot states and predictions
-            num_others (int): number of other robots
-            state_dim (int): typically 3 (x, y, theta)
-            horizon (int): prediction horizon
-            robot_width (float): width of a robot
-            radius (float): radius for semi-circular front detection
+        Check dynamic obstacles and return filtered robot states with only conflicting ones.
 
         Returns:
-            bool: True if interaction detected
+            interaction (bool): True if interaction detected
+            filtered_robot_states (List[float]): original length, non-conflicting states set to -10
         """
         x0, y0, theta0 = self._state
         my_traj = np.vstack((self._state[:2], ref_states[:, :2]))  # (H+1, 2)
+
+        # Initialize filtered states with -10
+        filtered_robot_states = [-10.0] * len(robot_states_for_control)
+        interaction_detected = False
 
         for i in range(num_others):
             base_idx = i * state_dim
@@ -528,11 +522,13 @@ class ClusterNode(Node):
             # --- 1. Semi-circular front zone check ---
             dx, dy = x - x0, y - y0
             dist = np.hypot(dx, dy)
+            conflict = False
+
             if dist <= radius:
                 angle_to_robot = math.atan2(dy, dx)
                 angle_diff = self._normalize_angle(angle_to_robot - theta0)
                 if -np.pi / 2 <= angle_diff <= np.pi / 2:
-                    return True  # robot in front zone
+                    conflict = True
 
             # --- 2. Per-timestep proximity check ---
             pred_idx = (state_dim * num_others) + i * state_dim * horizon
@@ -543,12 +539,20 @@ class ClusterNode(Node):
             ])  # (horizon, 2)
 
             for t in range(min(horizon, len(my_traj) - 1)):
-                my_pos = my_traj[t + 1]  # skip current state
+                my_pos = my_traj[t + 1]
                 other_pos = other_traj[t]
                 if np.linalg.norm(my_pos - other_pos) <= 2 * robot_width:
-                    return True  # interaction at timestep
+                    conflict = True
+                    break
 
-        return False
+            if conflict:
+                interaction_detected = True
+                # Copy current state and predicted trajectory to output
+                filtered_robot_states[base_idx : base_idx + 3] = robot_states_for_control[base_idx : base_idx + 3]
+                filtered_robot_states[pred_idx : pred_idx + state_dim * horizon] = robot_states_for_control[pred_idx : pred_idx + state_dim * horizon]
+
+        return interaction_detected, filtered_robot_states
+
 
     def _normalize_angle(self, angle):
         """
@@ -677,11 +681,10 @@ class ClusterNode(Node):
                             idx_pred += state_dim*horizon
                 start_time = self.get_clock().now()
                 check_static, path_type = self.check_static_obstacles_on_the_way(ref_states=ref_states)
-                
-                if  check_static is False and \
-                    self.check_dynamic_obstacles(ref_states=ref_states, robot_states_for_control=robot_states_for_switch,
+                check_dynamic, robot_states_for_control= self.check_dynamic_obstacles(ref_states=ref_states, robot_states_for_control=robot_states_for_switch,
                                                  num_others=num_others,state_dim=state_dim,horizon=horizon, 
-                                                 robot_width=self.config_robot.vehicle_width)==False:
+                                                 robot_width=self.config_robot.vehicle_width)
+                if  check_static is False and check_dynamic is False:
                     remaining_needed = horizon - len(connecting_end_path)
                     remaining_ref = ref_states[5:]
                     remaining_ref = remaining_ref[:remaining_needed]
