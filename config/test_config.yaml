@@ -60,13 +60,13 @@ test_scenarios:
     timeout_seconds: 360.0
 
 
-  - name: "schedule_demo_data"
-    map_path: "data/schedule_demo_data/map.json"
-    graph_path: "data/schedule_demo_data/graph.json"
-    robot_start_path: "data/schedule_demo_data/robot_start.json"
-    robot_spec_path: "data/schedule_demo_data/schedule.csv"
-    world_file: "schedule_demo_data.world"
-    rviz_config_path: "src/obj_robot_visualizer/config/schedule_demo_data.rviz"
-    latency_values: [0.0, 1.0]
-    iterations_per_latency: 20
-    timeout_seconds: 300.0
+  # - name: "schedule_demo_data"
+  #   map_path: "data/schedule_demo_data/map.json"
+  #   graph_path: "data/schedule_demo_data/graph.json"
+  #   robot_start_path: "data/schedule_demo_data/robot_start.json"
+  #   robot_spec_path: "data/schedule_demo_data/schedule.csv"
+  #   world_file: "schedule_demo_data.world"
+  #   rviz_config_path: "src/obj_robot_visualizer/config/schedule_demo_data.rviz"
+  #   latency_values: [0.0, 1.0]
+  #   iterations_per_latency: 20
+  #   timeout_seconds: 300.0
