@@ -1,0 +1,8 @@
+Latency,1.0
+Iteration,19
+Success,True
+Failure Type,None
+
+Robot ID,Deviation Area,Normalized Deviation,Execution Time,Path Length,Linear Smoothness,Angular Smoothness,Convergence Success Count,Convergence Failure Count,Convergence Success Rate,Avg Solver Computing Time
+0,0.0002782895273183303,3.975564675976147e-05,13.901819,7.0,1.5092615469891602e-07,4.8024222376597e-07,0,0,0.0,0.0
+1,0.009927181086418829,0.0009927181086418829,20.004855,10.0,7.047037648144627e-06,2.0350880472759785e-05,2,0,1.0,0.1671694575

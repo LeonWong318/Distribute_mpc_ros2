@@ -1,0 +1,3 @@
+Scenario,Latency,Success Rate,Timeout Rate,Collision Rate,Avg Execution Time,Avg Deviation,Avg Path Length,Avg Linear Smoothness,Avg Angular Smoothness,Avg Convergence Success Count,Avg Convergence Failure Count,Avg Convergence Success Rate,Avg Computing Time
+test_data_cross_unbalance,0.0,1.0,0.0,0.0,16.94166139999999,0.0011356460194956208,8.5,9.174833519665429e-06,1.1168297467823376e-05,1.8,0.0,1.0,0.17884039661111112
+test_data_cross_unbalance,1.0,1.0,0.0,0.0,17.009935175,0.00367414979265072,8.5,2.836293426060274e-05,3.239767067676155e-05,1.9,0.0,1.0,0.17882113555263157
