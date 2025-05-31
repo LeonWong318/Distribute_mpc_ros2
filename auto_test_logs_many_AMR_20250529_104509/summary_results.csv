@@ -1,0 +1,2 @@
+Scenario,Latency,Success Rate,Timeout Rate,Collision Rate,Avg Execution Time,Avg Deviation,Avg Path Length,Avg Linear Smoothness,Avg Angular Smoothness,Avg Convergence Success Count,Avg Convergence Failure Count,Avg Convergence Success Rate,Avg Computing Time
+many_AMR,1.0,1.0,0.0,0.0,66.42207188000002,47.82426463473209,12.0,0.034451125972989584,0.0005362989700603896,89.45,0.5,0.9944413563090606,0.364221526422457
