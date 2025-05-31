@@ -681,9 +681,11 @@ class ClusterNode(Node):
                             idx_pred += state_dim*horizon
                 start_time = self.get_clock().now()
                 check_static, path_type = self.check_static_obstacles_on_the_way(ref_states=ref_states)
-                check_dynamic, robot_states_for_control= self.check_dynamic_obstacles(ref_states=ref_states, robot_states_for_control=robot_states_for_switch,
+                check_dynamic, filtered_robot_states= self.check_dynamic_obstacles(ref_states=ref_states, robot_states_for_control=robot_states_for_switch,
                                                  num_others=num_others,state_dim=state_dim,horizon=horizon, 
                                                  robot_width=self.config_robot.vehicle_width)
+                if self.enable_traj_share:
+                    robot_states_for_control = filtered_robot_states
                 if  check_static is False and check_dynamic is False:
                     remaining_needed = horizon - len(connecting_end_path)
                     remaining_ref = ref_states[5:]

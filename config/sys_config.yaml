@@ -20,7 +20,7 @@ manager_publish_frequency: 20.0
 cluster_control_frequency: 1.0
 close_to_target_rate: 0.5
 mpc_method: 'state_origin' #choose from state_fusion and state_origin
-enable_traj_share: True
+enable_traj_share: False
 # msg buffer config
 enable_gui: true
 mean_delay: 0.0
