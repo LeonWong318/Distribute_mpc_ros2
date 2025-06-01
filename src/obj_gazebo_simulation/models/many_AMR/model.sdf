@@ -3,7 +3,7 @@
   <model name="many_AMR">
     <static>true</static>
     <link name="wall_0">
-      <pose>20.0 17.0 1.0 0 0 0.0</pose>
+      <pose>20.0 29.0 1.0 0 0 0.0</pose>
       <self_collide>0</self_collide>
       <kinematic>0</kinematic>
       <visual name="wall_0_visual">
@@ -73,13 +73,13 @@
         </collision>
       </link>
     <link name="wall_1">
-      <pose>21.0 23.5 1.0 0 0 1.5707963267948966</pose>
+      <pose>21.0 29.5 1.0 0 0 1.5707963267948966</pose>
       <self_collide>0</self_collide>
       <kinematic>0</kinematic>
       <visual name="wall_1_visual">
         <geometry>
           <box>
-            <size>13.0 0.1 2.0</size>
+            <size>1.0 0.1 2.0</size>
             </box>
           </geometry>
         <material>
@@ -99,7 +99,7 @@
       <collision name="wall_1_collision">
         <geometry>
           <box>
-            <size>13.0 0.1 2.0</size>
+            <size>1.0 0.1 2.0</size>
             </box>
           </geometry>
         <laser_retro>0</laser_retro>
@@ -213,13 +213,13 @@
         </collision>
       </link>
     <link name="wall_3">
-      <pose>19.0 23.5 1.0 0 0 -1.5707963267948966</pose>
+      <pose>19.0 29.5 1.0 0 0 -1.5707963267948966</pose>
       <self_collide>0</self_collide>
       <kinematic>0</kinematic>
       <visual name="wall_3_visual">
         <geometry>
           <box>
-            <size>13.0 0.1 2.0</size>
+            <size>1.0 0.1 2.0</size>
             </box>
           </geometry>
         <material>
@@ -239,7 +239,7 @@
       <collision name="wall_3_collision">
         <geometry>
           <box>
-            <size>13.0 0.1 2.0</size>
+            <size>1.0 0.1 2.0</size>
             </box>
           </geometry>
         <laser_retro>0</laser_retro>
