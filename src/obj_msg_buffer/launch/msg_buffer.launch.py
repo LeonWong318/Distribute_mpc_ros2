@@ -36,7 +36,7 @@ def generate_launch_description():
     default_enable_gui = str(config.get('enable_gui', 'true')).lower()
     default_mean_delay = str(config.get('mean_delay', '1.0'))
     default_stddev_delay = str(config.get('stddev_delay', '0.1'))
-    
+    default_long_delay = str(config.get('long_delay', '1.0'))
     # === Launch Arguments ===
     robot_start_path_arg = DeclareLaunchArgument(
         'robot_start_path',
@@ -62,7 +62,11 @@ def generate_launch_description():
         description='stddev'
 
     )
-    
+    long_delay_arg = DeclareLaunchArgument(
+        'long_delay',
+        default_value=default_long_delay,
+        description='longdelay'
+    )
     # === Node Configuration ===
     msg_buffer = Node(
         package='obj_msg_buffer',
@@ -72,7 +76,9 @@ def generate_launch_description():
             'robot_start_path': LaunchConfiguration('robot_start_path'),
             'enable_gui': LaunchConfiguration('enable_gui'),
             'mean_delay': LaunchConfiguration('mean_delay'),
-            'stddev_delay': LaunchConfiguration('stddev_delay')
+            'stddev_delay': LaunchConfiguration('stddev_delay'),
+            'long_delay': LaunchConfiguration('long_delay'),
+            'enable_diff_mean': config.get('enable_diff_mean', True),
         }],
         output='screen'
     )
@@ -83,5 +89,6 @@ def generate_launch_description():
         enable_gui_arg,
         mean_delay_arg,
         stddev_delay_arg,
+        long_delay_arg,
         msg_buffer
     ])

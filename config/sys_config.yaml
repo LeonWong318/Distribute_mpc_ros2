@@ -20,12 +20,13 @@ manager_publish_frequency: 20.0
 cluster_control_frequency: 1.0
 close_to_target_rate: 0.5
 mpc_method: 'state_origin' #choose from state_fusion and state_origin
-enable_traj_share: False
+enable_traj_share: True
 # msg buffer config
 enable_gui: true
 mean_delay: 0.0
 stddev_delay: 0.1
-
+enable_diff_mean: True
+long_delay: 1.0
 # gazebo converter config
 command_timeout: 0.5
 converter_state_publish_frequency: 50.0
