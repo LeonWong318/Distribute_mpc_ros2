@@ -1,0 +1,2 @@
+Scenario,Latency,Success Rate,Timeout Rate,Collision Rate,Avg Execution Time,Avg Deviation,Avg Path Length,Avg Linear Smoothness,Avg Angular Smoothness,Avg Convergence Success Count,Avg Convergence Failure Count,Avg Convergence Success Rate,Avg Computing Time
+test_data_encounter_diffDelay_long1,0.0,1.0,0.0,0.0,27.364812874999995,0.4391782728949723,10.0,0.0004347372844884669,0.0021986118860620216,23.0,0.35,0.9850107066381156,0.2565650994346895
