@@ -4,7 +4,7 @@ iterations_per_latency: 20
 timeout_seconds: 300.0
 
 test_scenarios:
-  # - name: "test_data_encounter_noTrajShare"
+  # - name: "test_data_encounter_diffDelay"
   #   map_path: "data/test_data_encounter/map.json"
   #   graph_path: "data/test_data_encounter/graph.json"
   #   robot_start_path: "data/test_data_encounter/robot_start.json"
@@ -15,7 +15,7 @@ test_scenarios:
   #   iterations_per_latency: 20
   #   timeout_seconds: 150.0
 
-  # - name: "test_data_cross_balance_noTrajShare"
+  # - name: "test_data_cross_balance_diffDelay"
   #   map_path: "data/test_data_cross/map.json"
   #   graph_path: "data/test_data_cross/graph_balance.json"
   #   robot_start_path: "data/test_data_cross/robot_start_balance.json"
@@ -26,16 +26,16 @@ test_scenarios:
   #   iterations_per_latency: 20
   #   timeout_seconds: 150.0
   
-  # - name: "test_data_cross_unbalance_noTrajShare"
-  #   map_path: "data/test_data_cross/map.json"
-  #   graph_path: "data/test_data_cross/graph.json"
-  #   robot_start_path: "data/test_data_cross/robot_start.json"
-  #   robot_spec_path: "data/test_data_cross/schedule.csv"
-  #   world_file: "test_data_cross.world"
-  #   rviz_config_path: "src/obj_robot_visualizer/config/test_data_cross.rviz"
-  #   latency_values: [0.0, 1.0]
-  #   iterations_per_latency: 20
-  #   timeout_seconds: 150.0
+  - name: "test_data_cross_unbalance__noTrajShare_diffDelay_longfor1"
+    map_path: "data/test_data_cross/map.json"
+    graph_path: "data/test_data_cross/graph.json"
+    robot_start_path: "data/test_data_cross/robot_start.json"
+    robot_spec_path: "data/test_data_cross/schedule.csv"
+    world_file: "test_data_cross.world"
+    rviz_config_path: "src/obj_robot_visualizer/config/test_data_cross.rviz"
+    latency_values: [0.0]
+    iterations_per_latency: 20
+    timeout_seconds: 150.0
 
   # - name: "test_data_noTrajShare"
   #   map_path: "data/test_data/map.json"
@@ -60,13 +60,13 @@ test_scenarios:
     # timeout_seconds: 360.0
 
 
-  - name: "schedule_demo_data"
-    map_path: "data/schedule_demo_data/map.json"
-    graph_path: "data/schedule_demo_data/graph.json"
-    robot_start_path: "data/schedule_demo_data/robot_start.json"
-    robot_spec_path: "data/schedule_demo_data/schedule.csv"
-    world_file: "schedule_demo_data.world"
-    rviz_config_path: "src/obj_robot_visualizer/config/schedule_demo_data.rviz"
-    latency_values: [0.0, 1.0]
-    iterations_per_latency: 20
-    timeout_seconds: 300.0
+  # - name: "schedule_demo_data"
+  #   map_path: "data/schedule_demo_data/map.json"
+  #   graph_path: "data/schedule_demo_data/graph.json"
+  #   robot_start_path: "data/schedule_demo_data/robot_start.json"
+  #   robot_spec_path: "data/schedule_demo_data/schedule.csv"
+  #   world_file: "schedule_demo_data.world"
+  #   rviz_config_path: "src/obj_robot_visualizer/config/schedule_demo_data.rviz"
+  #   latency_values: [0.0, 1.0]
+  #   iterations_per_latency: 20
+  #   timeout_seconds: 300.0
